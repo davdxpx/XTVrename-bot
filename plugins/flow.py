@@ -5,8 +5,12 @@ from utils.auth import auth_filter
 from utils.state import set_state, get_state, update_data, get_data, clear_session
 from plugins.process import process_file
 from config import Config
+from utils.log import get_logger
 import asyncio
 import re
+
+logger = get_logger("plugins.flow")
+logger.info("Loading plugins.flow...")
 
 # Store for per-file processing data (keyed by Confirmation Message ID)
 file_sessions = {}
@@ -14,6 +18,7 @@ file_sessions = {}
 @Client.on_callback_query(filters.regex(r"^start_renaming$"))
 async def handle_start_renaming(client, callback_query):
     user_id = callback_query.from_user.id
+    logger.info(f"Start renaming flow for {user_id}")
     clear_session(user_id) # Reset
     set_state(user_id, "awaiting_type")
 
@@ -32,6 +37,7 @@ async def handle_start_renaming(client, callback_query):
 async def handle_type_selection(client, callback_query):
     user_id = callback_query.from_user.id
     media_type = callback_query.data.split("_")[1]
+    logger.info(f"User {user_id} selected type: {media_type}")
 
     update_data(user_id, "type", media_type)
     set_state(user_id, f"awaiting_search_{media_type}")
@@ -48,12 +54,18 @@ async def handle_type_subtitles(client, callback_query):
 
 async def search_handler(client, message, media_type):
     query = message.text
+    logger.info(f"Searching {media_type} for: {query}")
     msg = await message.reply_text(f"🔍 Searching for '{query}'...")
 
-    if media_type == "movie":
-        results = await tmdb.search_movie(query)
-    else:
-        results = await tmdb.search_tv(query)
+    try:
+        if media_type == "movie":
+            results = await tmdb.search_movie(query)
+        else:
+            results = await tmdb.search_tv(query)
+    except Exception as e:
+        logger.error(f"TMDb search failed: {e}")
+        await msg.edit_text(f"❌ Search Error: {e}")
+        return
 
     if not results:
         await msg.edit_text("❌ No results found. Please try again.",
@@ -97,10 +109,20 @@ async def season_handler(client, message):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
     )
 
-@Client.on_message(filters.text & filters.private & auth_filter)
+# Use group=1 to ensure it runs even if other handlers match (though debug is -1)
+# Removed auth_filter from here, check manually if needed, or ensure auth_filter is working.
+# auth_filter is simple lambda, should work.
+# Added logging.
+@Client.on_message(filters.text & filters.private, group=1)
 async def handle_text_input(client, message):
     user_id = message.from_user.id
+
+    # Auth check again just in case
+    if not (user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS):
+        return
+
     state = get_state(user_id)
+    logger.info(f"Text input from {user_id}: {message.text} | State: {state}")
 
     if not state:
         return
@@ -142,8 +164,13 @@ async def handle_tmdb_selection(client, callback_query):
     tmdb_id = data[3]
 
     # Fetch details
-    details = await tmdb.get_details(media_type, tmdb_id)
-    if not details:
+    try:
+        details = await tmdb.get_details(media_type, tmdb_id)
+        if not details:
+            await callback_query.answer("Error fetching details!", show_alert=True)
+            return
+    except Exception as e:
+        logger.error(f"TMDb details failed: {e}")
         await callback_query.answer("Error fetching details!", show_alert=True)
         return
 
@@ -180,10 +207,15 @@ async def handle_cancel(client, callback_query):
 
 # --- File Handling ---
 
-@Client.on_message((filters.document | filters.video) & filters.private & auth_filter)
+@Client.on_message((filters.document | filters.video) & filters.private, group=1)
 async def handle_file_upload(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
+
+    # Auth Check
+    if not (user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS):
+        return
+
     if state != "awaiting_file_upload":
         return
 

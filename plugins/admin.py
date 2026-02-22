@@ -13,35 +13,6 @@ admin_sessions = {}
 def is_admin(user_id):
     return user_id == Config.CEO_ID
 
-# --- Start/New Commands (Moved here because plugins/commands.py was ignored) ---
-@Client.on_message(filters.command(["start", "new"]) & filters.private)
-async def start_command(client, message):
-    user_id = message.from_user.id
-    logger.info(f"CMD received: {message.text} from {user_id}")
-
-    # Auth check
-    if not (user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS):
-        logger.warning(f"Unauthorized access by {user_id}")
-        return
-
-    await message.reply_text(
-        "**XTV Rename Bot**\n\n"
-        "Welcome to the official XTV file renaming tool.\n"
-        "This bot provides professional renaming and metadata management.\n\n"
-        "Click below to start.",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("Start Renaming", callback_data="start_renaming")]
-        ])
-    )
-
-@Client.on_message(filters.command("end") & filters.private)
-async def end_command(client, message):
-    user_id = message.from_user.id
-    logger.info(f"CMD received: {message.text} from {user_id}")
-    await message.reply_text("Session ended. Use /start or /new to begin again.")
-
-# --- Admin Panel ---
-
 @Client.on_message(filters.command("admin") & filters.private)
 async def admin_panel(client, message):
     if not is_admin(message.from_user.id):
@@ -83,11 +54,9 @@ async def admin_callback(client, callback_query):
         thumb_bin, _ = await db.get_thumbnail()
         if thumb_bin:
             try:
-                # Send as photo
                 f = io.BytesIO(thumb_bin)
                 f.name = "thumbnail.jpg"
                 await client.send_photo(user_id, f, caption="**Current Default Thumbnail**")
-                # Go back to menu in text message
                 await callback_query.message.edit_text(
                     "🖼 **Manage Thumbnail**\n\n"
                     "Thumbnail sent above.",
