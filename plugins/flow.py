@@ -12,7 +12,7 @@ import re
 logger = get_logger("plugins.flow")
 logger.info("Loading plugins.flow...")
 
-# Store for per-file processing data (keyed by Confirmation Message ID)
+# Store for per-file processing data
 file_sessions = {}
 
 @Client.on_callback_query(filters.regex(r"^start_renaming$"))
@@ -109,15 +109,12 @@ async def season_handler(client, message):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
     )
 
-# Use group=1 to ensure it runs even if other handlers match (though debug is -1)
-# Removed auth_filter from here, check manually if needed, or ensure auth_filter is working.
-# auth_filter is simple lambda, should work.
-# Added logging.
-@Client.on_message(filters.text & filters.private, group=1)
+# Group 2 - Runs AFTER start commands
+# Ignore anything starting with / to avoid catching commands
+@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=2)
 async def handle_text_input(client, message):
     user_id = message.from_user.id
 
-    # Auth check again just in case
     if not (user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS):
         return
 
@@ -163,7 +160,6 @@ async def handle_tmdb_selection(client, callback_query):
     media_type = data[2]
     tmdb_id = data[3]
 
-    # Fetch details
     try:
         details = await tmdb.get_details(media_type, tmdb_id)
         if not details:
@@ -207,12 +203,11 @@ async def handle_cancel(client, callback_query):
 
 # --- File Handling ---
 
-@Client.on_message((filters.document | filters.video) & filters.private, group=1)
+@Client.on_message((filters.document | filters.video) & filters.private, group=2)
 async def handle_file_upload(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
 
-    # Auth Check
     if not (user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS):
         return
 
@@ -295,7 +290,7 @@ async def handle_confirm(client, callback_query):
     sd = get_data(user_id)
 
     full_data = sd.copy()
-    full_data.update(fs) # fs overrides common data (season)
+    full_data.update(fs)
 
     await process_file(client, callback_query.message, full_data)
 
