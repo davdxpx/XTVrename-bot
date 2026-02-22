@@ -3,12 +3,12 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import Config
 from utils.log import get_logger
 
-# Setup logger
 logger = get_logger("plugins.start")
 logger.info("Loading plugins.start...")
 
-# Use group=1 to match flow.py and ensure visibility
-@Client.on_message(filters.command(["start", "new"]) & filters.private, group=1)
+# Group 0 (Default) - Runs before flow (Group 2)
+# Using regex for explicit command matching to avoid any filter ambiguity
+@Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)
 async def handle_start_command_unique(client, message):
     user_id = message.from_user.id
     logger.info(f"CMD received: {message.text} from {user_id}")
@@ -27,7 +27,7 @@ async def handle_start_command_unique(client, message):
         ])
     )
 
-@Client.on_message(filters.command("end") & filters.private, group=1)
+@Client.on_message(filters.command("end") & filters.private, group=0)
 async def handle_end_command_unique(client, message):
     user_id = message.from_user.id
     logger.info(f"CMD received: {message.text} from {user_id}")
