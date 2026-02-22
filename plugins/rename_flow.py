@@ -37,9 +37,9 @@ async def handle_type_selection(client, callback_query):
     set_state(user_id, f"awaiting_search_{media_type}")
 
     await callback_query.message.edit_text(
-        f"**Search {media_type.capitalize()}**\n\n"
+        f"🔍 **Search {media_type.capitalize()}**\n\n"
         f"Please enter the name of the {media_type} (e.g. 'Zootopia' or 'The Rookie').",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="cancel_rename")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
     )
 
 @Client.on_callback_query(filters.regex(r"^type_subtitles$"))
@@ -57,7 +57,7 @@ async def search_handler(client, message, media_type):
 
     if not results:
         await msg.edit_text("❌ No results found. Please try again.",
-                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="cancel_rename")]]))
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]))
         return
 
     buttons = []
@@ -67,7 +67,7 @@ async def search_handler(client, message, media_type):
             callback_data=f"sel_tmdb_{media_type}_{item['id']}"
         )])
 
-    buttons.append([InlineKeyboardButton("Cancel", callback_data="cancel_rename")])
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
 
     await msg.edit_text(
         f"**Select {media_type.capitalize()}**\n\n"
@@ -94,7 +94,7 @@ async def season_handler(client, message):
         f"**Season {season} Confirmed** for {title}.\n\n"
         "Please **forward the file(s)** you want to rename.\n"
         "For series, I will auto-detect the episode number from the filename (e.g. S01E05).",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="cancel_rename")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
     )
 
 @Client.on_message(filters.text & filters.private & auth_filter)
@@ -161,7 +161,7 @@ async def handle_tmdb_selection(client, callback_query):
         await callback_query.message.edit_text(
             f"**Selected Series:** {title} ({year})\n\n"
             "Please enter the **Season Number** (e.g. 1, 2, ...):",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data="cancel_rename")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
         )
     else:
         set_state(user_id, "awaiting_file_upload")
@@ -169,7 +169,7 @@ async def handle_tmdb_selection(client, callback_query):
             f"**Selected Movie:** {title} ({year})\n\n"
             "Please **forward the file(s)** you want to rename.\n"
             "You can forward multiple files.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Done / Cancel", callback_data="cancel_rename")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Done / Cancel", callback_data="cancel_rename")]])
         )
 
 @Client.on_callback_query(filters.regex(r"^cancel_rename$"))
@@ -227,7 +227,7 @@ async def update_confirmation_message(client, msg_id, user_id):
     fs = file_sessions[msg_id]
     sd = get_data(user_id)
 
-    text = f"**File:** `{fs['original_name']}`\n\n"
+    text = f"📄 **File:** `{fs['original_name']}`\n\n"
     text += f"**Detected Quality:** `{fs['quality']}`\n"
 
     buttons = []
@@ -241,7 +241,7 @@ async def update_confirmation_message(client, msg_id, user_id):
 
     buttons.append(row1)
     buttons.append(row2)
-    buttons.append([InlineKeyboardButton("Cancel", callback_data=f"cancel_file_{msg_id}")])
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")])
 
     await client.edit_message_text(
         chat_id=user_id,
@@ -278,7 +278,7 @@ async def handle_quality_menu(client, callback_query):
              InlineKeyboardButton("720p", callback_data=f"set_qual_{msg_id}_720p")],
             [InlineKeyboardButton("1080p", callback_data=f"set_qual_{msg_id}_1080p"),
              InlineKeyboardButton("2160p", callback_data=f"set_qual_{msg_id}_2160p")],
-            [InlineKeyboardButton("Back", callback_data=f"back_confirm_{msg_id}")]
+            [InlineKeyboardButton("🔙 Back", callback_data=f"back_confirm_{msg_id}")]
         ])
     )
 
@@ -306,7 +306,7 @@ async def handle_ep_change_prompt(client, callback_query):
     await callback_query.message.edit_text(
         "**Enter Episode Number:**\n"
         "Send a number (e.g. 5)",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"back_confirm_{msg_id}")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"back_confirm_{msg_id}")]])
     )
 
 @Client.on_callback_query(filters.regex(r"^season_change_(\d+)$"))
@@ -318,7 +318,7 @@ async def handle_season_change_prompt(client, callback_query):
     await callback_query.message.edit_text(
         "**Enter Season Number:**\n"
         "Send a number (e.g. 2)",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Cancel", callback_data=f"back_confirm_{msg_id}")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"back_confirm_{msg_id}")]])
     )
 
 @Client.on_callback_query(filters.regex(r"^cancel_file_(\d+)$"))
