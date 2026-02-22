@@ -167,7 +167,7 @@ async def handle_admin_photo(client, message):
         logger.error(f"Thumbnail upload failed: {e}")
         await msg.edit_text(f"❌ Error: {e}")
 
-@Client.on_message(filters.text & filters.private)
+@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"))
 async def handle_admin_text(client, message):
     user_id = message.from_user.id
     if not is_admin(user_id):
