@@ -66,3 +66,5 @@ class TMDb:
     async def get_details(self, media_type, tmdb_id):
         endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
         return await self._request(endpoint)
+
+tmdb = TMDb()
