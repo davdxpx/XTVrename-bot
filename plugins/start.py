@@ -1,14 +1,22 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from utils.auth import auth_filter
 from config import Config
+from utils.log import get_logger
 
-def is_authorized(user_id):
-    return user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS
+logger = get_logger("plugins.start")
 
-auth_filter = filters.create(lambda _, __, update: is_authorized(update.from_user.id if update.from_user else 0))
-
-@Client.on_message(filters.command(["start", "new"]) & auth_filter)
+@Client.on_message(filters.command(["start", "new"]))
 async def start_command(client, message):
+    # Log the attempt
+    user_id = message.from_user.id
+    logger.info(f"/start received from user {user_id}")
+
+    # Check Auth manually if filter is failing or for better logging
+    if not (user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS):
+        logger.warning(f"Unauthorized access attempt by {user_id}")
+        return # Ignore
+
     await message.reply_text(
         "**XTV Rename Bot**\n\n"
         "Welcome to the official XTV file renaming tool.\n"
