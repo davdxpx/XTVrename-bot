@@ -1,45 +1,54 @@
-# XTV Rename Bot 🚀
+# 𝕏TV Rename Bot 🚀
 
-A powerful, high-performance Telegram bot designed for automated media renaming, metadata injection, and thumbnail embedding. Built for speed and reliability on platforms like Railway.
+> **Business-Class Media Management Solution**
+> *Developed by [𝕏0L0™](https://t.me/davdxpx) for the [𝕏TV Network](https://t.me/XTVglobal)*
+
+![XTV Banner](https://telegra.ph/file/857e23117462419409849.jpg)
+
+The **XTV Rename Bot** is a high-performance, enterprise-grade Telegram bot engineered for automated media processing. It combines robust FFmpeg metadata injection with intelligent file renaming algorithms, designed specifically for maintaining large-scale media libraries.
 
 ## 🌟 Key Features
 
-*   **Intelligent Renaming**: Automatically formats filenames for Series (`S01E01`) and Movies (`Year.Quality`).
-*   **Professional Metadata**: Injects custom metadata (Title, Author, Artist, Copyright) into MKV/MP4 files using FFmpeg.
-*   **Custom Thumbnails**: Set a global custom thumbnail via the Admin Panel.
-*   **Concurrent Processing**: Supports album uploads (multiple files at once) without conflicts.
-*   **Anti-Hash Captions**: Generates random captions or uses custom templates to bypass Telegram's hash detection.
-*   **Admin Panel**: Fully featured inline-button based control panel for all settings.
-*   **Dockerized**: Ready for deployment on Railway, Heroku, or any Docker-compatible host.
+### 🔹 Advanced Processing Engines
+*   **XTV Core™**: Lightning-fast processing for standard files (up to 2GB) using the primary bot API.
+*   **XTV Pro™**: Seamless integration with a Userbot session to handle **Large Files (>2GB)**, bypassing standard bot limitations (Premium required).
+
+### 🔹 Intelligent Recognition
+*   **Auto-Detection Matrix**: Automatically scans filenames to detect Movie/Series titles, Years, Qualities, and Episode numbers with high accuracy.
+*   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork.
+
+### 🔹 Media Management
+*   **Series & Movies**: Specialized handling for different media types.
+    *   *Series*: Season/Episode numbering (S01E01) format.
+    *   *Movies*: Clean Title.Year.Quality format.
+*   **Subtitle Workflow**: Dedicated flow for subtitle files (`.srt`, `.ass`), supporting language codes and custom naming.
+
+### 🔹 Professional Metadata Injection
+*   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers.
+*   **Branding**: Sets "Encoded by @XTVglobal" and custom audio/subtitle track titles.
+*   **Thumbnail Embedding**: Embeds custom or poster-based thumbnails into video files.
+
+### 🔹 Security & Privacy
+*   **Anti-Hash Algorithm**: Generates unique, random captions for every file to prevent hash-based tracking or duplicate detection.
+*   **Concurrency Control**: Global semaphore system prevents server overload by managing simultaneous downloads/uploads.
 
 ## 🛠 Deployment Guide
 
 ### 1. Deploy on Railway (Recommended)
 
-This repository includes a `Dockerfile` specifically optimized for Railway.
+This repository is optimized for **Railway** with a custom `Dockerfile`.
 
 1.  **Fork this Repository** to your GitHub account.
 2.  **Create a New Project** on [Railway.app](https://railway.app).
 3.  **Deploy from GitHub Repo** and select your forked repository.
-4.  **Add Variables**: Go to the "Variables" tab and add the following:
-
-| Variable | Description | Example |
-| :--- | :--- | :--- |
-| `API_ID` | Your Telegram API ID | `1234567` |
-| `API_HASH` | Your Telegram API Hash | `abcdef123456...` |
-| `BOT_TOKEN` | Your Bot Token from @BotFather | `123456:ABC-DEF...` |
-| `MAIN_URI` | MongoDB Connection String | `mongodb+srv://user:pass@...` |
-| `CEO_ID` | Your Telegram User ID (Admin) | `123456789` |
-| `FRANCHISEE_IDS` | Allowed User IDs (comma separated) | `12345,67890` |
-| `TMDB_API_KEY` | TMDB API Key for metadata search | `your_tmdb_key` |
-
+4.  **Add Variables**: Go to the "Variables" tab and add the configuration (see below).
 5.  **Build & Deploy**: Railway will automatically detect the Dockerfile and start the bot.
 
-### 2. Run with Docker (Local / VPS)
+### 2. Local / VPS (Docker)
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/yourusername/XTVrename-bot.git
+git clone https://github.com/davdxpx/XTVrename-bot.git
 cd XTVrename-bot
 
 # 2. Build the image
@@ -51,38 +60,49 @@ docker run -d --env-file .env --name xtv-bot xtv-bot
 
 ## ⚙️ Configuration (.env)
 
-Create a `.env` file in the root directory if running locally:
+Create a `.env` file in the root directory:
 
-```ini
-API_ID=123456
-API_HASH=your_api_hash
-BOT_TOKEN=your_bot_token
-MAIN_URI=mongodb+srv://...
-CEO_ID=your_user_id
-FRANCHISEE_IDS=allowed_user_id_1,allowed_user_id_2
-TMDB_API_KEY=your_tmdb_key
-```
+| Variable | Description | Required |
+| :--- | :--- | :--- |
+| `API_ID` | Telegram API ID (my.telegram.org) | ✅ |
+| `API_HASH` | Telegram API Hash (my.telegram.org) | ✅ |
+| `BOT_TOKEN` | Bot Token from @BotFather | ✅ |
+| `MAIN_URI` | MongoDB Connection String | ✅ |
+| `CEO_ID` | Your Telegram User ID (Admin) | ✅ |
+| `FRANCHISEE_IDS` | Allowed User IDs (comma separated) | ❌ |
+| `TMDB_API_KEY` | TMDb API Key for metadata | ✅ |
+| `USER_SESSION` | Pyrogram String Session for Userbot (XTV Pro™) | ❌ |
 
-## 🎮 Admin Commands
+> **Note:** To generate a `USER_SESSION` string, run `python3 generate_session.py` locally.
 
-*   `/start` - Start the bot and check status.
-*   `/admin` - Open the **Admin Panel** (CEO Only).
+## 🎮 Usage
 
-**Admin Panel Features:**
-*   **🖼 Manage Thumbnail**: View or set the default thumbnail.
-*   **📝 Edit Metadata Templates**: Customize the internal file metadata (Title, Audio, Subtitles).
-*   **📝 Edit Caption Template**: Set the caption for uploaded files. Use `{random}` for anti-hash strings.
-*   **👀 View Settings**: Check current configuration.
+*   **/start**: Check bot status and ping.
+*   **/admin**: Access the **Admin Panel** to configure thumbnails, templates, and settings.
+*   **/end**: Clear current session state (useful to reset auto-detection).
 
-## 📝 Caption Templates
+**Workflow:**
+1.  **Forward a File**: The bot will Auto-Detect the content.
+2.  **Confirm/Edit**: Use the inline menu to correct the Title, Season, Episode, or Quality.
+3.  **Process**: The bot downloads, injects metadata, renames, and re-uploads the file.
 
-You can customize the file caption in the Admin Panel using these variables:
-*   `{filename}` - The final filename.
-*   `{size}` - The file size (e.g., 1.2 GB).
-*   `{random}` - Generates a random alphanumeric string (useful for avoiding duplicate file detection).
+## 🧩 Credits & License
 
-## 🧩 Credits
+This project is open-source under the **XTV Public License**.
+*   **Modifications**: You may fork and modify for personal use.
+*   **Attribution**: **You must retain the original author credits.** Unauthorized removal of the "Developed by 𝕏0L0™" notice is strictly prohibited.
 
-*   **Framework**: [Pyrogram](https://github.com/pyrogram/pyrogram)
-*   **Database**: [Motor](https://motor.readthedocs.io/) (MongoDB)
-*   **Media Processing**: [FFmpeg](https://ffmpeg.org/)
+---
+<div align="center">
+  <h3>Developed by 𝕏0L0™</h3>
+  <p>
+    <b>Don't Remove Credit</b><br>
+    Telegram Channel: <a href="https://t.me/XTVbots">@XTVbots</a><br>
+    Developed for the <a href="https://t.me/XTVglobal">𝕏TV Network</a><br>
+    Backup Channel: <a href="https://t.me/XTVhome">@XTVhome</a><br>
+    Contact on Telegram: <a href="https://t.me/davdxpx">@davdxpx</a>
+  </p>
+  <p>
+    <i>© 2024 XTV Network Global. All Rights Reserved.</i>
+  </p>
+</div>
