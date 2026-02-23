@@ -1,6 +1,6 @@
 import time
 import math
-from utils.xtv_core import XTVEngine
+from utils.XTVcore import XTVEngine
 
 async def progress_for_pyrogram(current, total, ud_type, message, start_time):
     """
