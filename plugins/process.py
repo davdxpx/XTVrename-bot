@@ -21,6 +21,20 @@ from utils.XTVcore import XTVEngine
 # Configure structured logger
 logger = logging.getLogger("TaskProcessor")
 
+# Global Concurrency Control
+# Semaphores are initialized lazily to ensure they bind to the correct event loop
+_SEMAPHORES = {
+    "download": None,
+    "process": None,
+    "upload": None
+}
+
+def get_semaphore(phase: str) -> asyncio.Semaphore:
+    """Retrieve or create the semaphore for the given phase."""
+    if _SEMAPHORES[phase] is None:
+        _SEMAPHORES[phase] = asyncio.Semaphore(3)
+    return _SEMAPHORES[phase]
+
 class TaskProcessor:
     """
     Handles the end-to-end processing of a media file:
@@ -83,25 +97,28 @@ class TaskProcessor:
             logger.warning(f"Error determining mode: {e}")
 
     async def run(self):
-        """Execute the full processing pipeline."""
+        """Execute the full processing pipeline with concurrency limits."""
         try:
             # Phase 0: Initialization & Validation
             if not await self._initialize():
                 return
 
             # Phase 1: Download
-            if not await self._download_media():
-                return
+            # Acquire semaphore only for the duration of the download
+            async with get_semaphore("download"):
+                if not await self._download_media():
+                    return
 
-            # Phase 2: Metadata & Thumbnail Setup
-            await self._prepare_resources()
+            # Phase 2: Metadata & Processing
+            # Grouping resource prep and ffmpeg under 'process' semaphore
+            async with get_semaphore("process"):
+                await self._prepare_resources()
+                if not await self._process_media():
+                    return
 
-            # Phase 3: Processing
-            if not await self._process_media():
-                return
-
-            # Phase 4: Upload
-            await self._upload_media()
+            # Phase 3: Upload
+            async with get_semaphore("upload"):
+                await self._upload_media()
 
         except Exception as e:
             logger.exception(f"Critical error in task for user {self.user_id}: {e}")
