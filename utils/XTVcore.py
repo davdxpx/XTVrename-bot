@@ -2,8 +2,14 @@ from datetime import datetime
 import time
 
 class XTVEngine:
-    NAME = "𝕏TV Core"
-    VERSION = "2.1"
+    # Core Mode (Default)
+    NAME_CORE = "𝕏TV Core"
+    VERSION_CORE = "2.1"
+
+    # Pro Mode (Userbot for >2GB)
+    NAME_PRO = "𝕏TV Pro"
+    VERSION_PRO = "1.1"
+
     BUILD = "2405.1" # YearMonth.Revision
     DEVELOPER = "@davdxpx"
     ORGANIZATION = "@XTVglobal"
@@ -14,9 +20,16 @@ class XTVEngine:
     ICON_ORG = "🏢"
 
     @classmethod
-    def get_signature(cls):
+    def get_signature(cls, mode="core"):
         """Returns the official engine signature string."""
-        return f"{cls.ICON_ENGINE} **Engine:** {cls.NAME} v{cls.VERSION}"
+        if mode.lower() == "pro":
+            name = cls.NAME_PRO
+            version = cls.VERSION_PRO
+        else:
+            name = cls.NAME_CORE
+            version = cls.VERSION_CORE
+
+        return f"{cls.ICON_ENGINE} **Engine:** {name} v{version}"
 
     @classmethod
     def get_footer(cls):

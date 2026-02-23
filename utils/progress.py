@@ -2,7 +2,7 @@ import time
 import math
 from utils.XTVcore import XTVEngine
 
-async def progress_for_pyrogram(current, total, ud_type, message, start_time):
+async def progress_for_pyrogram(current, total, ud_type, message, start_time, mode="core"):
     """
     Enhanced progress callback for Pyrogram with 'Business Software Level' formatting.
     Features:
@@ -58,7 +58,7 @@ async def progress_for_pyrogram(current, total, ud_type, message, start_time):
 
     # Engine Footer
     text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
-    text += f"{XTVEngine.get_signature()}"
+    text += f"{XTVEngine.get_signature(mode=mode)}"
 
     try:
         await message.edit(text=text)

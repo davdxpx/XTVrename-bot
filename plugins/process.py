@@ -10,6 +10,7 @@ import aiohttp
 from typing import Optional, Dict, Tuple, Any
 
 from pyrogram import Client
+from pyrogram.enums import ChatType
 from pyrogram.types import Message
 from config import Config
 from database import db
@@ -61,6 +62,26 @@ class TaskProcessor:
         self.settings: Optional[Dict] = None
         self.templates: Optional[Dict] = None
 
+        # Hybrid Workflow Logic
+        self.mode = "core"
+        self.active_client = self.client
+
+        try:
+             # Check for user_bot attached to client
+             if getattr(self.client, "user_bot", None):
+                 file_size = 0
+                 media = self.file_message.document or self.file_message.video
+                 if media:
+                     file_size = media.file_size
+
+                 # 2000 MB threshold (approx 2GB)
+                 if file_size > 2000 * 1024 * 1024:
+                     self.mode = "pro"
+                     self.active_client = self.client.user_bot
+                     logger.info(f"Activated PRO Mode for task {self.message_id} (Size: {file_size})")
+        except Exception as e:
+            logger.warning(f"Error determining mode: {e}")
+
     async def run(self):
         """Execute the full processing pipeline."""
         try:
@@ -97,7 +118,7 @@ class TaskProcessor:
         self.status_msg = await self.message.edit_text(
             "⏳ **Initializing Task...**\n"
             "Allocating resources and preparing environment.\n\n"
-            f"{XTVEngine.get_signature()}"
+            f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
         # Load settings once
@@ -116,7 +137,7 @@ class TaskProcessor:
             "📥 **Acquiring Media Resources**\n\n"
             "Establishing connection to Telegram servers...\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature()}"
+            f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
         ext = ".mkv"
@@ -127,12 +148,37 @@ class TaskProcessor:
         self.input_path = os.path.join(self.download_dir, f"{self.user_id}_{self.message_id}_input{ext}")
         download_start = time.time()
 
+        # Target Message Resolution for Userbot
+        target_message = self.file_message
+        if self.mode == "pro" and self.message.chat.type == ChatType.PRIVATE:
+            try:
+                bot_info = await self.client.get_me()
+                bot_username = bot_info.username
+
+                found = False
+                original_media = self.file_message.document or self.file_message.video
+
+                if original_media:
+                    # Scan recent messages in Userbot's chat with Bot to find matching file
+                    async for msg in self.active_client.get_chat_history(bot_username, limit=20):
+                        media = msg.document or msg.video
+                        if media and media.file_unique_id == original_media.file_unique_id:
+                            target_message = msg
+                            found = True
+                            logger.info(f"Resolved Userbot message ID: {msg.id}")
+                            break
+
+                if not found:
+                    logger.warning("Could not resolve message in Userbot history. Attempting fallback.")
+            except Exception as e:
+                logger.error(f"Error resolving Userbot message: {e}")
+
         try:
-            downloaded_path = await self.client.download_media(
-                self.file_message,
+            downloaded_path = await self.active_client.download_media(
+                target_message,
                 file_name=self.input_path,
                 progress=progress_for_pyrogram,
-                progress_args=("📥 **Downloading Media Content...**", self.status_msg, download_start)
+                progress_args=("📥 **Downloading Media Content...**", self.status_msg, download_start, self.mode)
             )
 
             if downloaded_path and os.path.exists(downloaded_path):
@@ -160,7 +206,7 @@ class TaskProcessor:
             "🎨 **Preparing Metadata Assets**\n\n"
             "Optimizing thumbnails and configuring metadata...\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature()}"
+            f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
         # Thumbnail Handling
@@ -228,7 +274,7 @@ class TaskProcessor:
             "⚙️ **Executing Transcoding Matrix**\n\n"
             "Injecting metadata and optimizing container...\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature()}"
+            f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
         cmd, err = await generate_ffmpeg_command(
@@ -258,7 +304,7 @@ class TaskProcessor:
             "📤 **Finalizing & Uploading**\n\n"
             "Transferring optimized asset to cloud...\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature()}"
+            f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
         upload_start = time.time()
@@ -267,16 +313,25 @@ class TaskProcessor:
         # Caption Generation
         caption = self._generate_caption(final_filename)
 
+        # Target Chat Resolution
+        target_chat_id = self.user_id
+        if self.mode == "pro" and self.message.chat.type == ChatType.PRIVATE:
+            try:
+                bot_info = await self.client.get_me()
+                target_chat_id = bot_info.username
+            except Exception as e:
+                logger.error(f"Failed to resolve bot username for upload: {e}")
+
         try:
             thumb = self.thumb_path if (os.path.exists(self.thumb_path) and not self.is_subtitle) else None
 
-            await self.client.send_document(
-                chat_id=self.user_id,
+            await self.active_client.send_document(
+                chat_id=target_chat_id,
                 document=self.output_path,
                 thumb=thumb,
                 caption=caption,
                 progress=progress_for_pyrogram,
-                progress_args=("📤 **Uploading Final File...**", self.status_msg, upload_start)
+                progress_args=("📤 **Uploading Final File...**", self.status_msg, upload_start, self.mode)
             )
 
             await self.status_msg.delete()
