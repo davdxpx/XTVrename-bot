@@ -2,14 +2,8 @@ from datetime import datetime
 import time
 
 class XTVEngine:
-    """
-    Core definitions for the XTV Rename Engine.
-    This class serves as the central point for branding, versioning, and developer credits.
-    It formalizes the 'XTV Core v2.0' identity requested by the CEO.
-    """
-
-    NAME = "XTV Core"
-    VERSION = "2.0"
+    NAME = "𝕏TV Core"
+    VERSION = "2.1"
     BUILD = "2405.1" # YearMonth.Revision
     DEVELOPER = "@davdxpx"
     ORGANIZATION = "@XTVglobal"
