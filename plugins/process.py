@@ -15,6 +15,7 @@ from config import Config
 from database import db
 from utils.ffmpeg_tools import generate_ffmpeg_command, execute_ffmpeg
 from utils.progress import progress_for_pyrogram
+from utils.xtv_core import XTVEngine
 
 # Configure structured logger
 logger = logging.getLogger("TaskProcessor")
@@ -95,7 +96,8 @@ class TaskProcessor:
 
         self.status_msg = await self.message.edit_text(
             "⏳ **Initializing Task...**\n"
-            "Allocating resources and preparing environment."
+            "Allocating resources and preparing environment.\n\n"
+            f"{XTVEngine.get_signature()}"
         )
 
         # Load settings once
@@ -112,7 +114,9 @@ class TaskProcessor:
         """Download the media file from Telegram."""
         await self._update_status(
             "📥 **Acquiring Media Resources**\n\n"
-            "Establishing connection to Telegram servers..."
+            "Establishing connection to Telegram servers...\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}"
         )
 
         ext = ".mkv"
@@ -154,7 +158,9 @@ class TaskProcessor:
         """Prepare thumbnail and calculate final filename/metadata."""
         await self._update_status(
             "🎨 **Preparing Metadata Assets**\n\n"
-            "Optimizing thumbnails and configuring metadata..."
+            "Optimizing thumbnails and configuring metadata...\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}"
         )
 
         # Thumbnail Handling
@@ -220,7 +226,9 @@ class TaskProcessor:
         """Run the FFmpeg processing command."""
         await self._update_status(
             "⚙️ **Executing Transcoding Matrix**\n\n"
-            "Injecting metadata and optimizing container..."
+            "Injecting metadata and optimizing container...\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}"
         )
 
         cmd, err = await generate_ffmpeg_command(
@@ -248,7 +256,9 @@ class TaskProcessor:
         """Upload the final file."""
         await self._update_status(
             "📤 **Finalizing & Uploading**\n\n"
-            "Transferring optimized asset to cloud..."
+            "Transferring optimized asset to cloud...\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}"
         )
 
         upload_start = time.time()
@@ -272,9 +282,8 @@ class TaskProcessor:
             await self.status_msg.delete()
             await self.message.reply_text(
                 "✅ **Processing Complete**\n\n"
-                f"📂 **File:** `{final_filename}`\n"
-                "🤖 **Engine:** XTV Core v2.0\n\n"
-                "Ready for next task. /new"
+                f"📂 **File:** `{final_filename}`\n\n"
+                f"{XTVEngine.get_footer()}"
             )
 
         except Exception as e:
