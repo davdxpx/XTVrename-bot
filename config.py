@@ -37,6 +37,17 @@ class Config:
         "subtitle": "Subtitled By:- @XTVglobal - {lang}"
     }
 
+    # Default Filename Templates
+    DEFAULT_FILENAME_TEMPLATES = {
+        "movies": "{Title}.{Year}.{Quality}_[{Channel}]",
+        "series": "{Title}.{Season_Episode}.{Quality}_[{Channel}]",
+        "subtitles_movies": "{Title}.{Year}_[{Channel}]",
+        "subtitles_series": "{Title}.{Season_Episode}_[{Channel}]"
+    }
+
+    # Default Channel
+    DEFAULT_CHANNEL = "@XTVglobal"
+
 if not os.path.exists(Config.DOWNLOAD_DIR):
     os.makedirs(Config.DOWNLOAD_DIR)
 

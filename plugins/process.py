@@ -75,6 +75,8 @@ class TaskProcessor:
         self.status_msg: Optional[Message] = None
         self.settings: Optional[Dict] = None
         self.templates: Optional[Dict] = None
+        self.filename_templates: Optional[Dict] = None
+        self.channel: Optional[str] = None
 
         # Hybrid Workflow Logic
         self.mode = "core"
@@ -142,9 +144,13 @@ class TaskProcessor:
         self.settings = await db.get_settings()
         if self.settings:
             self.templates = self.settings.get("templates", Config.DEFAULT_TEMPLATES)
+            self.filename_templates = self.settings.get("filename_templates", Config.DEFAULT_FILENAME_TEMPLATES)
+            self.channel = self.settings.get("channel", Config.DEFAULT_CHANNEL)
         else:
             logger.warning("Database settings unavailable, using defaults.")
             self.templates = Config.DEFAULT_TEMPLATES
+            self.filename_templates = Config.DEFAULT_FILENAME_TEMPLATES
+            self.channel = Config.DEFAULT_CHANNEL
 
         return True
 
@@ -256,22 +262,60 @@ class TaskProcessor:
         sanitized_title = self.title.replace(" ", ".")
         safe_title = re.sub(r'[\\/*?:"<>|]', '', sanitized_title)
 
+        # Determine the file extension based on input or type
+        ext = ".mkv" if not self.is_subtitle else ".srt"
+        if not self.is_subtitle and self.original_name:
+             orig_ext = os.path.splitext(self.original_name)[1].lower()
+             if orig_ext in ['.mp4', '.mkv', '.avi', '.ts']:
+                 ext = orig_ext
+
+        # Common format variables
+        season_str = f"S{self.season:02d}" if self.season else ""
+        episode_str = f"E{self.episode:02d}" if self.episode else ""
+        season_episode = f"{season_str}{episode_str}"
+        year_str = str(self.year) if self.year else ""
+
+        # Formatting dictionary
+        fmt_dict = {
+            "Title": safe_title,
+            "Year": year_str,
+            "Quality": self.quality,
+            "Season": season_str,
+            "Episode": episode_str,
+            "Season_Episode": season_episode,
+            "Language": self.language,
+            "Channel": self.channel
+        }
+
+        # Select correct template and generate final filename
         if self.media_type == "series":
-            season_episode = f"S{self.season:02d}E{self.episode:02d}"
-
             if self.is_subtitle:
-                final_filename = f"{safe_title}.{season_episode}.{self.language}.srt"
+                template = self.filename_templates.get("subtitles_series", Config.DEFAULT_FILENAME_TEMPLATES["subtitles_series"])
             else:
-                final_filename = f"{safe_title}.{season_episode}.{self.quality}_[@XTVglobal].mkv"
+                template = self.filename_templates.get("series", Config.DEFAULT_FILENAME_TEMPLATES["series"])
 
+            # Use format with fallback for missing keys
+            try:
+                base_name = template.format(**fmt_dict)
+            except KeyError as e:
+                logger.warning(f"KeyError {e} in template '{template}', using fallback.")
+                base_name = f"{safe_title}.{season_episode}.{self.quality}_[{self.channel}]" if not self.is_subtitle else f"{safe_title}.{season_episode}.{self.language}"
+
+            final_filename = f"{base_name}{ext}"
             meta_title = self.templates.get("title", "").format(title=self.title, season_episode=season_episode)
         else:
-            season_episode = ""
             if self.is_subtitle:
-                final_filename = f"{safe_title}.{self.year}.{self.language}.srt"
+                template = self.filename_templates.get("subtitles_movies", Config.DEFAULT_FILENAME_TEMPLATES["subtitles_movies"])
             else:
-                final_filename = f"{safe_title}.{self.quality}_[@XTVglobal].mkv"
+                template = self.filename_templates.get("movies", Config.DEFAULT_FILENAME_TEMPLATES["movies"])
 
+            try:
+                base_name = template.format(**fmt_dict)
+            except KeyError as e:
+                logger.warning(f"KeyError {e} in template '{template}', using fallback.")
+                base_name = f"{safe_title}.{year_str}.{self.quality}_[{self.channel}]" if not self.is_subtitle else f"{safe_title}.{year_str}.{self.language}"
+
+            final_filename = f"{base_name}{ext}"
             meta_title = self.templates.get("title", "").format(title=self.title, season_episode="").strip()
 
         self.output_path = os.path.join(self.download_dir, final_filename)

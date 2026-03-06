@@ -41,7 +41,9 @@ class Database:
                     "_id": "global_settings",
                     "thumbnail_file_id": None,
                     "thumbnail_binary": None,
-                    "templates": Config.DEFAULT_TEMPLATES
+                    "templates": Config.DEFAULT_TEMPLATES,
+                    "filename_templates": Config.DEFAULT_FILENAME_TEMPLATES,
+                    "channel": Config.DEFAULT_CHANNEL
                 }
                 await self.settings.insert_one(default_settings)
                 return default_settings
@@ -87,5 +89,39 @@ class Database:
         if settings:
             return settings.get("templates", Config.DEFAULT_TEMPLATES)
         return Config.DEFAULT_TEMPLATES
+
+    async def get_filename_templates(self):
+        settings = await self.get_settings()
+        if settings:
+            return settings.get("filename_templates", Config.DEFAULT_FILENAME_TEMPLATES)
+        return Config.DEFAULT_FILENAME_TEMPLATES
+
+    async def update_filename_template(self, key, value):
+        if self.settings is None: return
+        try:
+            await self.settings.update_one(
+                {"_id": "global_settings"},
+                {"$set": {f"filename_templates.{key}": value}},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error updating filename template: {e}")
+
+    async def get_channel(self):
+        settings = await self.get_settings()
+        if settings:
+            return settings.get("channel", Config.DEFAULT_CHANNEL)
+        return Config.DEFAULT_CHANNEL
+
+    async def update_channel(self, value):
+        if self.settings is None: return
+        try:
+            await self.settings.update_one(
+                {"_id": "global_settings"},
+                {"$set": {"channel": value}},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error updating channel: {e}")
 
 db = Database()
