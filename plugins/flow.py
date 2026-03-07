@@ -29,14 +29,15 @@ async def handle_start_renaming(client, callback_query):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🎬 Movie", callback_data="type_movie"),
              InlineKeyboardButton("📺 Series", callback_data="type_series")],
-            [InlineKeyboardButton("📹 Personal Video", callback_data="type_personal_video"),
-             InlineKeyboardButton("📸 Personal Photo/File", callback_data="type_personal_file")],
+            [InlineKeyboardButton("📹 Personal Video", callback_data="type_personal_video")],
+            [InlineKeyboardButton("📸 Personal Photo", callback_data="type_personal_photo")],
+            [InlineKeyboardButton("📁 Personal File", callback_data="type_personal_file")],
             [InlineKeyboardButton("📝 Subtitles", callback_data="type_subtitles")],
             [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]
         ])
     )
 
-@Client.on_callback_query(filters.regex(r"^type_personal_(video|file)$"))
+@Client.on_callback_query(filters.regex(r"^type_personal_(video|photo|file)$"))
 async def handle_type_personal(client, callback_query):
     user_id = callback_query.from_user.id
     personal_type = callback_query.data.split("_")[2]
@@ -45,10 +46,17 @@ async def handle_type_personal(client, callback_query):
     # For personal files, we store type as "movie" to use standard, non-episodic filename logic
     update_data(user_id, "type", "movie")
     update_data(user_id, "tmdb_id", None) # No TMDb
+    update_data(user_id, "personal_type", personal_type) # Track if it's photo/video/file
 
     set_state(user_id, "awaiting_manual_title")
 
-    label = "Video" if personal_type == "video" else "Photo/File"
+    if personal_type == "video":
+        label = "Video"
+    elif personal_type == "photo":
+        label = "Photo"
+    else:
+        label = "File"
+
     await callback_query.message.edit_text(
         f"✍️ **Personal {label} Details**\n\n"
         "Please enter the name you want to use for this file.\n"
@@ -119,11 +127,23 @@ async def manual_title_handler(client, message):
         set_state(user_id, "awaiting_season")
         await message.reply_text("📺 **Series:** What Season is this? (e.g., `1` or `01`)",
                                  reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]))
+    elif data.get("personal_type") == "photo":
+        set_state(user_id, "awaiting_send_as")
+        await message.reply_text(
+            f"📸 **Photo Selected**\n\n**Title:** {title}\n**Year:** {year}\n\n"
+            "How would you like to receive the output?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🖼 Send as Photo", callback_data="send_as_photo")],
+                [InlineKeyboardButton("📁 Send as Document (File)", callback_data="send_as_document")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]
+            ])
+        )
     else:
         set_state(user_id, "awaiting_file_upload")
+        type_str = "photo/file" if data.get("personal_type") else "file"
         await message.reply_text(
             f"✅ **Ready!**\n\n**Title:** {title}\n**Year:** {year}\n\n"
-            "Now, **send me the file** you want to rename.",
+            f"Now, **send me the {type_str}** you want to rename.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
         )
 
@@ -328,6 +348,21 @@ async def handle_manual_entry(client, callback_query):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
     )
 
+@Client.on_callback_query(filters.regex(r"^send_as_(photo|document)$"))
+async def handle_send_as_preference(client, callback_query):
+    user_id = callback_query.from_user.id
+    pref = callback_query.data.split("_")[2]
+
+    update_data(user_id, "send_as", pref)
+    set_state(user_id, "awaiting_file_upload")
+
+    label = "Photo" if pref == "photo" else "Document (File)"
+    await callback_query.message.edit_text(
+        f"✅ **Preference Saved: {label}**\n\n"
+        "Now, **send me the photo** you want to rename.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+    )
+
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
     user_id = callback_query.from_user.id
@@ -434,7 +469,7 @@ async def handle_cancel(client, callback_query):
 
 # --- File Handling ---
 
-@Client.on_message((filters.document | filters.video) & filters.private, group=2)
+@Client.on_message((filters.document | filters.video | filters.photo) & filters.private, group=2)
 async def handle_file_upload(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
@@ -492,8 +527,13 @@ async def handle_file_upload(client, message):
 async def handle_auto_detection(client, message):
     msg = await message.reply_text("🔍 **Executing Transcoding Matrix...**\nRunning deep scan on filename...", quote=True)
 
-    file_name = message.document.file_name if message.document else message.video.file_name
-    if not file_name: file_name = "unknown.mkv"
+    if message.photo:
+        file_name = f"image_{message.id}.jpg"
+    else:
+        file_name = message.document.file_name if message.document else message.video.file_name
+
+    if not file_name:
+        file_name = "unknown_file.bin"
 
     # Analyze
     metadata = analyze_filename(file_name)

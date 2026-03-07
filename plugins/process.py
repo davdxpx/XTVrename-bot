@@ -164,9 +164,17 @@ class TaskProcessor:
         )
 
         ext = ".mkv"
+        if self.original_name:
+            orig_ext = os.path.splitext(self.original_name)[1].lower()
+            if orig_ext:
+                ext = orig_ext
+
         if self.is_subtitle:
-             ext = os.path.splitext(self.original_name)[1]
-             if not ext: ext = ".srt"
+             if not ext or ext not in ['.srt', '.ass', '.vtt']:
+                 ext = ".srt"
+
+        if self.message.photo:
+            ext = ".jpg"
 
         self.input_path = os.path.join(self.download_dir, f"{self.user_id}_{self.message_id}_input{ext}")
         download_start = time.time()
@@ -266,8 +274,11 @@ class TaskProcessor:
         ext = ".mkv" if not self.is_subtitle else ".srt"
         if not self.is_subtitle and self.original_name:
              orig_ext = os.path.splitext(self.original_name)[1].lower()
-             if orig_ext in ['.mp4', '.mkv', '.avi', '.ts']:
+             if orig_ext:
                  ext = orig_ext
+
+        if self.message.photo:
+            ext = ".jpg"
 
         # Common format variables
         season_str = f"S{self.season:02d}" if self.season else ""
@@ -391,16 +402,27 @@ class TaskProcessor:
                 logger.error(f"Failed to resolve bot username for upload: {e}")
 
         try:
-            thumb = self.thumb_path if (os.path.exists(self.thumb_path) and not self.is_subtitle) else None
+            thumb = self.thumb_path if (self.thumb_path and os.path.exists(self.thumb_path) and not self.is_subtitle) else None
 
-            await self.active_client.send_document(
-                chat_id=target_chat_id,
-                document=self.output_path,
-                thumb=thumb,
-                caption=caption,
-                progress=progress_for_pyrogram,
-                progress_args=("📤 **Uploading Final File...**", self.status_msg, upload_start, self.mode)
-            )
+            send_as = self.data.get("send_as")
+
+            if send_as == "photo" or (self.message.photo and not send_as):
+                await self.active_client.send_photo(
+                    chat_id=target_chat_id,
+                    photo=self.output_path,
+                    caption=caption,
+                    progress=progress_for_pyrogram,
+                    progress_args=("📤 **Uploading Photo...**", self.status_msg, upload_start, self.mode)
+                )
+            else:
+                await self.active_client.send_document(
+                    chat_id=target_chat_id,
+                    document=self.output_path,
+                    thumb=thumb,
+                    caption=caption,
+                    progress=progress_for_pyrogram,
+                    progress_args=("📤 **Uploading Final File...**", self.status_msg, upload_start, self.mode)
+                )
 
             await self.status_msg.delete()
             await self.message.reply_text(
