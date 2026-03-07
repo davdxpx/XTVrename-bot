@@ -42,7 +42,10 @@ class Config:
         "movies": "{Title}.{Year}.{Quality}_[{Channel}]",
         "series": "{Title}.{Season_Episode}.{Quality}_[{Channel}]",
         "subtitles_movies": "{Title}.{Year}_[{Channel}]",
-        "subtitles_series": "{Title}.{Season_Episode}_[{Channel}]"
+        "subtitles_series": "{Title}.{Season_Episode}.{Language}",
+        "personal_video": "{Title} {Year} [{Channel}]",
+        "personal_photo": "{Title} {Year} [{Channel}]",
+        "personal_file": "{Title} {Year} [{Channel}]"
     }
 
     # Default Channel

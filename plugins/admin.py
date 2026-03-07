@@ -137,8 +137,20 @@ async def admin_callback(client, callback_query):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Movies", callback_data="edit_fn_template_movies")],
                 [InlineKeyboardButton("Series", callback_data="edit_fn_template_series")],
+                [InlineKeyboardButton("Personal", callback_data="admin_fn_templates_personal")],
                 [InlineKeyboardButton("Subtitles", callback_data="admin_fn_templates_subtitles")],
                 [InlineKeyboardButton("🔙 Back", callback_data="admin_main")]
+            ])
+        )
+    elif data == "admin_fn_templates_personal":
+        await callback_query.message.edit_text(
+            "📝 **Edit Personal Filename Templates**\n\n"
+            "Select media type to edit:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Personal Files", callback_data="edit_fn_template_personal_file")],
+                [InlineKeyboardButton("Personal Photos", callback_data="edit_fn_template_personal_photo")],
+                [InlineKeyboardButton("Personal Videos", callback_data="edit_fn_template_personal_video")],
+                [InlineKeyboardButton("🔙 Back", callback_data="admin_filename_templates")]
             ])
         )
     elif data == "admin_fn_templates_subtitles":

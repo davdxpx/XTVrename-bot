@@ -289,7 +289,7 @@ class TaskProcessor:
         # Formatting dictionary
         fmt_dict = {
             "Title": safe_title,
-            "Year": year_str,
+            "Year": f"({year_str})" if year_str else "",
             "Quality": self.quality,
             "Season": season_str,
             "Episode": episode_str,
@@ -297,6 +297,10 @@ class TaskProcessor:
             "Language": self.language,
             "Channel": self.channel
         }
+
+        # Clean up empty year space if needed
+        # When year is empty, template.format(**fmt_dict) will result in "._{Channel}" or similar.
+        # This will be cleaned below.
 
         # Select correct template and generate final filename
         if self.media_type == "series":
@@ -315,13 +319,20 @@ class TaskProcessor:
             final_filename = f"{base_name}{ext}"
             meta_title = self.templates.get("title", "").format(title=self.title, season_episode=season_episode)
         else:
-            if self.is_subtitle:
+            personal_type = self.data.get("personal_type")
+            if personal_type:
+                key = f"personal_{personal_type}"
+                template = self.filename_templates.get(key, Config.DEFAULT_FILENAME_TEMPLATES[key])
+            elif self.is_subtitle:
                 template = self.filename_templates.get("subtitles_movies", Config.DEFAULT_FILENAME_TEMPLATES["subtitles_movies"])
             else:
                 template = self.filename_templates.get("movies", Config.DEFAULT_FILENAME_TEMPLATES["movies"])
 
             try:
                 base_name = template.format(**fmt_dict)
+                # Cleanup potential double spaces from missing year
+                base_name = re.sub(r'\s+', ' ', base_name).strip()
+                base_name = base_name.replace(" .", ".").replace("..", ".")
             except KeyError as e:
                 logger.warning(f"KeyError {e} in template '{template}', using fallback.")
                 base_name = f"{safe_title}.{year_str}.{self.quality}_[{self.channel}]" if not self.is_subtitle else f"{safe_title}.{year_str}.{self.language}"

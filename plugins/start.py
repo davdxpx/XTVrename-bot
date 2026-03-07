@@ -35,10 +35,6 @@ async def handle_help_command_unique(client, message):
     user_id = message.from_user.id
     logger.info(f"CMD received: {message.text} from {user_id}")
 
-    if not (user_id == Config.CEO_ID or user_id in Config.FRANCHISEE_IDS):
-        logger.warning(f"Unauthorized access by {user_id}")
-        return
-
     await message.reply_text(
         "**📖 Help & Guide**\n\n"
         "Welcome to the XTV Rename Bot Guide!\n"

@@ -114,7 +114,7 @@ async def manual_title_handler(client, message):
 
     match = re.search(r"^(.*?)(?:\s*\((\d{4})\))?$", text)
     title = match.group(1).strip() if match else text
-    year = match.group(2) if match and match.group(2) else "Unknown"
+    year = match.group(2) if match and match.group(2) else ""
 
     update_data(user_id, "title", title)
     update_data(user_id, "year", year)
@@ -483,7 +483,11 @@ async def handle_file_upload(client, message):
         return
 
     # Existing manual flow processing
-    file_name = message.document.file_name if message.document else message.video.file_name
+    if message.photo:
+        file_name = f"image_{message.id}.jpg"
+    else:
+        file_name = message.document.file_name if message.document else message.video.file_name
+
     if not file_name:
         file_name = "unknown.mkv"
 
