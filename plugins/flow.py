@@ -77,6 +77,33 @@ async def handle_subtitle_type_selection(client, callback_query):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
     )
 
+async def manual_title_handler(client, message):
+    user_id = message.from_user.id
+    text = message.text.strip()
+
+    match = re.search(r"^(.*?)(?:\s*\((\d{4})\))?$", text)
+    title = match.group(1).strip() if match else text
+    year = match.group(2) if match and match.group(2) else "Unknown"
+
+    update_data(user_id, "title", title)
+    update_data(user_id, "year", year)
+    update_data(user_id, "poster", None) # No poster for manual entry
+
+    data = get_data(user_id)
+    media_type = data.get("type")
+
+    if media_type == "series":
+        set_state(user_id, "awaiting_season")
+        await message.reply_text("📺 **Series:** What Season is this? (e.g., `1` or `01`)",
+                                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]))
+    else:
+        set_state(user_id, "awaiting_file_upload")
+        await message.reply_text(
+            f"✅ **Ready!**\n\n**Title:** {title}\n**Year:** {year}\n\n"
+            "Now, **send me the file** you want to rename.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+        )
+
 async def search_handler(client, message, media_type):
     query = message.text
     logger.info(f"Searching {media_type} for: {query}")
@@ -93,8 +120,15 @@ async def search_handler(client, message, media_type):
         return
 
     if not results:
-        await msg.edit_text("❌ No results found. Please try again.",
-                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]))
+        await msg.edit_text(
+            "❌ **No results found.**\n\n"
+            "This could be a personal file, home video, or a regional/unknown series not listed on TMDb.\n"
+            "You can enter the details manually by clicking below.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✍️ Skip / Enter Manually", callback_data="manual_entry")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]
+            ])
+        )
         return
 
     buttons = []
@@ -176,6 +210,8 @@ async def handle_text_input(client, message):
         await search_handler(client, message, "movie")
     elif state == "awaiting_search_series":
         await search_handler(client, message, "series")
+    elif state == "awaiting_manual_title":
+        await manual_title_handler(client, message)
     elif state == "awaiting_season":
         await season_handler(client, message)
 
@@ -249,6 +285,25 @@ async def handle_text_input(client, message):
             buttons.append([InlineKeyboardButton("Cancel", callback_data=f"back_confirm_{msg_id}")])
 
             await msg.edit_text(f"Select correct {mtype}:", reply_markup=InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex(r"^manual_entry$"))
+async def handle_manual_entry(client, callback_query):
+    user_id = callback_query.from_user.id
+    logger.info(f"User {user_id} selected manual entry.")
+
+    # Mark as manual entry
+    update_data(user_id, "tmdb_id", None)
+
+    media_type = get_data(user_id).get("type", "movie")
+
+    set_state(user_id, "awaiting_manual_title")
+    await callback_query.message.edit_text(
+        f"✍️ **Manual Entry ({media_type.capitalize()})**\n\n"
+        "Please enter the exact title and year you want to use.\n"
+        "Format: `Title (Year)`\n"
+        "Example: `My Family Vacation (2023)`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+    )
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
