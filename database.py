@@ -149,6 +149,7 @@ class Database:
                     "community_name": "Our Community",
                     "support_contact": "@davdxpx",
                     "force_sub_channel": None,
+                    "force_sub_link": None,
                     "rate_limit_delay": 0  # 0 means disabled
                 }
                 await self.settings.insert_one(default_config)

@@ -271,8 +271,10 @@ class TaskProcessor:
                     logger.warning(f"Failed to download poster: {e}")
 
         # Filename & Metadata Calculation
-        sanitized_title = self.title.replace(" ", ".")
-        safe_title = re.sub(r'[\\/*?:"<>|]', '', sanitized_title)
+
+        # Only sanitize filesystem-illegal characters. DO NOT replace spaces with dots by default.
+        # The template itself should dictate formatting.
+        safe_title = re.sub(r'[\\/*?:"<>|]', '', self.title)
 
         # Determine the file extension based on input or type
         ext = ".mkv" if not self.is_subtitle else ".srt"
@@ -302,10 +304,6 @@ class TaskProcessor:
             "Channel": self.channel
         }
 
-        # Clean up empty year space if needed
-        # When year is empty, template.format(**fmt_dict) will result in "._{Channel}" or similar.
-        # This will be cleaned below.
-
         # Select correct template and generate final filename
         if self.media_type == "series":
             if self.is_subtitle:
@@ -319,6 +317,12 @@ class TaskProcessor:
             except KeyError as e:
                 logger.warning(f"KeyError {e} in template '{template}', using fallback.")
                 base_name = f"{safe_title}.{season_episode}.{self.quality}_[{self.channel}]" if not self.is_subtitle else f"{safe_title}.{season_episode}.{self.language}"
+
+            # If template didn't use spaces, but the user expected dots (e.g. the default `{Title}.{Year}`),
+            # make sure the spaces in {Title} match the delimiter used in the template if no spaces exist.
+            # But DO NOT mangle brackets like `[{Channel}]`.
+            if " " not in template and "." in template:
+                base_name = base_name.replace(" ", ".")
 
             final_filename = f"{base_name}{ext}"
             meta_title = self.templates.get("title", "").format(title=self.title, season_episode=season_episode)
@@ -334,12 +338,16 @@ class TaskProcessor:
 
             try:
                 base_name = template.format(**fmt_dict)
-                # Cleanup potential double spaces from missing year
+                if " " not in template and "." in template:
+                    base_name = base_name.replace(" ", ".")
+                # Cleanup potential double spaces/dots from missing year
                 base_name = re.sub(r'\s+', ' ', base_name).strip()
-                base_name = base_name.replace(" .", ".").replace("..", ".")
+                base_name = base_name.replace("..", ".").replace(" .", ".").replace(". ", ".")
             except KeyError as e:
                 logger.warning(f"KeyError {e} in template '{template}', using fallback.")
                 base_name = f"{safe_title}.{year_str}.{self.quality}_[{self.channel}]" if not self.is_subtitle else f"{safe_title}.{year_str}.{self.language}"
+                if " " not in template and "." in template:
+                    base_name = base_name.replace(" ", ".")
 
             final_filename = f"{base_name}{ext}"
             meta_title = self.templates.get("title", "").format(title=self.title, season_episode="").strip()
