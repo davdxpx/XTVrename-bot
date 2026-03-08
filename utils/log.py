@@ -56,7 +56,8 @@ def get_logger(name):
         logger.addHandler(ch)
 
     # Suppress verbose loggers
-    logging.getLogger("pyrogram").setLevel(logging.WARNING)
+    logging.getLogger("pyrogram").setLevel(logging.ERROR)
+    logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     return logger

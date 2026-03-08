@@ -16,6 +16,12 @@ logger.info("Loading plugins.flow...")
 # Store for per-file processing data
 file_sessions = {}
 
+# Store for batching multiple file uploads
+batch_sessions = {}
+
+# Store for batch processing tasks
+batch_tasks = {}
+
 @Client.on_callback_query(filters.regex(r"^start_renaming$"))
 async def handle_start_renaming(client, callback_query):
     user_id = callback_query.from_user.id
@@ -469,6 +475,48 @@ async def handle_cancel(client, callback_query):
 
 # --- File Handling ---
 
+async def process_batch(client, user_id):
+    """Processes a batch of files for a user, sorting them and sending confirmations in order."""
+    if user_id not in batch_sessions:
+        return
+
+    batch = batch_sessions.pop(user_id)
+    if not batch:
+        return
+
+    # Sort the batch based on the type of flow
+    # Each item in the batch is a dict: {'message': Message, 'data': dict}
+    # For auto-detect, the dict contains all detected properties
+    # For manual, it contains the calculated season, episode, etc.
+
+    def get_sort_key(item):
+        data = item['data']
+        is_series = data.get('type') == 'series'
+
+        if is_series:
+            # Sort by season and episode
+            return (0, data.get('season', 0), data.get('episode', 0))
+        else:
+            # Sort alphabetically by original filename
+            return (1, data.get('original_name', '').lower(), 0)
+
+    sorted_batch = sorted(batch, key=get_sort_key)
+
+    # Process sorted items one by one
+    for item in sorted_batch:
+        message = item['message']
+        data = item['data']
+        is_auto = data.get('is_auto', False)
+
+        msg = await message.reply_text("Processing file...", quote=True)
+        file_sessions[msg.id] = data
+
+        if is_auto:
+            await update_auto_detected_message(client, msg.id, user_id)
+        else:
+            await update_confirmation_message(client, msg.id, user_id)
+
+
 @Client.on_message((filters.document | filters.video | filters.photo) & filters.private, group=2)
 async def handle_file_upload(client, message):
     user_id = message.from_user.id
@@ -512,25 +560,42 @@ async def handle_file_upload(client, message):
                 if match:
                     episode = int(match.group(1))
 
-    msg = await message.reply_text("Processing file...", quote=True)
-
     # Store language if subtitle
     lang = session_data.get("language", "en") if session_data.get("is_subtitle") else None
 
-    file_sessions[msg.id] = {
+    # Add to batch queue
+    if user_id not in batch_sessions:
+        batch_sessions[user_id] = []
+
+    # Start or reset the batch processing timer
+    if user_id in batch_tasks:
+        batch_tasks[user_id].cancel()
+
+    data = {
         "file_message": message,
         "quality": quality,
         "episode": episode,
         "season": season,
         "original_name": file_name,
-        "language": lang
+        "language": lang,
+        "type": session_data.get("type"),
+        "is_auto": False
     }
+    batch_sessions[user_id].append({"message": message, "data": data})
 
-    await update_confirmation_message(client, msg.id, user_id)
+    async def wait_and_process():
+        try:
+            await asyncio.sleep(3.0) # Wait 3 seconds for more files
+            if batch_tasks.get(user_id) == asyncio.current_task():
+                del batch_tasks[user_id]
+            await process_batch(client, user_id)
+        except asyncio.CancelledError:
+            pass
+
+    batch_tasks[user_id] = asyncio.create_task(wait_and_process())
+
 
 async def handle_auto_detection(client, message):
-    msg = await message.reply_text("🔍 **Executing Transcoding Matrix...**\nRunning deep scan on filename...", quote=True)
-
     if message.photo:
         file_name = f"image_{message.id}.jpg"
     else:
@@ -539,12 +604,15 @@ async def handle_auto_detection(client, message):
     if not file_name:
         file_name = "unknown_file.bin"
 
+    # Quick pre-analysis for sorting properties without doing full TMDb lookup yet
+    # Or we can do the full lookup now, so sorting is fully accurate
+
     # Analyze
     metadata = analyze_filename(file_name)
     tmdb_data = await auto_match_tmdb(metadata)
 
     if not tmdb_data:
-        await msg.edit_text(
+        await message.reply_text(
             f"⚠️ **Detection Failed**\n\nCould not automatically match `{file_name}` with TMDb.\n"
             "Please use /start to rename manually.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
@@ -560,25 +628,44 @@ async def handle_auto_detection(client, message):
     season = metadata.get('season', 1) or 1
     lang = metadata.get('language', 'en')
 
-    # Store in file_sessions (including TMDB info, effectively bypassing user session state)
-    file_sessions[msg.id] = {
+    user_id = message.from_user.id
+
+    # Add to batch queue
+    if user_id not in batch_sessions:
+        batch_sessions[user_id] = []
+
+    # Start or reset the batch processing timer
+    if user_id in batch_tasks:
+        batch_tasks[user_id].cancel()
+
+    data = {
         "file_message": message,
         "original_name": file_name,
         "quality": quality,
         "episode": episode,
         "season": season,
         "language": lang,
-        # Auto-detect fields that normally live in user session
         "tmdb_id": tmdb_data['tmdb_id'],
         "title": tmdb_data['title'],
         "year": tmdb_data['year'],
         "poster": tmdb_data['poster'],
         "type": tmdb_data['type'],
         "is_subtitle": is_subtitle,
-        "is_auto": True # Flag to know this was auto-detected
+        "is_auto": True
     }
+    batch_sessions[user_id].append({"message": message, "data": data})
 
-    await update_auto_detected_message(client, msg.id, message.from_user.id)
+    async def wait_and_process():
+        try:
+            await asyncio.sleep(3.0) # Wait 3 seconds for more files
+            if batch_tasks.get(user_id) == asyncio.current_task():
+                del batch_tasks[user_id]
+            await process_batch(client, user_id)
+        except asyncio.CancelledError:
+            pass
+
+    batch_tasks[user_id] = asyncio.create_task(wait_and_process())
+
 
 async def update_auto_detected_message(client, msg_id, user_id):
     if msg_id not in file_sessions: return
