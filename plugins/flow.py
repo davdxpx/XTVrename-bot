@@ -545,14 +545,7 @@ async def handle_file_upload(client, message):
         # Check Force Sub
         if not await check_force_sub(client, user_id):
             config = await db.get_public_config()
-            force_sub_channel = config.get("force_sub_channel")
-
-            try:
-                chat_info = await client.get_chat(force_sub_channel)
-                invite_link = chat_info.invite_link or f"https://t.me/{chat_info.username}"
-            except Exception as e:
-                logger.error(f"Failed to fetch invite link: {e}")
-                invite_link = force_sub_channel
+            invite_link = config.get("force_sub_link") or config.get("force_sub_channel", "")
 
             await message.reply_text(
                 f"⚠️ **Access Restricted**\n\n"

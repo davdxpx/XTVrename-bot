@@ -145,7 +145,13 @@ async def admin_callback(client, callback_query):
         elif field == "support_contact":
             text = "🔗 **Send the new support contact (e.g., @username or link):**"
         elif field == "force_sub":
-            text = "📢 **Send the channel username (e.g., @MyChannel) or ID.**\nSend `disable` to disable."
+            text = (
+                "📢 **Setup Force-Sub Channel**\n\n"
+                "To ensure the bot has proper permissions, please follow these steps:\n"
+                "1️⃣ **Add me** as an Admin to your desired channel.\n"
+                "2️⃣ **Forward any message** from that channel directly to me here.\n\n"
+                "*Send `disable` to disable Force-Sub entirely.*"
+            )
         elif field == "rate_limit":
             text = "⏱ **Send the delay in seconds (e.g., 60).**\nSend `0` to disable."
         else:
@@ -412,7 +418,7 @@ async def handle_admin_photo(client, message):
     except Exception as e:
         logger.error(f"Thumbnail upload failed: {e}")
         await msg.edit_text(f"❌ Error: {e}")
-@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=1)
+@Client.on_message((filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"), group=1)
 async def handle_admin_text(client, message):
     user_id = message.from_user.id
     if not is_admin(user_id):
@@ -425,7 +431,35 @@ async def handle_admin_text(client, message):
     # Handle Public Mode settings
     if state.startswith("awaiting_public_"):
         field = state.replace("awaiting_public_", "")
-        val = message.text.strip()
+
+        # Handle Force-Sub channel forward explicitly
+        if field == "force_sub" and getattr(message, "forward_from_chat", None):
+            chat_id = message.forward_from_chat.id
+            try:
+                # Verify admin rights
+                bot_member = await client.get_chat_member(chat_id, "me")
+                if bot_member.status not in [Client.enums.ChatMemberStatus.ADMINISTRATOR, Client.enums.ChatMemberStatus.OWNER]:
+                    raise Exception("Not an admin")
+
+                # Try to get or create invite link
+                chat_info = await client.get_chat(chat_id)
+                invite_link = chat_info.invite_link
+                if not invite_link:
+                    invite_link = await client.export_chat_invite_link(chat_id)
+
+                await db.update_public_config("force_sub_channel", chat_id)
+                await db.update_public_config("force_sub_link", invite_link)
+
+                await message.reply_text(f"✅ **Force-Sub Setup Complete!**\n\nChannel ID: `{chat_id}`\nSaved Link: {invite_link}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]))
+                admin_sessions.pop(user_id, None)
+            except Exception as e:
+                logger.error(f"Force sub setup error: {e}")
+                await message.reply_text(f"❌ **Failed to verify channel.**\n\nPlease ensure I am added to the channel as an Admin with permission to create invite links, then try forwarding again.\n\nError: `{e}`", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]))
+            return
+
+        val = message.text.strip() if message.text else ""
+        if not val:
+            raise ContinuePropagation
 
         if field == "bot_name":
             await db.update_public_config("bot_name", val)
@@ -439,14 +473,11 @@ async def handle_admin_text(client, message):
         elif field == "force_sub":
             if val.lower() == "disable":
                 await db.update_public_config("force_sub_channel", None)
+                await db.update_public_config("force_sub_link", None)
                 await message.reply_text("✅ Force-Sub disabled.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]))
             else:
-                # Basic check for channel format
-                if not val.startswith("@") and not val.startswith("-100"):
-                    await message.reply_text("❌ Invalid format. Must start with '@' or '-100'. Try again.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]))
-                    return
-                await db.update_public_config("force_sub_channel", val)
-                await message.reply_text(f"✅ Force-Sub channel updated to `{val}`.\nMake sure I am an admin there!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]))
+                await message.reply_text("❌ Invalid action. Please **forward a message** from your channel, or type `disable`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]))
+                return
         elif field == "rate_limit":
             if not val.isdigit():
                 await message.reply_text("❌ Invalid number. Try again.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]))

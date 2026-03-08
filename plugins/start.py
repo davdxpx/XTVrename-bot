@@ -27,16 +27,8 @@ async def handle_start_command_unique(client, message):
         # Public Mode checks
         if not await check_force_sub(client, user_id):
             config = await db.get_public_config()
-            force_sub_channel = config.get("force_sub_channel")
+            invite_link = config.get("force_sub_link") or config.get("force_sub_channel", "")
             community_name = config.get("community_name", "Our Community")
-
-            # Fetch invite link
-            try:
-                chat_info = await client.get_chat(force_sub_channel)
-                invite_link = chat_info.invite_link or f"https://t.me/{chat_info.username}"
-            except Exception as e:
-                logger.error(f"Failed to fetch invite link: {e}")
-                invite_link = force_sub_channel
 
             await message.reply_text(
                 f"👋 **Welcome to {community_name}!**\n\n"
