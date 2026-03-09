@@ -135,6 +135,90 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating channel for {doc_id}: {e}")
 
+    # --- Dumb Channels ---
+    async def get_dumb_channels(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("dumb_channels", {})
+        return {}
+
+    async def add_dumb_channel(self, channel_id, channel_name, user_id=None):
+        if self.settings is None: return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            # We store dumb_channels as a dict: {str(channel_id): "Channel Name"}
+            await self.settings.update_one(
+                {"_id": doc_id},
+                {"$set": {f"dumb_channels.{channel_id}": channel_name}},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error adding dumb channel for {doc_id}: {e}")
+
+    async def remove_dumb_channel(self, channel_id, user_id=None):
+        if self.settings is None: return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id},
+                {"$unset": {f"dumb_channels.{channel_id}": ""}},
+                upsert=True
+            )
+            # If the removed channel was the default, unset the default
+            settings = await self.get_settings(user_id)
+            if settings and settings.get("default_dumb_channel") == str(channel_id):
+                await self.settings.update_one(
+                    {"_id": doc_id},
+                    {"$unset": {"default_dumb_channel": ""}},
+                    upsert=True
+                )
+        except Exception as e:
+            logger.error(f"Error removing dumb channel for {doc_id}: {e}")
+
+    async def get_default_dumb_channel(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("default_dumb_channel")
+        return None
+
+    async def set_default_dumb_channel(self, channel_id, user_id=None):
+        if self.settings is None: return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id},
+                {"$set": {"default_dumb_channel": str(channel_id)}},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error setting default dumb channel for {doc_id}: {e}")
+
+    async def get_dumb_channel_timeout(self):
+        """Fetch the global dumb channel timeout (applies to both modes)."""
+        if self.settings is None: return 3600 # 1 hour default
+        if Config.PUBLIC_MODE:
+            config = await self.get_public_config()
+            return config.get("dumb_channel_timeout", 3600)
+        else:
+            doc = await self.settings.find_one({"_id": "global_settings"})
+            if doc:
+                return doc.get("dumb_channel_timeout", 3600)
+            return 3600
+
+    async def update_dumb_channel_timeout(self, timeout_seconds: int):
+        if self.settings is None: return
+        try:
+            if Config.PUBLIC_MODE:
+                await self.update_public_config("dumb_channel_timeout", timeout_seconds)
+            else:
+                await self.settings.update_one(
+                    {"_id": "global_settings"},
+                    {"$set": {"dumb_channel_timeout": timeout_seconds}},
+                    upsert=True
+                )
+        except Exception as e:
+            logger.error(f"Error updating dumb channel timeout: {e}")
+
     # --- PUBLIC_MODE Global Configs ---
     async def get_public_config(self):
         """Fetch the global public mode configuration set by the CEO."""

@@ -148,13 +148,7 @@ async def manual_title_handler(client, message):
             ])
         )
     else:
-        set_state(user_id, "awaiting_file_upload")
-        type_str = "photo/file" if data.get("personal_type") else "file"
-        await message.reply_text(
-            f"✅ **Ready!**\n\n**Title:** {title}\n**Year:** {year}\n\n"
-            f"Now, **send me the {type_str}** you want to rename.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
-        )
+        await prompt_dumb_channel(client, user_id, message)
 
 async def search_handler(client, message, media_type):
     query = message.text
@@ -221,14 +215,7 @@ async def season_handler(client, message):
         )
         return
 
-    set_state(user_id, "awaiting_file_upload")
-
-    await message.reply_text(
-        f"**Season {season} Confirmed** for {title}.\n\n"
-        "Please **forward the file(s)** you want to rename.\n"
-        "For series, I will auto-detect the episode number from the filename (e.g. S01E05).",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
-    )
+    await prompt_dumb_channel(client, user_id, message)
 
 async def episode_handler(client, message):
     user_id = message.from_user.id
@@ -278,12 +265,7 @@ async def handle_text_input(client, message):
              return
 
         update_data(user_id, "language", lang)
-        set_state(user_id, "awaiting_file_upload")
-        await message.reply_text(
-            f"**Language Selected:** `{lang}`\n\n"
-            "Please **forward the subtitle file(s)** (.srt, .ass, etc.).",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Done / Cancel", callback_data="cancel_rename")]])
-        )
+        await prompt_dumb_channel(client, user_id, message)
 
     elif state.startswith("awaiting_episode_correction_"):
         msg_id = int(state.split("_")[-1])
@@ -364,14 +346,7 @@ async def handle_send_as_preference(client, callback_query):
     pref = callback_query.data.split("_")[2]
 
     update_data(user_id, "send_as", pref)
-    set_state(user_id, "awaiting_file_upload")
-
-    label = "Photo" if pref == "photo" else "Document (File)"
-    await callback_query.message.edit_text(
-        f"✅ **Preference Saved: {label}**\n\n"
-        "Now, **send me the photo** you want to rename.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
-    )
+    await prompt_dumb_channel(client, user_id, callback_query.message)
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
@@ -411,15 +386,56 @@ async def handle_tmdb_selection(client, callback_query):
         if data.get("is_subtitle"):
             await initiate_language_selection(client, user_id, callback_query.message)
         else:
-            set_state(user_id, "awaiting_file_upload")
-            await callback_query.message.edit_text(
-                f"**Selected Movie:** {title} ({year})\n\n"
-                "Please **forward the file(s)** you want to rename.\n"
-                "You can forward multiple files.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Done / Cancel", callback_data="cancel_rename")]])
-            )
+            await prompt_dumb_channel(client, user_id, callback_query.message)
+
+async def prompt_dumb_channel(client, user_id, message_obj):
+    channels = await db.get_dumb_channels(user_id)
+    if not channels:
+        set_state(user_id, "awaiting_file_upload")
+        text = "✅ **Ready!**\n\nNow, **send me the file(s)** you want to rename."
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+        if isinstance(message_obj, str):
+            await client.send_message(user_id, text, reply_markup=reply_markup)
+        elif hasattr(message_obj, "edit_text"):
+            await message_obj.edit_text(text, reply_markup=reply_markup)
+        else:
+            await message_obj.reply_text(text, reply_markup=reply_markup)
+        return
+
+    set_state(user_id, "awaiting_dumb_channel_selection")
+    text = "📺 **Dumb Channel Selection**\n\nWhere should the files from this session be sent?"
+    buttons = []
+    for ch_id, ch_name in channels.items():
+        buttons.append([InlineKeyboardButton(f"Send to {ch_name}", callback_data=f"sel_dumb_{ch_id}")])
+    buttons.append([InlineKeyboardButton("❌ Don't send to Dumb Channel", callback_data="sel_dumb_none")])
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
+
+    if isinstance(message_obj, str):
+        await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+    elif hasattr(message_obj, "edit_text"):
+        await message_obj.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await message_obj.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex(r"^sel_dumb_(.*)$"))
+async def handle_dumb_selection(client, callback_query):
+    user_id = callback_query.from_user.id
+    ch_id = callback_query.data.split("_")[2]
+
+    if ch_id != "none":
+        update_data(user_id, "dumb_channel", ch_id)
+    else:
+        update_data(user_id, "dumb_channel", None)
+
+    set_state(user_id, "awaiting_file_upload")
+    await callback_query.message.edit_text(
+        f"✅ **Ready!**\n\n"
+        f"Now, **send me the file(s)** you want to rename.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+    )
 
 async def initiate_language_selection(client, user_id, message_obj):
+
     set_state(user_id, "awaiting_language")
     buttons = [
         [InlineKeyboardButton("🇺🇸 English", callback_data="lang_en"),
@@ -455,13 +471,7 @@ async def handle_language_callback(client, callback_query):
         return
 
     update_data(user_id, "language", data)
-    set_state(user_id, "awaiting_file_upload")
-
-    await callback_query.message.edit_text(
-        f"**Language Selected:** `{data}`\n\n"
-        "Please **forward the subtitle file(s)** (.srt, .ass, etc.).",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Done / Cancel", callback_data="cancel_rename")]])
-    )
+    await prompt_dumb_channel(client, user_id, callback_query.message)
 
 @Client.on_callback_query(filters.regex(r"^cancel_rename$"))
 async def handle_cancel(client, callback_query):
@@ -484,7 +494,8 @@ async def process_batch(client, user_id):
     if user_id not in batch_sessions:
         return
 
-    batch = batch_sessions.pop(user_id)
+    batch_dict = batch_sessions.pop(user_id)
+    batch = batch_dict.get('items', [])
     if not batch:
         return
 
@@ -532,6 +543,8 @@ async def process_batch(client, user_id):
 
 from utils.auth import check_force_sub
 from database import db
+from utils.queue_manager import queue_manager
+import uuid
 
 @Client.on_message((filters.document | filters.video | filters.photo) & filters.private, group=2)
 async def handle_file_upload(client, message):
@@ -607,13 +620,28 @@ async def handle_file_upload(client, message):
 
     # Add to batch queue
     if user_id not in batch_sessions:
-        batch_sessions[user_id] = []
+        batch_id = queue_manager.create_batch()
+        batch_sessions[user_id] = {'batch_id': batch_id, 'items': []}
         msg = await message.reply_text("⏳ **Sorting Files...**\nPlease wait a moment.", quote=True)
         batch_status_msgs[user_id] = msg
 
     # Start or reset the batch processing timer
     if user_id in batch_tasks:
         batch_tasks[user_id].cancel()
+
+    batch_id = batch_sessions[user_id]['batch_id']
+    item_id = str(uuid.uuid4())
+
+    # Priority for quality: 2160p = 0, 1080p = 1, 720p = 2, 480p = 3
+    quality_priority = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3}
+
+    sort_key = (0, season, episode) if session_data.get("type") == "series" else (1, quality_priority.get(quality, 4), 0)
+    display_name = f"S{season:02d}E{episode:02d}" if session_data.get("type") == "series" else f"{quality}"
+
+    # Store batch info in session_data so it carries over to file processing
+    update_data(user_id, "batch_id", batch_id)
+
+    queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, message.id)
 
     data = {
         "file_message": message,
@@ -623,9 +651,12 @@ async def handle_file_upload(client, message):
         "original_name": file_name,
         "language": lang,
         "type": session_data.get("type"),
-        "is_auto": False
+        "is_auto": False,
+        "dumb_channel": session_data.get("dumb_channel"),
+        "batch_id": batch_id,
+        "item_id": item_id
     }
-    batch_sessions[user_id].append({"message": message, "data": data})
+    batch_sessions[user_id]['items'].append({"message": message, "data": data})
 
     async def wait_and_process():
         try:
@@ -674,15 +705,29 @@ async def handle_auto_detection(client, message):
 
     user_id = message.from_user.id
 
+    # Fetch default dumb channel
+    default_dumb_channel = await db.get_default_dumb_channel(user_id)
+
     # Add to batch queue
     if user_id not in batch_sessions:
-        batch_sessions[user_id] = []
+        batch_id = queue_manager.create_batch()
+        batch_sessions[user_id] = {'batch_id': batch_id, 'items': []}
         msg = await message.reply_text("⏳ **Sorting Files...**\nPlease wait a moment.", quote=True)
         batch_status_msgs[user_id] = msg
 
     # Start or reset the batch processing timer
     if user_id in batch_tasks:
         batch_tasks[user_id].cancel()
+
+    batch_id = batch_sessions[user_id]['batch_id']
+    item_id = str(uuid.uuid4())
+
+    quality_priority = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3}
+
+    sort_key = (0, season, episode) if tmdb_data['type'] == "series" else (1, quality_priority.get(quality, 4), 0)
+    display_name = f"S{season:02d}E{episode:02d}" if tmdb_data['type'] == "series" else f"{quality}"
+
+    queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, message.id)
 
     data = {
         "file_message": message,
@@ -697,9 +742,12 @@ async def handle_auto_detection(client, message):
         "poster": tmdb_data['poster'],
         "type": tmdb_data['type'],
         "is_subtitle": is_subtitle,
-        "is_auto": True
+        "is_auto": True,
+        "dumb_channel": default_dumb_channel,
+        "batch_id": batch_id,
+        "item_id": item_id
     }
-    batch_sessions[user_id].append({"message": message, "data": data})
+    batch_sessions[user_id]['items'].append({"message": message, "data": data})
 
     async def wait_and_process():
         try:

@@ -17,6 +17,7 @@ from database import db
 from utils.ffmpeg_tools import generate_ffmpeg_command, execute_ffmpeg
 from utils.progress import progress_for_pyrogram
 from utils.XTVcore import XTVEngine
+from utils.queue_manager import queue_manager
 
 # Configure structured logger
 logger = logging.getLogger("TaskProcessor")
@@ -430,7 +431,7 @@ class TaskProcessor:
             send_as = self.data.get("send_as")
 
             if send_as == "photo" or (self.message.photo and not send_as):
-                await self.active_client.send_photo(
+                media_msg = await self.active_client.send_photo(
                     chat_id=target_chat_id,
                     photo=self.output_path,
                     caption=caption,
@@ -438,7 +439,7 @@ class TaskProcessor:
                     progress_args=("📤 **Uploading Photo...**", self.status_msg, upload_start, self.mode)
                 )
             else:
-                await self.active_client.send_document(
+                media_msg = await self.active_client.send_document(
                     chat_id=target_chat_id,
                     document=self.output_path,
                     thumb=thumb,
@@ -448,14 +449,61 @@ class TaskProcessor:
                 )
 
             await self.status_msg.delete()
-            await self.message.reply_text(
-                "✅ **Processing Complete**\n\n"
-                f"📂 **File:** `{final_filename}`\n\n"
-            )
+
+            # Handle Dumb Channel Forwarding if applicable
+            batch_id = self.data.get("batch_id")
+            item_id = self.data.get("item_id")
+            dumb_channel = self.data.get("dumb_channel")
+
+            if batch_id and item_id:
+                if not dumb_channel:
+                    queue_manager.update_status(batch_id, item_id, "done_dumb")
+                else:
+                    queue_manager.update_status(batch_id, item_id, "done_user")
+
+                    # Enter wait loop for earlier items in the batch
+                    wait_start = time.time()
+                    timeout = await db.get_dumb_channel_timeout()
+                    wait_msg = None
+
+                    while True:
+                        blocking_item = queue_manager.get_blocking_item(batch_id, item_id)
+                        if not blocking_item:
+                            break # We are clear to send
+
+                        if time.time() - wait_start > timeout:
+                            logger.warning(f"Timeout waiting for dumb channel upload for {final_filename}")
+                            if wait_msg:
+                                await wait_msg.delete()
+                            break
+
+                        wait_text = f"⏳ **Waiting for {blocking_item.display_name} to finish To send it in the dumb channel**"
+                        if not wait_msg:
+                            wait_msg = await self.message.reply_text(wait_text)
+                        elif wait_msg.text != wait_text:
+                            # Update message if the blocking item changed
+                            await wait_msg.edit_text(wait_text)
+
+                        await asyncio.sleep(5)
+
+                    if wait_msg:
+                        await wait_msg.delete()
+
+                    # Now send to dumb channel
+                    try:
+                        await media_msg.forward(chat_id=dumb_channel)
+                        queue_manager.update_status(batch_id, item_id, "done_dumb")
+                    except Exception as e:
+                        logger.error(f"Failed to forward {final_filename} to dumb channel {dumb_channel}: {e}")
+                        queue_manager.update_status(batch_id, item_id, "failed", str(e))
 
         except Exception as e:
             logger.error(f"Upload failed: {e}")
             await self._update_status(f"❌ **Upload Protocol Failed**\n\n`{e}`")
+            batch_id = self.data.get("batch_id")
+            item_id = self.data.get("item_id")
+            if batch_id and item_id:
+                queue_manager.update_status(batch_id, item_id, "failed", str(e))
 
     def _generate_caption(self, filename: str) -> str:
         """Generate a secure caption based on templates."""

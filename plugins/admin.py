@@ -26,7 +26,8 @@ async def admin_panel(client, message):
                  InlineKeyboardButton("👥 Edit Community Name", callback_data="admin_public_community_name")],
                 [InlineKeyboardButton("🔗 Edit Support Contact", callback_data="admin_public_support_contact"),
                  InlineKeyboardButton("📢 Edit Force-Sub Channel", callback_data="admin_public_force_sub")],
-                [InlineKeyboardButton("⏱ Edit Rate Limits", callback_data="admin_public_rate_limit")],
+                [InlineKeyboardButton("⏱ Edit Rate Limits", callback_data="admin_public_rate_limit"),
+                 InlineKeyboardButton("⏱ Edit Dumb Channel Timeout", callback_data="admin_dumb_timeout")],
                 [InlineKeyboardButton("👀 View Public Config", callback_data="admin_public_view")]
             ])
         )
@@ -41,6 +42,7 @@ async def admin_panel(client, message):
                 [InlineKeyboardButton("📝 Edit Metadata Templates", callback_data="admin_templates")],
                 [InlineKeyboardButton("📝 Edit Filename Templates", callback_data="admin_filename_templates")],
                 [InlineKeyboardButton("📝 Edit Caption Template", callback_data="admin_caption")],
+                [InlineKeyboardButton("📺 Dumb Channels", callback_data="admin_dumb_channels")],
                 [InlineKeyboardButton("⚙️ Settings", callback_data="admin_settings")],
                 [InlineKeyboardButton("👀 View Current Settings", callback_data="admin_view")]
             ])
@@ -48,13 +50,112 @@ async def admin_panel(client, message):
 
 from pyrogram import ContinuePropagation
 
-@Client.on_callback_query(filters.regex(r"^(admin_|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_fn_template_|prompt_template_)"))
+@Client.on_callback_query(filters.regex(r"^(admin_|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_fn_template_|prompt_template_|dumb_)"))
 async def admin_callback(client, callback_query):
     user_id = callback_query.from_user.id
     if not is_admin(user_id):
         raise ContinuePropagation
     data = callback_query.data
     logger.info(f"Admin callback: {data} from user {user_id}")
+
+    # Handle Dumb Channel Callbacks for non-public mode
+    if not Config.PUBLIC_MODE and data.startswith("dumb_"):
+        if data == "dumb_menu":
+            channels = await db.get_dumb_channels()
+            default_ch = await db.get_default_dumb_channel()
+            text = "📺 **Manage Dumb Channels**\n\n"
+            text += "These channels can be used to forward processed files automatically.\n\n"
+            text += "**Configured Channels:**\n"
+            if not channels:
+                text += "- None\n"
+            else:
+                for ch_id, ch_name in channels.items():
+                    marker = " (Default)" if str(ch_id) == default_ch else ""
+                    text += f"- {ch_name} `{ch_id}`{marker}\n"
+
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Add New Dumb Channel", callback_data="dumb_add")],
+                    [InlineKeyboardButton("➖ Remove Dumb Channel", callback_data="dumb_remove")],
+                    [InlineKeyboardButton("⭐ Set Default", callback_data="dumb_set_default")],
+                    [InlineKeyboardButton("🔙 Back", callback_data="admin_main")]
+                ])
+            )
+            return
+        elif data == "dumb_add":
+            admin_sessions[user_id] = "awaiting_dumb_add"
+            await callback_query.message.edit_text(
+                "➕ **Add Dumb Channel**\n\n"
+                "Please add me as an Administrator in the desired channel.\n"
+                "Then, forward any message from that channel to me, OR send the Channel ID (e.g. `-100...`) or Public Username.\n\n"
+                "*(Send `disable` to cancel)*",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]])
+            )
+            return
+        elif data == "dumb_remove":
+            channels = await db.get_dumb_channels()
+            if not channels:
+                await callback_query.answer("No channels configured.", show_alert=True)
+                return
+            buttons = []
+            for ch_id, ch_name in channels.items():
+                buttons.append([InlineKeyboardButton(f"❌ {ch_name}", callback_data=f"dumb_del_{ch_id}")])
+            buttons.append([InlineKeyboardButton("🔙 Back", callback_data="dumb_menu")])
+            await callback_query.message.edit_text("Select a channel to remove:", reply_markup=InlineKeyboardMarkup(buttons))
+            return
+        elif data.startswith("dumb_del_"):
+            ch_id = data.replace("dumb_del_", "")
+            await db.remove_dumb_channel(ch_id)
+            await callback_query.answer("Channel removed.", show_alert=True)
+            # go back
+            callback_query.data = "dumb_menu"
+            await admin_callback(client, callback_query)
+            return
+        elif data == "dumb_set_default":
+            channels = await db.get_dumb_channels()
+            if not channels:
+                await callback_query.answer("No channels configured.", show_alert=True)
+                return
+            buttons = []
+            for ch_id, ch_name in channels.items():
+                buttons.append([InlineKeyboardButton(f"⭐ {ch_name}", callback_data=f"dumb_def_{ch_id}")])
+            buttons.append([InlineKeyboardButton("🔙 Back", callback_data="dumb_menu")])
+            await callback_query.message.edit_text("Select default auto-detect channel:", reply_markup=InlineKeyboardMarkup(buttons))
+            return
+        elif data.startswith("dumb_def_"):
+            ch_id = data.replace("dumb_def_", "")
+            await db.set_default_dumb_channel(ch_id)
+            await callback_query.answer("Default channel set.", show_alert=True)
+            callback_query.data = "dumb_menu"
+            await admin_callback(client, callback_query)
+            return
+
+    if data == "admin_dumb_channels":
+        callback_query.data = "dumb_menu"
+        await admin_callback(client, callback_query)
+        return
+
+    if data == "admin_dumb_timeout":
+        current_val = await db.get_dumb_channel_timeout()
+        await callback_query.message.edit_text(
+            f"⏱ **Edit Dumb Channel Timeout**\n\n"
+            f"This is the max time (in seconds) the bot will wait for earlier files before uploading to the Dumb Channel.\n\n"
+            f"Current: `{current_val}` seconds\n\nClick below to change it.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Change", callback_data="prompt_admin_dumb_timeout")],
+                [InlineKeyboardButton("🔙 Back", callback_data="admin_main")]
+            ])
+        )
+        return
+
+    if data == "prompt_admin_dumb_timeout":
+        admin_sessions[user_id] = "awaiting_dumb_timeout"
+        await callback_query.message.edit_text(
+            "⏱ **Send the new timeout in seconds (e.g., 3600 for 1 hour):**",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]])
+        )
+        return
 
     # Handle Public Mode Callbacks first
     if Config.PUBLIC_MODE and data.startswith("admin_public_"):
@@ -358,7 +459,8 @@ async def admin_callback(client, callback_query):
                      InlineKeyboardButton("👥 Edit Community Name", callback_data="admin_public_community_name")],
                     [InlineKeyboardButton("🔗 Edit Support Contact", callback_data="admin_public_support_contact"),
                      InlineKeyboardButton("📢 Edit Force-Sub Channel", callback_data="admin_public_force_sub")],
-                    [InlineKeyboardButton("⏱ Edit Rate Limits", callback_data="admin_public_rate_limit")],
+                    [InlineKeyboardButton("⏱ Edit Rate Limits", callback_data="admin_public_rate_limit"),
+                     InlineKeyboardButton("⏱ Edit Dumb Channel Timeout", callback_data="admin_dumb_timeout")],
                     [InlineKeyboardButton("👀 View Public Config", callback_data="admin_public_view")]
                 ])
             )
@@ -373,6 +475,7 @@ async def admin_callback(client, callback_query):
                     [InlineKeyboardButton("📝 Edit Metadata Templates", callback_data="admin_templates")],
                     [InlineKeyboardButton("📝 Edit Filename Templates", callback_data="admin_filename_templates")],
                     [InlineKeyboardButton("📝 Edit Caption Template", callback_data="admin_caption")],
+                    [InlineKeyboardButton("📺 Dumb Channels", callback_data="admin_dumb_channels")],
                     [InlineKeyboardButton("⚙️ Settings", callback_data="admin_settings")],
                     [InlineKeyboardButton("👀 View Current Settings", callback_data="admin_view")]
                 ])
@@ -428,6 +531,43 @@ async def handle_admin_text(client, message):
     state = admin_sessions.get(user_id)
     if not state:
         raise ContinuePropagation
+
+    if state == "awaiting_dumb_timeout":
+        val = message.text.strip() if message.text else ""
+        if not val.isdigit():
+            await message.reply_text("❌ Invalid number. Try again.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]))
+            return
+        await db.update_dumb_channel_timeout(int(val))
+        await message.reply_text(f"✅ Dumb channel timeout updated to `{val}` seconds.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]))
+        admin_sessions.pop(user_id, None)
+        return
+
+    if state == "awaiting_dumb_add" and not Config.PUBLIC_MODE:
+        val = message.text.strip() if message.text else ""
+        if val.lower() == "disable":
+            admin_sessions.pop(user_id, None)
+            await message.reply_text("Cancelled.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="dumb_menu")]]))
+            return
+
+        ch_id = None
+        ch_name = "Custom Channel"
+        if message.forward_from_chat:
+            ch_id = message.forward_from_chat.id
+            ch_name = message.forward_from_chat.title
+        elif val:
+            try:
+                chat = await client.get_chat(val)
+                ch_id = chat.id
+                ch_name = chat.title or "Channel"
+            except Exception as e:
+                await message.reply_text(f"❌ Error finding channel: {e}\nTry forwarding a message instead.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]]))
+                return
+
+        if ch_id:
+            await db.add_dumb_channel(ch_id, ch_name)
+            await message.reply_text(f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="dumb_menu")]]))
+            admin_sessions.pop(user_id, None)
+        return
 
     # Handle Public Mode settings
     if state.startswith("awaiting_public_"):
