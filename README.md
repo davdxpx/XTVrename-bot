@@ -18,6 +18,8 @@ The **XTV Rename Bot** is a high-performance, enterprise-grade Telegram bot engi
 *   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork.
 
 ### 🔹 Media Management
+*   **Multiple Dumb Channels (Storage/Forwarding)**: Configure multiple destination channels (globally or per-user). The bot automatically queues files and strictly forwards them in sequential order (e.g., sorting series by Season/Episode and movies by resolution precedence: 2160p > 1080p > 720p > 480p).
+*   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit (configurable by the CEO).
 *   **Personal Media & Unlisted Content**: Direct menu options to bypass metadata databases (e.g., TMDb) for personal files, camera footage, photos, and unlisted regional content. Smartly preserves original file extensions (like `.jpeg`) and lets you choose your preferred output format.
 *   **Series & Movies**: Specialized handling for different media types.
     *   *Series*: Season/Episode numbering (S01E01) format.
@@ -26,7 +28,7 @@ The **XTV Rename Bot** is a high-performance, enterprise-grade Telegram bot engi
 *   **Dynamic Filename Templates**: Fully customizable filename structures via the Admin Panel for Movies, Series, and Subtitles using variables like `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, and `{Channel}`.
 
 ### 🔹 Professional Metadata Injection
-*   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers.
+*   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
 *   **Branding**: Sets "Encoded by @XTVglobal" and custom audio/subtitle track titles.
 *   **Thumbnail Embedding**: Embeds custom or poster-based thumbnails into video files.
 
