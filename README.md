@@ -5,34 +5,45 @@
 
 ![XTV Banner](https://telegra.ph/file/857e23117462419409849.jpg)
 
-The **XTV Rename Bot** is a high-performance, enterprise-grade Telegram bot engineered for automated media processing. It combines robust FFmpeg metadata injection with intelligent file renaming algorithms, designed specifically for maintaining large-scale media libraries.
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![Pyrogram](https://img.shields.io/badge/Pyrogram-Latest-blue.svg?logo=telegram&logoColor=white)](https://docs.pyrogram.org/)
+[![FFmpeg](https://img.shields.io/badge/FFmpeg-Included-green.svg?logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-XTV_Public_v2.0-red.svg)](https://github.com/davdxpx/XTVrename-bot/blob/main/LICENSE)
+
+The **XTV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot** engineered for automated media processing, file renaming, and video metadata editing. It combines robust **FFmpeg** metadata injection with intelligent file renaming algorithms, designed specifically for maintaining large-scale media libraries on Telegram. Whether you need an **auto renamer bot**, a **TMDb movie scraper**, or a **video metadata editor**, XTV Rename Bot is the ultimate **media management solution**.
 
 ## 🌟 Key Features
 
 ### 🔹 Advanced Processing Engines
 *   **XTV Core™**: Lightning-fast processing for standard files (up to 2GB) using the primary bot API.
-*   **𝕏TV Pro™**: Seamless integration with a Userbot session to handle **Large Files (up to 4GB)**, bypassing standard bot limitations (Premium required).
+*   **XTV Pro™**: Seamless integration with a Userbot session to handle **Large Files (up to 4GB)**, bypassing standard bot limitations (Premium required). The perfect **4GB Telegram bot** solution.
 
 ### 🔹 Intelligent Recognition
 *   **Auto-Detection Matrix**: Automatically scans filenames to detect Movie/Series titles, Years, Qualities, and Episode numbers with high accuracy.
 *   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork.
 
 ### 🔹 Media Management
+*   **Multiple Dumb Channels (Storage/Forwarding)**: Configure multiple destination channels (globally or per-user). The bot automatically queues files and strictly forwards them in sequential order (e.g., sorting series by Season/Episode and movies by resolution precedence: 2160p > 1080p > 720p > 480p).
+*   **Smart Debounce Queue Manager**: Automatically sorts batched media uploads logically. Instead of simple alphabetical sorting, series are ordered by SxxExx and movies by quality precedence, preventing out-of-order uploads to your channels.
+*   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit (configurable by the CEO).
+*   **Spam-Proof Forwarding**: Utilizing Pyrogram's `copy()` method, the bot cleanly removes 'Forwarded from' tags when sending to Dumb Channels, preventing Telegram's spam detection from flagging bulk media (which can result in 0KB files and stripped thumbnails).
 *   **Personal Media & Unlisted Content**: Direct menu options to bypass metadata databases (e.g., TMDb) for personal files, camera footage, photos, and unlisted regional content. Smartly preserves original file extensions (like `.jpeg`) and lets you choose your preferred output format.
 *   **Series & Movies**: Specialized handling for different media types.
     *   *Series*: Season/Episode numbering (S01E01) format.
     *   *Movies*: Clean Title.Year.Quality format.
 *   **Subtitle Workflow**: Dedicated flow for subtitle files (`.srt`, `.ass`), supporting language codes and custom naming.
-*   **Dynamic Filename Templates**: Fully customizable filename structures via the Admin Panel for Movies, Series, and Subtitles using variables like `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, and `{Channel}`.
+*   **Dynamic Filename Templates**: Fully customizable filename structures via the Admin Panel for Movies, Series, and Subtitles using variables like `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, and `{Channel}`. The template is the absolute source of truth for spacing and formatting.
 
 ### 🔹 Professional Metadata Injection
-*   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers.
+*   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
 *   **Branding**: Sets "Encoded by @XTVglobal" and custom audio/subtitle track titles.
 *   **Thumbnail Embedding**: Embeds custom or poster-based thumbnails into video files.
 
 ### 🔹 Security & Privacy
 *   **Anti-Hash Algorithm**: Generates unique, random captions for every file to prevent hash-based tracking or duplicate detection.
 *   **Concurrency Control**: Global semaphore system prevents server overload by managing simultaneous downloads/uploads.
+*   **Smart Force-Sub Setup**: Automatically detects when the bot is promoted to an Administrator in a channel, verifies permissions, and dynamically generates and saves an invite link for seamless Force-Sub configuration.
 
 ### 🔹 Other Features
 *   **Admin Panel**: Full control over bot settings, metadata templates, filename templates, and thumbnails via an inline menu.
@@ -72,7 +83,7 @@ docker run -d --env-file .env --name xtv-bot xtv-bot
 
 ## ⚙️ Configuration (.env)
 
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory. You will need a **MongoDB** instance and **Pyrogram** session (optional for 4GB files).
 
 | Variable | Description | Required |
 | :--- | :--- | :--- |
