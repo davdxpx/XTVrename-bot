@@ -14,6 +14,10 @@ async def admin_panel(client, message):
     if not is_admin(message.from_user.id):
         return
 
+    # Check if Pro is configured to adjust the button text
+    pro_session = await db.get_pro_session()
+    pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
+
     if Config.PUBLIC_MODE:
         await message.reply_text(
             "🛠 **Public Mode Admin Panel** 🛠\n\n"
@@ -29,7 +33,7 @@ async def admin_panel(client, message):
                 [InlineKeyboardButton("⏱ Edit Rate Limits", callback_data="admin_public_rate_limit"),
                  InlineKeyboardButton("⏱ Edit Dumb Channel Timeout", callback_data="admin_dumb_timeout")],
                 [InlineKeyboardButton("👀 View Public Config", callback_data="admin_public_view")],
-                [InlineKeyboardButton("🚀 Manage 𝕏TV Pro™", callback_data="admin_xtv_pro")]
+                [InlineKeyboardButton(pro_btn_text, callback_data="pro_setup_menu")]
             ])
         )
     else:
@@ -46,7 +50,7 @@ async def admin_panel(client, message):
                 [InlineKeyboardButton("📺 Dumb Channels", callback_data="admin_dumb_channels")],
                 [InlineKeyboardButton("⚙️ Settings", callback_data="admin_settings")],
                 [InlineKeyboardButton("👀 View Current Settings", callback_data="admin_view")],
-                [InlineKeyboardButton("🚀 Manage 𝕏TV Pro™", callback_data="admin_xtv_pro")]
+                [InlineKeyboardButton(pro_btn_text, callback_data="pro_setup_menu")]
             ])
         )
 
@@ -449,6 +453,10 @@ async def admin_callback(client, callback_query):
         )
     elif data == "admin_main" or data == "admin_cancel":
         admin_sessions.pop(user_id, None)
+
+        pro_session = await db.get_pro_session()
+        pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
+
         if Config.PUBLIC_MODE:
             await callback_query.message.edit_text(
                 "🛠 **Public Mode Admin Panel** 🛠\n\n"
@@ -463,7 +471,8 @@ async def admin_callback(client, callback_query):
                      InlineKeyboardButton("📢 Edit Force-Sub Channel", callback_data="admin_public_force_sub")],
                     [InlineKeyboardButton("⏱ Edit Rate Limits", callback_data="admin_public_rate_limit"),
                      InlineKeyboardButton("⏱ Edit Dumb Channel Timeout", callback_data="admin_dumb_timeout")],
-                    [InlineKeyboardButton("👀 View Public Config", callback_data="admin_public_view")]
+                    [InlineKeyboardButton("👀 View Public Config", callback_data="admin_public_view")],
+                    [InlineKeyboardButton(pro_btn_text, callback_data="pro_setup_menu")]
                 ])
             )
         else:
@@ -479,7 +488,8 @@ async def admin_callback(client, callback_query):
                     [InlineKeyboardButton("📝 Edit Caption Template", callback_data="admin_caption")],
                     [InlineKeyboardButton("📺 Dumb Channels", callback_data="admin_dumb_channels")],
                     [InlineKeyboardButton("⚙️ Settings", callback_data="admin_settings")],
-                    [InlineKeyboardButton("👀 View Current Settings", callback_data="admin_view")]
+                    [InlineKeyboardButton("👀 View Current Settings", callback_data="admin_view")],
+                    [InlineKeyboardButton(pro_btn_text, callback_data="pro_setup_menu")]
                 ])
             )
     elif data.startswith("edit_template_"):
@@ -566,7 +576,14 @@ async def handle_admin_text(client, message):
                 return
 
         if ch_id:
-            await db.add_dumb_channel(ch_id, ch_name)
+            invite_link = None
+            try:
+                # Try to export an invite link so the bot can cache this peer on restart
+                invite_link = await client.export_chat_invite_link(ch_id)
+            except Exception as e:
+                logger.warning(f"Could not export invite link for {ch_id}: {e}")
+
+            await db.add_dumb_channel(ch_id, ch_name, invite_link=invite_link)
             await message.reply_text(f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="dumb_menu")]]))
             admin_sessions.pop(user_id, None)
         return

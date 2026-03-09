@@ -422,6 +422,7 @@ class TaskProcessor:
         # then the Bot copies the file to the User. This hides the Userbot's identity from the user.
         target_chat_id = self.user_id
         is_tunneling = False
+        used_pm_tunnel = False
 
         if self.mode == "pro":
             is_tunneling = True
@@ -434,6 +435,7 @@ class TaskProcessor:
                 else:
                     bot_info = await self.client.get_me()
                     target_chat_id = bot_info.username
+                    used_pm_tunnel = True
             except Exception as e:
                 logger.error(f"Failed to resolve tunnel target for Pro upload: {e}")
 
@@ -464,18 +466,50 @@ class TaskProcessor:
             # The Main Bot must now copy it to the end-user to hide the Userbot.
             if is_tunneling:
                 try:
+                    from_chat_id = media_msg.chat.id
+                    message_id_to_copy = media_msg.id
+
+                    # If the tunnel was the Bot's PM, the Userbot's media_msg.id will NOT match the Main Bot's message ID
+                    # for that exact same message (since Telegram separates IDs in private chats).
+                    # We must find the correct message ID from the Main Bot's perspective.
+                    if used_pm_tunnel:
+                        # Search the main bot's chat history with the Userbot for the file.
+                        userbot_me = await self.active_client.get_me()
+                        from_chat_id = userbot_me.id
+
+                        # Wait briefly for Telegram to sync the message to the bot's inbox
+                        await asyncio.sleep(2)
+
+                        found = False
+                        # Use userbot_me.id instead of username to prevent crashes if the Premium account has no username set
+                        async for bot_msg in self.client.get_chat_history(userbot_me.id, limit=10):
+                            bot_media = bot_msg.document or bot_msg.video or bot_msg.photo
+                            userbot_media = media_msg.document or media_msg.video or media_msg.photo
+                            if bot_media and userbot_media and bot_media.file_unique_id == userbot_media.file_unique_id:
+                                message_id_to_copy = bot_msg.id
+                                found = True
+                                break
+
+                        if not found:
+                            raise Exception("Could not locate tunneled message in Bot's PM history.")
+
                     await self.client.copy_message(
                         chat_id=self.user_id,
-                        from_chat_id=media_msg.chat.id,
-                        message_id=media_msg.id
+                        from_chat_id=from_chat_id,
+                        message_id=message_id_to_copy
                     )
 
                     # If we used the bot's PM as a tunnel, delete the message from the bot PM to avoid clutter
-                    if target_chat_id != self.user_id and str(target_chat_id) != str(self.data.get("dumb_channel")):
-                        await media_msg.delete()
+                    if used_pm_tunnel:
+                        await self.client.delete_messages(chat_id=from_chat_id, message_ids=message_id_to_copy)
+                        # Optional: Also delete it from the Userbot's side
+                        try:
+                            await media_msg.delete()
+                        except:
+                            pass
                 except Exception as e:
                     logger.error(f"Failed to copy tunneled file to user {self.user_id}: {e}")
-                    await self.client.send_message(self.user_id, "❌ **Delivery Error**\n\nThe file was processed successfully but the bot failed to deliver it to you from the tunnel. Please check the bot's permissions.")
+                    await self.client.send_message(self.user_id, f"❌ **Delivery Error**\n\nThe file was processed successfully but the bot failed to deliver it to you from the tunnel. Error: `{e}`")
 
             await self.status_msg.delete()
 

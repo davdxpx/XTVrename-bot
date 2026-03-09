@@ -47,15 +47,21 @@ if __name__ == "__main__":
     logger.info("Starting XTV Rename Bot...")
     app.start()
 
-    # Cache dialogs to resolve PEER_ID_INVALID on ephemeral hostings
-    logger.info("Caching peers to avoid PEER_ID_INVALID...")
+    # Cache Dumb Channel peers using stored invite links to prevent PEER_ID_INVALID on ephemeral hosts
     try:
-        async def cache_peers():
-            async for _ in app.get_dialogs(limit=50):
-                pass
-        app.loop.run_until_complete(cache_peers())
+        from database import db
+        async def cache_dumb_channels():
+            links = await db.get_all_dumb_channel_links()
+            for link in links:
+                try:
+                    # Using get_chat with an invite link caches the peer in the session
+                    await app.get_chat(link)
+                except Exception as e:
+                    logger.warning(f"Failed to cache peer for link {link}: {e}")
+        logger.info("Caching Dumb Channel peers...")
+        app.loop.run_until_complete(cache_dumb_channels())
     except Exception as e:
-        logger.warning(f"Failed to cache peers: {e}")
+        logger.warning(f"Error during Dumb Channel caching: {e}")
 
     # Fetch Userbot session from Database
     try:

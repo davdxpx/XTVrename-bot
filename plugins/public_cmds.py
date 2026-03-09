@@ -455,7 +455,14 @@ async def handle_user_text(client, message):
                 return
 
         if ch_id:
-            await db.add_dumb_channel(ch_id, ch_name, user_id)
+            invite_link = None
+            try:
+                # Try to export an invite link so the bot can cache this peer on restart
+                invite_link = await client.export_chat_invite_link(ch_id)
+            except Exception as e:
+                logger.warning(f"Could not export invite link for {ch_id}: {e}")
+
+            await db.add_dumb_channel(ch_id, ch_name, invite_link=invite_link, user_id=user_id)
             await message.reply_text(f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="dumb_user_menu")]]))
             user_sessions.pop(user_id, None)
         return

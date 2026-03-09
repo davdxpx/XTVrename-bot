@@ -95,9 +95,21 @@ Create a `.env` file in the root directory. You will need a **MongoDB** instance
 | `ADMIN_IDS` | Allowed User IDs (comma separated) (Formerly FRANCHISEE_IDS) | ❌ |
 | `PUBLIC_MODE` | Set to `True` to allow anyone to use the bot. | ❌ |
 | `TMDB_API_KEY` | TMDb API Key for metadata | ✅ |
-| `USER_SESSION` | Pyrogram String Session for Userbot (XTV Pro™) | ❌ |
 
-> **Note:** To generate a `USER_SESSION` string, run `python3 generate_session.py` locally.
+## 🚀 𝕏TV Pro™ Setup (4GB File Support)
+
+To bypass Telegram's standard 2GB bot upload limit, the **𝕏TV Rename Bot** features a built-in **𝕏TV Pro™** mode. This mode uses a Premium Telegram account (Userbot) to act as a seamless tunnel for processing and delivering files up to 4GB.
+
+**How to Setup:**
+1. Send `/admin` to your bot.
+2. Click the **"🚀 Manage 𝕏TV Pro™"** button.
+3. Follow the interactive setup guide. You will be asked to provide your **API ID**, **API Hash**, and **Phone Number**.
+4. The bot will request a login code from Telegram. *(Enter the code with spaces, e.g., `1 2 3 4 5`, to avoid Telegram's security triggers).*
+5. If 2FA is enabled, enter your password.
+6. The bot will verify that the account has **Telegram Premium**. If successful, it securely saves the session credentials to the MongoDB database.
+7. **Restart the bot container** for the changes to take effect.
+
+> **Privacy & Tunneling:** When processing a file > 2GB, the Premium Userbot transcodes the file and uploads it to your Dumb Channel (acting as a tunnel). The Main Bot then seamlessly copies the file from the Dumb Channel directly to the user. This completely hides the Userbot's identity and removes any "Forwarded from" tags, ensuring a professional and secure delivery for all users!
 
 ## 🌍 Public Mode vs Private Mode
 

@@ -142,18 +142,32 @@ class Database:
             return settings.get("dumb_channels", {})
         return {}
 
-    async def add_dumb_channel(self, channel_id, channel_name, user_id=None):
+    async def add_dumb_channel(self, channel_id, channel_name, invite_link=None, user_id=None):
         if self.settings is None: return
         doc_id = self._get_doc_id(user_id)
         try:
             # We store dumb_channels as a dict: {str(channel_id): "Channel Name"}
+            update_data = {f"dumb_channels.{channel_id}": channel_name}
+            if invite_link:
+                update_data[f"dumb_channel_links.{channel_id}"] = invite_link
+
             await self.settings.update_one(
                 {"_id": doc_id},
-                {"$set": {f"dumb_channels.{channel_id}": channel_name}},
+                {"$set": update_data},
                 upsert=True
             )
         except Exception as e:
             logger.error(f"Error adding dumb channel for {doc_id}: {e}")
+
+    async def get_all_dumb_channel_links(self):
+        """Fetch all dumb channel links to cache peers on startup."""
+        if self.settings is None: return []
+        links = set()
+        async for doc in self.settings.find({"dumb_channel_links": {"$exists": True}}):
+            for link in doc.get("dumb_channel_links", {}).values():
+                if link:
+                    links.add(link)
+        return list(links)
 
     async def remove_dumb_channel(self, channel_id, user_id=None):
         if self.settings is None: return

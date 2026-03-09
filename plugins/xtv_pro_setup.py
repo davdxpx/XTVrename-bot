@@ -2,7 +2,7 @@ import asyncio
 import os
 import random
 import string
-from pyrogram import Client, filters
+from pyrogram import Client, filters, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import (
     SessionPasswordNeeded, PhoneCodeInvalid, PasswordHashInvalid,
@@ -20,11 +20,14 @@ def get_pro_session_data(user_id):
         pro_setup_sessions[user_id] = {}
     return pro_setup_sessions[user_id]
 
-@Client.on_callback_query(filters.regex(r"^admin_xtv_pro$"))
+@Client.on_callback_query(filters.regex(r"^pro_setup_menu$"))
 async def pro_menu(client, callback_query):
     user_id = callback_query.from_user.id
     if user_id != Config.CEO_ID:
         return await callback_query.answer("Not authorized.", show_alert=True)
+
+    # Clear any pending setup state if the user clicked cancel/back to reach this menu
+    pro_setup_sessions.pop(user_id, None)
 
     session = await db.get_pro_session()
 
@@ -53,32 +56,32 @@ async def start_setup(client, callback_query):
         "🚀 **𝕏TV Pro™ Setup**\n\n"
         "Let's configure the Userbot tunnel for 4GB files.\n"
         "First, please send me your **API ID** (e.g., `1234567`):",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]])
     )
 
 @Client.on_message(filters.private & filters.user(Config.CEO_ID))
 async def pro_setup_handler(client, message, group=0):
     user_id = message.from_user.id
     if user_id not in pro_setup_sessions:
-        message.continue_propagation()
+        raise ContinuePropagation
 
     data = pro_setup_sessions[user_id]
     state = data.get("state")
     if not state:
-        message.continue_propagation()
+        raise ContinuePropagation
 
     text = message.text.strip() if message.text else ""
     if not text:
-        return await message.reply_text("Please provide text.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]]))
+        return await message.reply_text("Please provide text.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]))
 
     if state == "awaiting_api_id":
         if not text.isdigit():
-            return await message.reply_text("API ID must be numeric. Try again.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]]))
+            return await message.reply_text("API ID must be numeric. Try again.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]))
         data["api_id"] = int(text)
         data["state"] = "awaiting_api_hash"
         await message.reply_text(
             "✅ Got API ID.\n\nNow, send me your **API Hash**:",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]])
         )
 
     elif state == "awaiting_api_hash":
@@ -87,7 +90,7 @@ async def pro_setup_handler(client, message, group=0):
         await message.reply_text(
             "✅ Got API Hash.\n\n"
             "Now, send your **Phone Number** in international format (e.g., `+1234567890`):",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]])
         )
 
     elif state == "awaiting_phone":
@@ -113,16 +116,16 @@ async def pro_setup_handler(client, message, group=0):
                 "Check your Telegram app for the login code.\n"
                 "**IMPORTANT:** Enter the code with spaces to avoid Telegram's security triggers.\n"
                 "For example, if your code is `12345`, enter `1 2 3 4 5`.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]])
             )
         except ApiIdInvalid:
-            await msg.edit_text("❌ **Invalid API ID / Hash**. Setup failed.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_xtv_pro")]]))
+            await msg.edit_text("❌ **Invalid API ID / Hash**. Setup failed.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]))
             del pro_setup_sessions[user_id]
         except PhoneNumberInvalid:
-            await msg.edit_text("❌ **Invalid Phone Number**. Setup failed.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_xtv_pro")]]))
+            await msg.edit_text("❌ **Invalid Phone Number**. Setup failed.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]))
             del pro_setup_sessions[user_id]
         except Exception as e:
-            await msg.edit_text(f"❌ **Error requesting code:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_xtv_pro")]]))
+            await msg.edit_text(f"❌ **Error requesting code:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]))
             del pro_setup_sessions[user_id]
 
     elif state == "awaiting_code":
@@ -138,12 +141,12 @@ async def pro_setup_handler(client, message, group=0):
             await msg.edit_text(
                 "🔐 **Two-Step Verification Enabled**\n\n"
                 "Please enter your 2FA password:",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]])
             )
         except PhoneCodeInvalid:
-            await msg.edit_text("❌ **Invalid Code**. Try again or restart setup.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]]))
+            await msg.edit_text("❌ **Invalid Code**. Try again or restart setup.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]))
         except Exception as e:
-            await msg.edit_text(f"❌ **Sign In Error:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]]))
+            await msg.edit_text(f"❌ **Sign In Error:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]))
             del pro_setup_sessions[user_id]
 
     elif state == "awaiting_password":
@@ -153,9 +156,9 @@ async def pro_setup_handler(client, message, group=0):
             await userbot.check_password(text)
             await finalize_setup(userbot, user_id, msg)
         except PasswordHashInvalid:
-            await msg.edit_text("❌ **Invalid Password**. Try again.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]]))
+            await msg.edit_text("❌ **Invalid Password**. Try again.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]))
         except Exception as e:
-            await msg.edit_text(f"❌ **Error:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_xtv_pro")]]))
+            await msg.edit_text(f"❌ **Error:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]))
             del pro_setup_sessions[user_id]
 
 async def finalize_setup(userbot, user_id, msg):
@@ -166,7 +169,7 @@ async def finalize_setup(userbot, user_id, msg):
                 "❌ **Premium Account Required**\n\n"
                 "Your account doesn't have Telegram Premium.\n"
                 "Buy it or complete the setup with an account that has Premium to unlock 4GB uploads.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_xtv_pro")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]])
             )
             await userbot.disconnect()
             del pro_setup_sessions[user_id]
@@ -187,5 +190,5 @@ async def finalize_setup(userbot, user_id, msg):
         await userbot.disconnect()
         del pro_setup_sessions[user_id]
     except Exception as e:
-        await msg.edit_text(f"❌ **Failed to finalize setup:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_xtv_pro")]]))
+        await msg.edit_text(f"❌ **Failed to finalize setup:** {e}", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]))
         del pro_setup_sessions[user_id]
