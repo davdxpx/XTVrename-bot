@@ -73,12 +73,13 @@ async def settings_panel(client, message):
             [InlineKeyboardButton("📝 Edit Metadata Templates", callback_data="user_templates")],
             [InlineKeyboardButton("📝 Edit Filename Templates", callback_data="user_filename_templates")],
             [InlineKeyboardButton("📝 Edit Caption Template", callback_data="user_caption")],
+            [InlineKeyboardButton("📺 Dumb Channels", callback_data="user_dumb_channels")],
             [InlineKeyboardButton("⚙️ General Settings", callback_data="user_general_settings")],
             [InlineKeyboardButton("👀 View Current Settings", callback_data="user_view")]
         ])
     )
 
-@Client.on_callback_query(filters.regex(r"^(user_|edit_user_template_|edit_user_fn_template_|prompt_user_.*)"))
+@Client.on_callback_query(filters.regex(r"^(user_|edit_user_template_|edit_user_fn_template_|prompt_user_.*|dumb_user_)"))
 async def user_settings_callback(client, callback_query):
     if not is_public_mode():
         raise ContinuePropagation
@@ -86,6 +87,83 @@ async def user_settings_callback(client, callback_query):
     user_id = callback_query.from_user.id
     data = callback_query.data
     logger.info(f"User settings callback: {data} from user {user_id}")
+
+    # Handle Dumb Channel Callbacks for public mode
+    if data.startswith("dumb_user_"):
+        if data == "dumb_user_menu":
+            channels = await db.get_dumb_channels(user_id)
+            default_ch = await db.get_default_dumb_channel(user_id)
+            text = "📺 **Manage Dumb Channels**\n\n"
+            text += "These channels can be used to forward processed files automatically.\n\n"
+            text += "**Configured Channels:**\n"
+            if not channels:
+                text += "- None\n"
+            else:
+                for ch_id, ch_name in channels.items():
+                    marker = " (Default)" if str(ch_id) == default_ch else ""
+                    text += f"- {ch_name} `{ch_id}`{marker}\n"
+
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Add New Dumb Channel", callback_data="dumb_user_add")],
+                    [InlineKeyboardButton("➖ Remove Dumb Channel", callback_data="dumb_user_remove")],
+                    [InlineKeyboardButton("⭐ Set Default", callback_data="dumb_user_set_default")],
+                    [InlineKeyboardButton("🔙 Back", callback_data="user_main")]
+                ])
+            )
+            return
+        elif data == "dumb_user_add":
+            user_sessions[user_id] = "awaiting_dumb_user_add"
+            await callback_query.message.edit_text(
+                "➕ **Add Dumb Channel**\n\n"
+                "Please add me as an Administrator in the desired channel.\n"
+                "Then, forward any message from that channel to me, OR send the Channel ID (e.g. `-100...`) or Public Username.\n\n"
+                "*(Send `disable` to cancel)*",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="dumb_user_menu")]])
+            )
+            return
+        elif data == "dumb_user_remove":
+            channels = await db.get_dumb_channels(user_id)
+            if not channels:
+                await callback_query.answer("No channels configured.", show_alert=True)
+                return
+            buttons = []
+            for ch_id, ch_name in channels.items():
+                buttons.append([InlineKeyboardButton(f"❌ {ch_name}", callback_data=f"dumb_user_del_{ch_id}")])
+            buttons.append([InlineKeyboardButton("🔙 Back", callback_data="dumb_user_menu")])
+            await callback_query.message.edit_text("Select a channel to remove:", reply_markup=InlineKeyboardMarkup(buttons))
+            return
+        elif data.startswith("dumb_user_del_"):
+            ch_id = data.replace("dumb_user_del_", "")
+            await db.remove_dumb_channel(ch_id, user_id)
+            await callback_query.answer("Channel removed.", show_alert=True)
+            callback_query.data = "dumb_user_menu"
+            await user_settings_callback(client, callback_query)
+            return
+        elif data == "dumb_user_set_default":
+            channels = await db.get_dumb_channels(user_id)
+            if not channels:
+                await callback_query.answer("No channels configured.", show_alert=True)
+                return
+            buttons = []
+            for ch_id, ch_name in channels.items():
+                buttons.append([InlineKeyboardButton(f"⭐ {ch_name}", callback_data=f"dumb_user_def_{ch_id}")])
+            buttons.append([InlineKeyboardButton("🔙 Back", callback_data="dumb_user_menu")])
+            await callback_query.message.edit_text("Select default auto-detect channel:", reply_markup=InlineKeyboardMarkup(buttons))
+            return
+        elif data.startswith("dumb_user_def_"):
+            ch_id = data.replace("dumb_user_def_", "")
+            await db.set_default_dumb_channel(ch_id, user_id)
+            await callback_query.answer("Default channel set.", show_alert=True)
+            callback_query.data = "dumb_user_menu"
+            await user_settings_callback(client, callback_query)
+            return
+
+    if data == "user_dumb_channels":
+        callback_query.data = "dumb_user_menu"
+        await user_settings_callback(client, callback_query)
+        return
 
     if data == "user_thumb_menu":
         await callback_query.message.edit_text(
@@ -292,6 +370,7 @@ async def user_settings_callback(client, callback_query):
                 [InlineKeyboardButton("📝 Edit Metadata Templates", callback_data="user_templates")],
                 [InlineKeyboardButton("📝 Edit Filename Templates", callback_data="user_filename_templates")],
                 [InlineKeyboardButton("📝 Edit Caption Template", callback_data="user_caption")],
+                [InlineKeyboardButton("📺 Dumb Channels", callback_data="user_dumb_channels")],
                 [InlineKeyboardButton("⚙️ General Settings", callback_data="user_general_settings")],
                 [InlineKeyboardButton("👀 View Current Settings", callback_data="user_view")]
             ])
@@ -344,7 +423,7 @@ async def handle_user_photo(client, message):
         logger.error(f"Thumbnail upload failed: {e}")
         await msg.edit_text(f"❌ Error: {e}")
 
-@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=1)
+@Client.on_message((filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"), group=1)
 async def handle_user_text(client, message):
     if not is_public_mode():
         raise ContinuePropagation
@@ -353,6 +432,33 @@ async def handle_user_text(client, message):
     state = user_sessions.get(user_id)
     if not state:
         raise ContinuePropagation
+
+    if state == "awaiting_dumb_user_add":
+        val = message.text.strip() if message.text else ""
+        if val.lower() == "disable":
+            user_sessions.pop(user_id, None)
+            await message.reply_text("Cancelled.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="dumb_user_menu")]]))
+            return
+
+        ch_id = None
+        ch_name = "Custom Channel"
+        if message.forward_from_chat:
+            ch_id = message.forward_from_chat.id
+            ch_name = message.forward_from_chat.title
+        elif val:
+            try:
+                chat = await client.get_chat(val)
+                ch_id = chat.id
+                ch_name = chat.title or "Channel"
+            except Exception as e:
+                await message.reply_text(f"❌ Error finding channel: {e}\nTry forwarding a message instead.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="dumb_user_menu")]]))
+                return
+
+        if ch_id:
+            await db.add_dumb_channel(ch_id, ch_name, user_id)
+            await message.reply_text(f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="dumb_user_menu")]]))
+            user_sessions.pop(user_id, None)
+        return
 
     if state.startswith("awaiting_user_template_"):
         field = state.split("_")[-1]
