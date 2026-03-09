@@ -148,7 +148,7 @@ async def manual_title_handler(client, message):
             ])
         )
     else:
-        await prompt_dumb_channel(client, user_id, message)
+        await prompt_dumb_channel(client, user_id, message, is_edit=False)
 
 async def search_handler(client, message, media_type):
     query = message.text
@@ -265,7 +265,7 @@ async def handle_text_input(client, message):
              return
 
         update_data(user_id, "language", lang)
-        await prompt_dumb_channel(client, user_id, message)
+        await prompt_dumb_channel(client, user_id, message, is_edit=False)
 
     elif state.startswith("awaiting_episode_correction_"):
         msg_id = int(state.split("_")[-1])
@@ -346,7 +346,7 @@ async def handle_send_as_preference(client, callback_query):
     pref = callback_query.data.split("_")[2]
 
     update_data(user_id, "send_as", pref)
-    await prompt_dumb_channel(client, user_id, callback_query.message)
+    await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
@@ -386,17 +386,15 @@ async def handle_tmdb_selection(client, callback_query):
         if data.get("is_subtitle"):
             await initiate_language_selection(client, user_id, callback_query.message)
         else:
-            await prompt_dumb_channel(client, user_id, callback_query.message)
+            await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
 
-async def prompt_dumb_channel(client, user_id, message_obj):
+async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
     channels = await db.get_dumb_channels(user_id)
     if not channels:
         set_state(user_id, "awaiting_file_upload")
         text = "✅ **Ready!**\n\nNow, **send me the file(s)** you want to rename."
         reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
-        if isinstance(message_obj, str):
-            await client.send_message(user_id, text, reply_markup=reply_markup)
-        elif hasattr(message_obj, "edit_text"):
+        if is_edit:
             await message_obj.edit_text(text, reply_markup=reply_markup)
         else:
             await message_obj.reply_text(text, reply_markup=reply_markup)
@@ -410,9 +408,7 @@ async def prompt_dumb_channel(client, user_id, message_obj):
     buttons.append([InlineKeyboardButton("❌ Don't send to Dumb Channel", callback_data="sel_dumb_none")])
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
 
-    if isinstance(message_obj, str):
-        await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
-    elif hasattr(message_obj, "edit_text"):
+    if is_edit:
         await message_obj.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
     else:
         await message_obj.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -471,7 +467,7 @@ async def handle_language_callback(client, callback_query):
         return
 
     update_data(user_id, "language", data)
-    await prompt_dumb_channel(client, user_id, callback_query.message)
+    await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
 
 @Client.on_callback_query(filters.regex(r"^cancel_rename$"))
 async def handle_cancel(client, callback_query):

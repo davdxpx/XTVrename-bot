@@ -50,7 +50,7 @@ async def admin_panel(client, message):
 
 from pyrogram import ContinuePropagation
 
-@Client.on_callback_query(filters.regex(r"^(admin_|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_fn_template_|prompt_template_|dumb_)"))
+@Client.on_callback_query(filters.regex(r"^(admin_|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_fn_template_|prompt_template_|dumb_(?!user_))"))
 async def admin_callback(client, callback_query):
     user_id = callback_query.from_user.id
     if not is_admin(user_id):
