@@ -96,9 +96,15 @@ if __name__ == "__main__":
             # the Userbot (which is immune to bot limitations) must send a message to the tunnel,
             # forcing Telegram to sync the channel's peer info back to the Main Bot instantly.
             tunnel_id = pro_data.get("tunnel_id")
-            if tunnel_id:
+            tunnel_link = pro_data.get("tunnel_link")
+
+            if tunnel_id and tunnel_link:
                 try:
-                    logger.info(f"Pinging Pro Tunnel ({tunnel_id}) to synchronize peer data...")
+                    logger.info(f"Caching Pro Tunnel peer for Userbot via invite link...")
+                    # Userbot must resolve the invite link to cache the peer for itself
+                    app.loop.run_until_complete(user_bot.get_chat(tunnel_link))
+
+                    logger.info(f"Pinging Pro Tunnel ({tunnel_id}) to synchronize peer data with Main Bot...")
                     # Send a silent ping and delete it immediately
                     msg = app.loop.run_until_complete(user_bot.send_message(tunnel_id, "ping", disable_notification=True))
                     app.loop.run_until_complete(user_bot.delete_messages(tunnel_id, msg.id))
