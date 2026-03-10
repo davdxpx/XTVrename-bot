@@ -71,7 +71,9 @@ This repository includes a `render.yaml` blueprint for a seamless, 1-click deplo
 3.  Click **New +** and select **Blueprint**.
 4.  Connect your GitHub account and select your forked `XTVrename-bot` repository.
 5.  Render will automatically detect the `render.yaml` file. Click **Apply**.
-6.  You will be prompted to fill in the **Environment Variables** (like your `BOT_TOKEN`, `API_ID`, etc. - *see Configuration below*).
+6.  You will be prompted to fill in the **Environment Variables**. Most are standard (`BOT_TOKEN`, `API_ID`, etc. - *see Configuration below*), but pay special attention to **`PUBLIC_MODE`**:
+    *   Type **`True`** if you want the bot open to everyone (Public Mode).
+    *   Type **`False`** if you want the bot locked so only you (the CEO) can use it (Private Mode).
 7.  Click **Save** and Render will automatically build and start your bot as a Background Worker!
 
 > **Note on Free Tier & RAM:** The blueprint defaults to Render's Free Tier, which requires **no credit card**. However, since this bot uses **FFmpeg** to process large media files, it can consume significant RAM. If your bot crashes or restarts during heavy video processing (like embedding thumbnails into large MKV files), you may need to upgrade your Render plan to give the bot more memory.
