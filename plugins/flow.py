@@ -576,6 +576,21 @@ async def handle_file_upload(client, message):
             await message.reply_text(f"⏳ **Rate Limited**\n\nPlease wait {delay} seconds between uploads.")
             return
 
+    # Pre-check file size limits before processing
+    media = message.document or message.video
+    if media:
+        file_size = media.file_size
+
+        # 4GB Absolute limit
+        if file_size > 4000 * 1024 * 1024:
+            await message.reply_text("❌ **File Too Large**\n\nTelegram's absolute maximum file size is 4GB. This file cannot be processed.")
+            return
+
+        # 2GB Limit requiring XTV Pro
+        if file_size > 2000 * 1024 * 1024 and not getattr(client, "user_bot", None):
+            await message.reply_text("❌ **𝕏TV Pro™ Required**\n\nThis file is larger than 2GB. You must configure the 𝕏TV Pro™ Premium Userbot in the `/admin` panel to process files of this size.")
+            return
+
     if state != "awaiting_file_upload":
         if state is None:
             await handle_auto_detection(client, message)
