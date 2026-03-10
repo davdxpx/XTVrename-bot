@@ -163,10 +163,9 @@ To bypass Telegram's standard 2GB bot upload limit, the **𝕏TV Rename Bot** fe
 3. Follow the interactive setup guide. You will be asked to provide your **API ID**, **API Hash**, and **Phone Number**.
 4. The bot will request a login code from Telegram. *(Enter the code with spaces, e.g., `1 2 3 4 5`, to avoid Telegram's security triggers).*
 5. If 2FA is enabled, enter your password.
-6. The bot will verify that the account has **Telegram Premium**. If successful, it securely saves the session credentials to the MongoDB database.
-7. **Restart the bot container** for the changes to take effect.
+6. The bot will verify that the account has **Telegram Premium**. If successful, it securely saves the session credentials to the MongoDB database and hot-starts the Userbot instantly—**no restart required**.
 
-> **Privacy & Tunneling:** When processing a file > 2GB, the Premium Userbot transcodes the file and uploads it to your Dumb Channel (acting as a tunnel). The Main Bot then seamlessly copies the file from the Dumb Channel directly to the user. This completely hides the Userbot's identity and removes any "Forwarded from" tags, ensuring a professional and secure delivery for all users!
+> **Privacy & Ephemeral Tunneling:** When processing a file > 2GB, the Premium Userbot creates a temporary, private "Ephemeral Tunnel" channel specific to that file. It uploads the transcoded file to this tunnel, and the Main Bot seamlessly copies the file from the tunnel directly to the user. After the transfer, the Userbot instantly deletes the temporary channel. This entirely bypasses standard bot API limitations, completely hides the Userbot's identity, prevents `PEER_ID_INVALID` caching errors, and removes any "Forwarded from" tags for a flawless delivery!
 
 ## 🌍 Public Mode vs Private Mode
 
