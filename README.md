@@ -88,19 +88,35 @@ This repository is also optimized for **Railway** with a custom `Dockerfile`, th
 4.  **Add Variables**: Go to the "Variables" tab and add the configuration (see below).
 5.  **Build & Deploy**: Railway will automatically detect the Dockerfile and start the bot.
 
-### 3. Local / VPS (Docker)
+### 3. Oracle Cloud (The Ultimate Solution for 10TB Free Egress)
 
-```bash
-# 1. Clone the repo
-git clone https://github.com/davdxpx/XTVrename-bot.git
-cd XTVrename-bot
+If you have been struggling with massive bandwidth (egress) bills on platforms like Railway because of heavy media processing, **Oracle Cloud's Always Free ARM A1 Instance is the ultimate solution.** You get 4 CPU Cores, 24GB of RAM, and **10TB of Free Egress Bandwidth** every month!
 
-# 2. Build the image
-docker build -t xtv-bot .
+**Step-by-Step Oracle Setup:**
+1. **Create Instance:** Go to the Oracle Cloud console, create a new compute instance, and select **Canonical Ubuntu**. Change the shape to **Ampere VM.Standard.A1.Flex** (ARM), and max out the sliders (4 OCPUs, 24GB RAM). Assign a Public IPv4 address.
+2. **Connect via SSH:** `ssh -i /path/to/key ubuntu@YOUR_SERVER_IP`
+3. **Install Docker & Docker Compose:**
+   ```bash
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install docker.io docker-compose -y
+   sudo systemctl enable --now docker
+   sudo usermod -aG docker ubuntu
+   # (Log out and back in for the group to apply)
+   ```
+4. **Deploy the Bot:**
+   ```bash
+   # Clone the repo
+   git clone https://github.com/davdxpx/XTVrename-bot.git
+   cd XTVrename-bot
 
-# 3. Run the container
-docker run -d --env-file .env --name xtv-bot xtv-bot
-```
+   # Configure Environment
+   cp .env.example .env
+   nano .env # Fill in your API_ID, BOT_TOKEN, etc.
+
+   # Build & Run in the background
+   docker-compose up -d --build
+   ```
+   *(Note: Our Dockerfile automatically detects the ARM architecture and optimizes the build!)*
 
 ## ⚙️ Configuration (.env)
 

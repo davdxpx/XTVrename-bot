@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  xtv-rename-bot:
+    build: .
+    container_name: xtv-rename-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Optional: If you want to persist the local pyrogram sessions outside the container
+    # volumes:
+    #   - ./:/app
