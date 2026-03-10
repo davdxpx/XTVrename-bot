@@ -46,9 +46,10 @@ If you have been struggling with massive bandwidth (egress) bills on platforms l
 2. **Create Instance:** Once logged into your dashboard, click **"Create a VM instance"**.
 3. **Name & Image:** Give your instance a name (e.g., `XTV-Bot`). Under "Image and shape", click "Edit". Change the Image to **Canonical Ubuntu** (pick the latest LTS version, like 22.04 or 24.04).
 4. **Shape (Crucial Step):** Under "Shape", click "Change shape". Select **"Virtual machine"**, then select the **"Ampere"** series. Choose the **VM.Standard.A1.Flex** shape. Max out the sliders to get your full free allowance: **4 OCPUs** and **24GB RAM**. Click "Select shape".
-5. **Networking (VCN):** Under "Networking", click "Edit". Select "Create new virtual cloud network". Ensure **"Assign a public IPv4 address"** is checked so you can connect to it.
-6. **SSH Keys (Crucial Step):** Under "Add SSH keys", ensure **"Generate a key pair for me"** is selected. Click **"Save private key"** and download the `.key` file to your computer. *Keep this safe! You will need it to connect to your server.*
-7. **Create:** Scroll down and click **"Create"**. Wait a few minutes for the instance to provision. Once it's green and says "RUNNING", copy the **"Public IP Address"** shown on the page.
+5. **Networking (Primary VNIC):** Under "Networking", click "Edit". Look for **Primary VNIC information** and select **"Create a new virtual cloud network"**. You will then be given options for the subnet; select **"Create a new public subnet"**. Ensure **"Assign a public IPv4 address"** is checked so you can connect to your server.
+6. **Storage:** Leave the default boot volume size as it is (it should default to the free 46.6 GB limit).
+7. **SSH Keys (Crucial Step):** Under "Add SSH keys", ensure **"Generate a key pair for me"** is selected. Click **"Save private key"** and download the `.key` file to your computer. *Keep this safe! You will need it to connect to your server.*
+8. **Create:** Scroll down and click **"Create"**. Wait a few minutes for the instance to provision. Once it's green and says "RUNNING", copy the **"Public IP Address"** shown on the page.
 
 #### Step B: Connect to Your Server (SSH)
 **What is SSH?** SSH (Secure Shell) is simply a way to remotely log into your new Oracle server from your own computer's terminal. It gives you a text-based window into your cloud server.
