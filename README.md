@@ -57,9 +57,26 @@ The **XTV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot** 
 
 ## 🛠 Deployment Guide
 
-### 1. Deploy on Railway (Recommended)
+### 1. Deploy on Render.com (Highly Recommended - Zero Egress Costs)
 
-This repository is optimized for **Railway** with a custom `Dockerfile`.
+**Why Render?** Telegram bots that process media use significant bandwidth downloading and uploading files. Platforms like Railway charge high fees for bandwidth (egress). Render provides **generous unmetered bandwidth**, saving you from unexpected bills!
+
+This repository includes a `render.yaml` blueprint for a seamless, 1-click deployment.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+**Beginner-Friendly Setup Guide:**
+1.  **Fork this Repository** to your GitHub account.
+2.  Sign up or log in to [Render.com](https://render.com).
+3.  Click **New +** and select **Blueprint**.
+4.  Connect your GitHub account and select your forked `XTVrename-bot` repository.
+5.  Render will automatically detect the `render.yaml` file. Click **Apply**.
+6.  You will be prompted to fill in the **Environment Variables** (like your `BOT_TOKEN`, `API_ID`, etc. - *see Configuration below*).
+7.  Click **Save** and Render will automatically build and start your bot as a Background Worker! *(Note: The starter tier is recommended over the free tier due to FFmpeg's memory usage).*
+
+### 2. Deploy on Railway
+
+This repository is also optimized for **Railway** with a custom `Dockerfile`, though be aware of potential bandwidth (egress) costs.
 
 1.  **Fork this Repository** to your GitHub account.
 2.  **Create a New Project** on [Railway.app](https://railway.app).
@@ -67,7 +84,7 @@ This repository is optimized for **Railway** with a custom `Dockerfile`.
 4.  **Add Variables**: Go to the "Variables" tab and add the configuration (see below).
 5.  **Build & Deploy**: Railway will automatically detect the Dockerfile and start the bot.
 
-### 2. Local / VPS (Docker)
+### 3. Local / VPS (Docker)
 
 ```bash
 # 1. Clone the repo

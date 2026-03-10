@@ -1,0 +1,23 @@
+services:
+  - type: worker
+    name: xtv-rename-bot
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # Starter plan is generally recommended for ffmpeg operations over the free tier due to RAM requirements
+    envVars:
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: MAIN_URI
+        sync: false
+      - key: CEO_ID
+        sync: false
+      - key: TMDB_API_KEY
+        sync: false
+      - key: PUBLIC_MODE
+        value: "False"
+      - key: ADMIN_IDS
+        sync: false
