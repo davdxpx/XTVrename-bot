@@ -118,6 +118,26 @@ If you have been struggling with massive bandwidth (egress) bills on platforms l
    ```
    *(Note: Our Dockerfile automatically detects the ARM architecture and optimizes the build!)*
 
+### 4. Local / VPS (Standard Docker)
+
+If you prefer using standard Docker commands instead of Docker Compose:
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/davdxpx/XTVrename-bot.git
+cd XTVrename-bot
+
+# 2. Configure Environment
+cp .env.example .env
+nano .env # Add your tokens here
+
+# 3. Build the image
+docker build -t xtv-bot .
+
+# 4. Run the container
+docker run -d --env-file .env --name xtv-bot xtv-bot
+```
+
 ## ⚙️ Configuration (.env)
 
 Create a `.env` file in the root directory. You will need a **MongoDB** instance and **Pyrogram** session (optional for 4GB files).
