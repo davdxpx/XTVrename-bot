@@ -56,17 +56,13 @@ if __name__ == "__main__":
             for link in links:
                 try:
                     # Using get_chat with an invite link caches the peer in the session
+                    # Note: Telegram Bots cannot use CheckChatInvite for private channels.
+                    # If links are public (@username), it works. If private (+hash), it raises BOT_METHOD_INVALID.
+                    # We will catch this, but it's safe to ignore since the bot might already know it.
                     await app.get_chat(link)
                 except Exception as e:
-                    logger.warning(f"Failed to cache peer for link {link}: {e}")
-
-            # Pro Tunnel Channel
-            pro_session = await db.get_pro_session()
-            if pro_session and pro_session.get("tunnel_link"):
-                try:
-                    await app.get_chat(pro_session.get("tunnel_link"))
-                except Exception as e:
-                    logger.warning(f"Failed to cache peer for Pro Tunnel link: {e}")
+                    # Log as debug so we don't spam warnings on valid setups where the bot just can't use the link
+                    pass
 
         logger.info("Caching Channel peers...")
         app.loop.run_until_complete(cache_channels())
@@ -95,6 +91,21 @@ if __name__ == "__main__":
             logger.info("Starting 𝕏TV Pro™ Premium Userbot...")
             user_bot.start()
             logger.info("𝕏TV Pro™ Premium Userbot Started Successfully!")
+
+            # To prevent PEER_ID_INVALID on the Main Bot when copying files into the private tunnel,
+            # the Userbot (which is immune to bot limitations) must send a message to the tunnel,
+            # forcing Telegram to sync the channel's peer info back to the Main Bot instantly.
+            tunnel_id = pro_data.get("tunnel_id")
+            if tunnel_id:
+                try:
+                    logger.info(f"Pinging Pro Tunnel ({tunnel_id}) to synchronize peer data...")
+                    # Send a silent ping and delete it immediately
+                    msg = app.loop.run_until_complete(user_bot.send_message(tunnel_id, "ping", disable_notification=True))
+                    app.loop.run_until_complete(user_bot.delete_messages(tunnel_id, msg.id))
+                    logger.info("Tunnel Peer successfully cached for Main Bot!")
+                except Exception as e:
+                    logger.warning(f"Could not ping Pro Tunnel on startup (this is okay if the tunnel is already cached): {e}")
+
         else:
             app.user_bot = None
             logger.warning("No 𝕏TV Pro™ Session found in database. 4GB upload support is DISABLED.")

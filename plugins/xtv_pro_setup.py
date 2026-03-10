@@ -221,11 +221,36 @@ async def finalize_setup(userbot, user_id, msg):
         except Exception as tunnel_e:
             logger.error(f"Failed to create tunnel: {tunnel_e}")
 
+        # Start userbot on the main app
+        main_app = msg._client
+        if not getattr(main_app, "user_bot", None):
+            main_app.user_bot = Client(
+                "xtv_user_bot",
+                api_id=data["api_id"],
+                api_hash=data["api_hash"],
+                session_string=session_string,
+                workers=50,
+                max_concurrent_transmissions=10
+            )
+            await main_app.user_bot.start()
+            logger.info("𝕏TV Pro™ Premium Userbot Hot-Started Successfully!")
+
+            # Ping the tunnel to cache peer for Main Bot
+            try:
+                ping_msg = await main_app.user_bot.send_message(tunnel_id, "ping", disable_notification=True)
+                await ping_msg.delete()
+            except Exception as e:
+                logger.warning(f"Could not ping tunnel immediately after setup: {e}")
+
+            # Start cleanup task
+            from main import cleanup_tunnel
+            main_app.loop.create_task(cleanup_tunnel(main_app))
+
         await msg.edit_text(
             "✅ **𝕏TV Pro™ Setup Complete!**\n\n"
             f"Successfully authenticated as **{me.first_name}**.\n"
             "Session string and credentials saved to the database.\n"
-            "**Restart the bot container for changes to take effect.**",
+            "**𝕏TV Pro™ is now active and ready to process >2GB files.**",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]])
         )
         await userbot.disconnect()
