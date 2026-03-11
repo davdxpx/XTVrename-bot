@@ -77,8 +77,22 @@ Oracle Cloud is the ultimate choice for heavy users. The "Always Free" Ampere A1
    ```
 5. Follow the **Standard Docker Deployment** steps below to run the bot. Our Dockerfile automatically detects and optimizes for the ARM architecture!
 
-### 2. Standard VPS (DigitalOcean, AWS EC2, Hetzner, etc.)
-Whether you are using a $5 DigitalOcean Droplet, an AWS EC2 instance, or a Hetzner server, the standard Docker deployment method is identical.
+### 2. Hetzner Cloud (The Ultimate Budget VPS - 20TB Traffic)
+If you need high performance but don't want to rely on the Oracle Free Tier, **Hetzner Cloud** is widely considered the best budget option in the industry. For around €4 a month, you get a dedicated IPv4 and a massive **20TB of Traffic (Bandwidth)** per month included!
+
+1. Create an account on [Hetzner Cloud](https://www.hetzner.com/cloud/).
+2. Create a new Project, then click **Add Server**.
+3. Choose your Location. Under **Image**, select **Ubuntu 24.04** (or latest LTS).
+4. Under **Type**, choose either **Shared vCPU -> x86 (CX series)** or **Shared vCPU -> Arm64 (CAX series)**. The cheapest CAX11 or CX22 is more than powerful enough.
+5. Add an SSH Key (or use a root password), name your server, and click **Create & Buy now**.
+6. Once running, connect via SSH:
+   ```bash
+   ssh root@YOUR_SERVER_IP
+   ```
+7. Follow the **Standard Docker Deployment** steps below. (If you chose an Arm64 CAX server, our Dockerfile will automatically optimize for it!).
+
+### 3. Standard VPS (DigitalOcean, AWS EC2, etc.)
+Whether you are using a $5 DigitalOcean Droplet, an AWS EC2 instance, or any other Linux VPS provider, the standard Docker deployment method is identical.
 
 1. **Connect** to your server via SSH: `ssh root@YOUR_SERVER_IP`
 2. **Install Docker** (if not already installed):
