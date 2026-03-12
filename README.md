@@ -133,6 +133,14 @@ The XTV Rename Bot can operate in two distinct modes via the `PUBLIC_MODE` envir
 *   **/info**: View bot details and support info (Public Mode only).
 *   **/end**: Clear current session state (useful to reset auto-detection).
 
+**Shortcut Commands:**
+*   **/r** or **/rename**: Open the classic manual rename menu directly.
+*   **/p** or **/personal**: Open Personal Files mode directly.
+*   **/g** or **/general**: Open General Mode (Rename any file, bypass TMDb lookup).
+*   **/a** or **/audio**: Open Audio Metadata Editor (Edit MP3/FLAC title, artist, cover art).
+*   **/c** or **/convert**: Open File Converter (Extract audio, image to webp, video to gif, etc).
+*   **/w** or **/watermark**: Open Image Watermarker (Add text or overlay image).
+
 **Workflow:**
 1.  **Forward a File**: The bot will Auto-Detect the content.
 2.  **Confirm/Edit**: Use the inline menu to correct the Title, Season, Episode, or Quality.

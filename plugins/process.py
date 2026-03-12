@@ -63,14 +63,20 @@ class TaskProcessor:
         self.is_subtitle = data.get("is_subtitle", False)
         self.language = data.get("language", "en")
         self.tmdb_id = data.get("tmdb_id")
-        self.title = data.get("title")
+        self.original_name = data.get("original_name", "unknown.mkv")
+
+        # Fallback for title if not provided (e.g. in Audio, Convert, Watermark modes)
+        if data.get("title"):
+            self.title = data.get("title")
+        else:
+            self.title = os.path.splitext(self.original_name)[0]
+
         self.year = data.get("year")
         self.poster_url = data.get("poster")
         self.season = data.get("season")
         self.episode = data.get("episode")
         self.quality = data.get("quality", "720p")
         self.file_message = data.get("file_message")
-        self.original_name = data.get("original_name", "unknown.mkv")
 
         # Runtime State
         self.status_msg: Optional[Message] = None
@@ -186,6 +192,21 @@ class TaskProcessor:
         self.input_path = os.path.join(self.download_dir, f"{self.user_id}_{self.message_id}_input{ext}")
         download_start = time.time()
 
+        # For Audio Metadata Editor
+        if self.media_type == "audio":
+            if not hasattr(self, "metadata"):
+                self.metadata = {}
+
+            if self.data.get("audio_thumb_id"):
+                self.thumb_path = os.path.join(self.download_dir, f"{self.user_id}_{self.message_id}_thumb.jpg")
+                await self.active_client.download_media(self.data.get("audio_thumb_id"), file_name=self.thumb_path)
+
+            # Setup specific metadata
+            self.metadata["title"] = self.data.get("audio_title", "")
+            self.metadata["artist"] = self.data.get("audio_artist", "")
+            if self.data.get("audio_album"):
+                self.metadata["album"] = self.data.get("audio_album", "")
+
         # Target Message Resolution for Userbot
         target_message = self.file_message
         if self.mode == "pro":
@@ -286,9 +307,10 @@ class TaskProcessor:
         )
 
         # Thumbnail Handling
-        self.thumb_path = os.path.join(self.download_dir, f"{self.user_id}_{self.message_id}_thumb.jpg")
+        if not self.thumb_path:
+            self.thumb_path = os.path.join(self.download_dir, f"{self.user_id}_{self.message_id}_thumb.jpg")
 
-        if not self.is_subtitle:
+        if not self.is_subtitle and self.media_type != "audio":
             thumb_binary = self.settings.get("thumbnail_binary") if self.settings else None
 
             if thumb_binary:
@@ -335,11 +357,36 @@ class TaskProcessor:
             "Episode": episode_str,
             "Season_Episode": season_episode,
             "Language": self.language,
-            "Channel": self.channel
+            "Channel": self.channel,
+            "filename": os.path.splitext(self.original_name)[0] if self.original_name else ""
         }
 
         # Select correct template and generate final filename
-        if self.media_type == "series":
+        if self.media_type == "general":
+            template = self.data.get("general_name", "{filename}")
+            try:
+                base_name = template.format(**fmt_dict)
+            except KeyError as e:
+                logger.warning(f"KeyError {e} in general template '{template}', using fallback.")
+                base_name = f"{safe_title}"
+
+            final_filename = f"{base_name}{ext}"
+            meta_title = base_name
+
+        elif self.media_type == "audio":
+            final_filename = f"{safe_title}{ext}"
+            meta_title = self.metadata.get("title", safe_title)
+
+        elif self.media_type == "convert":
+            target_ext = f".{self.data.get('target_format', 'mkv')}"
+            final_filename = f"{safe_title}{target_ext}"
+            meta_title = f"{safe_title}"
+
+        elif self.media_type == "watermark":
+            final_filename = f"{safe_title}_watermarked{ext}"
+            meta_title = f"{safe_title}"
+
+        elif self.media_type == "series":
             if self.is_subtitle:
                 template = self.filename_templates.get("subtitles_series", Config.DEFAULT_FILENAME_TEMPLATES["subtitles_series"])
             else:
@@ -392,17 +439,24 @@ class TaskProcessor:
         if os.path.exists(self.output_path):
              self.output_path = os.path.join(self.download_dir, f"{int(time.time())}_{final_filename}")
 
-        self.metadata = {
-            "title": meta_title,
+        if not hasattr(self, "metadata"):
+            self.metadata = {}
+
+        # Don't overwrite title/artist if set by audio editor
+        if "title" not in self.metadata:
+            self.metadata["title"] = meta_title
+        if "artist" not in self.metadata:
+            self.metadata["artist"] = self.templates.get("artist", "")
+
+        self.metadata.update({
             "author": self.templates.get("author", ""),
-            "artist": self.templates.get("artist", ""),
             "encoded_by": "@XTVglobal",
             "video_title": self.templates.get("video", "Encoded By:- @XTVglobal"),
             "audio_title": self.templates.get("audio", "Audio By:- @XTVglobal - {lang}"),
             "subtitle_title": self.templates.get("subtitle", "Subtitled By:- @XTVglobal - {lang}"),
             "default_language": "English",
             "copyright": self.templates.get("copyright", "@XTVglobal")
-        }
+        })
 
     async def _process_media(self) -> bool:
         """Run the FFmpeg processing command."""
@@ -413,12 +467,54 @@ class TaskProcessor:
             f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
-        cmd, err = await generate_ffmpeg_command(
-            input_path=self.input_path,
-            output_path=self.output_path,
-            metadata=self.metadata,
-            thumbnail_path=self.thumb_path if (os.path.exists(self.thumb_path) and not self.is_subtitle) else None
-        )
+        if self.media_type == "watermark":
+            wtype = self.data.get("watermark_type")
+            wcontent = self.data.get("watermark_content")
+
+            cmd = ["ffmpeg", "-y", "-i", self.input_path]
+
+            if wtype == "text":
+                # Ensure the text is escaped for ffmpeg
+                escaped_text = wcontent.replace("'", "\\'").replace(":", "\\:")
+                # Draw text centered, simple styling
+                cmd.extend(["-vf", f"drawtext=text='{escaped_text}':fontcolor=white@0.8:fontsize=h/10:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.5:boxborderw=5"])
+            else:
+                # Image watermark
+                watermark_path = os.path.join(self.download_dir, f"{self.user_id}_wm_overlay.png")
+                # We need to download it first
+                if wcontent:
+                    await self.active_client.download_media(wcontent, file_name=watermark_path)
+
+                if os.path.exists(watermark_path):
+                    cmd.extend(["-i", watermark_path, "-filter_complex", "overlay=W-w-10:H-h-10"]) # Bottom right overlay
+                else:
+                    logger.error("Watermark overlay image missing.")
+
+            cmd.append(self.output_path)
+            err = None
+        elif self.media_type == "convert":
+            # For conversion, use a simplified ffmpeg command bypassing complex metadata mapping
+            target_format = self.data.get("target_format", "mkv")
+            cmd = ["ffmpeg", "-y", "-i", self.input_path]
+
+            if target_format == "mp3":
+                cmd.extend(["-vn", "-c:a", "libmp3lame", "-q:a", "2"])
+            elif target_format == "gif":
+                cmd.extend(["-vf", "fps=10,scale=320:-1:flags=lanczos", "-c:v", "gif"])
+            elif target_format in ["png", "jpg", "jpeg", "webp"]:
+                cmd.extend(["-vframes", "1"])
+            else:
+                cmd.extend(["-c", "copy"])
+
+            cmd.append(self.output_path)
+            err = None
+        else:
+            cmd, err = await generate_ffmpeg_command(
+                input_path=self.input_path,
+                output_path=self.output_path,
+                metadata=self.metadata,
+                thumbnail_path=self.thumb_path if (os.path.exists(self.thumb_path) and not self.is_subtitle and self.media_type != "convert") else None
+            )
 
         if not cmd:
             logger.error(f"FFmpeg command generation failed: {err}")
@@ -477,7 +573,13 @@ class TaskProcessor:
 
             send_as = self.data.get("send_as")
 
-            if send_as == "photo" or (self.message.photo and not send_as):
+            # Determine mime/ext for smart sending
+            file_ext = os.path.splitext(self.output_path)[1].lower()
+            is_vid_ext = file_ext in [".mp4", ".mkv", ".webm", ".avi", ".mov"]
+            is_aud_ext = file_ext in [".mp3", ".flac", ".m4a", ".wav", ".ogg"]
+            is_img_ext = file_ext in [".jpg", ".jpeg", ".png", ".webp"]
+
+            if send_as == "photo" or (self.message.photo and not send_as and not is_vid_ext and not is_aud_ext):
                 media_msg = await self.active_client.send_photo(
                     chat_id=target_chat_id,
                     photo=self.output_path,
@@ -485,6 +587,45 @@ class TaskProcessor:
                     progress=progress_for_pyrogram,
                     progress_args=("📤 **Uploading Photo (Tunneling)...**" if is_tunneling else "📤 **Uploading Photo...**", self.status_msg, upload_start, self.mode)
                 )
+            elif send_as == "media":
+                if is_img_ext:
+                    media_msg = await self.active_client.send_photo(
+                        chat_id=target_chat_id,
+                        photo=self.output_path,
+                        caption=caption,
+                        progress=progress_for_pyrogram,
+                        progress_args=("📤 **Uploading Photo (Tunneling)...**" if is_tunneling else "📤 **Uploading Photo...**", self.status_msg, upload_start, self.mode)
+                    )
+                elif is_vid_ext:
+                    media_msg = await self.active_client.send_video(
+                        chat_id=target_chat_id,
+                        video=self.output_path,
+                        thumb=thumb,
+                        caption=caption,
+                        progress=progress_for_pyrogram,
+                        progress_args=("📤 **Uploading Video (Tunneling)...**" if is_tunneling else "📤 **Uploading Video...**", self.status_msg, upload_start, self.mode)
+                    )
+                elif is_aud_ext:
+                    media_msg = await self.active_client.send_audio(
+                        chat_id=target_chat_id,
+                        audio=self.output_path,
+                        thumb=thumb,
+                        caption=caption,
+                        title=self.metadata.get("title"),
+                        performer=self.metadata.get("artist"),
+                        progress=progress_for_pyrogram,
+                        progress_args=("📤 **Uploading Audio (Tunneling)...**" if is_tunneling else "📤 **Uploading Audio...**", self.status_msg, upload_start, self.mode)
+                    )
+                else:
+                    # Fallback to document if it's media but not recognized as explicit audio/video
+                    media_msg = await self.active_client.send_document(
+                        chat_id=target_chat_id,
+                        document=self.output_path,
+                        thumb=thumb,
+                        caption=caption,
+                        progress=progress_for_pyrogram,
+                        progress_args=("📤 **Uploading Media (Tunneling)...**" if is_tunneling else "📤 **Uploading Media...**", self.status_msg, upload_start, self.mode)
+                    )
             else:
                 media_msg = await self.active_client.send_document(
                     chat_id=target_chat_id,

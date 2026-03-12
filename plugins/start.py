@@ -55,10 +55,105 @@ async def handle_start_command_unique(client, message):
         "💡 **Tip:** You don't need to click anything to begin! Simply send or forward a file directly to me, and I will auto-detect the details.\n\n"
         "Click below to start manually or to view the guide.",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎬 Start Renaming Manually", callback_data="start_renaming")],
+            [InlineKeyboardButton("📁 Rename / Tag Media", callback_data="start_renaming")],
+            [InlineKeyboardButton("🎵 Audio Metadata Editor", callback_data="audio_editor_menu")],
+            [InlineKeyboardButton("🔀 File Converter", callback_data="file_converter_menu")],
+            [InlineKeyboardButton("© Image Watermarker", callback_data="watermarker_menu")],
             [InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")]
         ])
     )
+
+@Client.on_message(filters.command(["r", "rename"]) & filters.private, group=0)
+async def handle_rename_command(client, message):
+    user_id = message.from_user.id
+    if not Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS): return
+    from plugins.flow import handle_start_renaming
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "start_renaming"
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading menu...")
+    mock_cb.message = msg
+    await handle_start_renaming(client, mock_cb)
+
+@Client.on_message(filters.command(["g", "general"]) & filters.private, group=0)
+async def handle_general_command(client, message):
+    user_id = message.from_user.id
+    if not Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS): return
+    from plugins.flow import handle_type_general
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "type_general"
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading general mode...")
+    mock_cb.message = msg
+    await handle_type_general(client, mock_cb)
+
+@Client.on_message(filters.command(["a", "audio"]) & filters.private, group=0)
+async def handle_audio_command(client, message):
+    user_id = message.from_user.id
+    if not Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS): return
+    from plugins.flow import handle_audio_editor_menu
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "audio_editor_menu"
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading audio editor...")
+    mock_cb.message = msg
+    await handle_audio_editor_menu(client, mock_cb)
+
+@Client.on_message(filters.command(["p", "personal"]) & filters.private, group=0)
+async def handle_personal_command(client, message):
+    user_id = message.from_user.id
+    if not Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS): return
+    from plugins.flow import handle_type_personal
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "type_personal_file"
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading personal mode...")
+    mock_cb.message = msg
+    await handle_type_personal(client, mock_cb)
+
+
+@Client.on_message(filters.command(["c", "convert"]) & filters.private, group=0)
+async def handle_convert_command(client, message):
+    user_id = message.from_user.id
+    if not Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS): return
+    from plugins.flow import handle_file_converter_menu
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "file_converter_menu"
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading converter...")
+    mock_cb.message = msg
+    await handle_file_converter_menu(client, mock_cb)
+
+@Client.on_message(filters.command(["w", "watermark"]) & filters.private, group=0)
+async def handle_watermark_command(client, message):
+    user_id = message.from_user.id
+    if not Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS): return
+    from plugins.flow import handle_watermarker_menu
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "watermarker_menu"
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading watermarker...")
+    mock_cb.message = msg
+    await handle_watermarker_menu(client, mock_cb)
+
 
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
@@ -114,6 +209,7 @@ async def handle_help_callbacks(client, callback_query):
                 [InlineKeyboardButton("🛠 How to Use", callback_data="help_how_to_use")],
                 [InlineKeyboardButton("🤖 Auto-Detect Magic", callback_data="help_auto_detect")],
                 [InlineKeyboardButton("📁 Personal Files & Home Videos", callback_data="help_personal")],
+                [InlineKeyboardButton("📄 General Mode & Variables", callback_data="help_general")],
                 [InlineKeyboardButton("⚙️ Settings & Info", callback_data="help_settings")],
                 [InlineKeyboardButton("❌ Close", callback_data="help_close")]
             ])
@@ -143,6 +239,26 @@ async def handle_help_callbacks(client, callback_query):
             "1. Send your personal video.\n"
             "2. When prompted with TMDb search results, select **'Skip / Manual'** or similar option if it's not a public release.\n"
             "3. You can still set custom names, add your own thumbnails, and organize them exactly how you want them!",
+            reply_markup=InlineKeyboardMarkup(back_button)
+        )
+    elif data == "help_general":
+        await callback_query.message.edit_text(
+            "**📄 General Mode & Variables**\n\n"
+            "General mode allows you to rename ANY file exactly how you want, bypassing all metadata lookups.\n\n"
+            "**Available Variables for Renaming:**\n"
+            "• `{filename}` - The original filename (without extension)\n"
+            "• `{Season_Episode}` - Example: S01E01 (if detected)\n"
+            "• `{Quality}` - Example: 1080p, 720p (if detected)\n"
+            "• `{Year}` - Example: 2024 (if detected)\n"
+            "• `{Title}` - Example: The Matrix (if detected)\n\n"
+            "*(The file extension like .mkv or .pdf is always added automatically!)*\n\n"
+            "**Shortcuts:**\n"
+            "• `/r` or `/rename` - Start rename flow\n"
+            "• `/p` or `/personal` - Open Personal Files mode directly\n"
+            "• `/g` or `/general` - Open General Mode directly\n"
+            "• `/a` or `/audio` - Open Audio Metadata Editor\n"
+            "• `/c` or `/convert` - Open File Converter\n"
+            "• `/w` or `/watermark` - Open Image Watermarker",
             reply_markup=InlineKeyboardMarkup(back_button)
         )
     elif data == "help_settings":
