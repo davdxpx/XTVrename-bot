@@ -93,16 +93,17 @@ class TaskProcessor:
 
         try:
              # Check for user_bot attached to client
-             if getattr(self.client, "user_bot", None):
+             user_bot = getattr(self.client, "user_bot", None)
+             if user_bot:
                  file_size = 0
                  media = self.file_message.document or self.file_message.video
                  if media:
                      file_size = media.file_size
 
                  # 2000 MB threshold (approx 2GB)
-                 if file_size > 2000 * 1024 * 1024:
+                 if file_size > 2000 * 1000 * 1000:
                      self.mode = "pro"
-                     self.active_client = self.client.user_bot
+                     self.active_client = user_bot
                      logger.info(f"Activated PRO Mode for task {self.message_id} (Size: {file_size})")
         except Exception as e:
             logger.warning(f"Error determining mode: {e}")
