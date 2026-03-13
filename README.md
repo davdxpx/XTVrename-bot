@@ -17,18 +17,19 @@ The **XTV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot** 
 
 ### 🔹 Advanced Processing Engines
 *   **XTV Core™**: Lightning-fast processing for standard files (up to 2GB) using the primary bot API.
-*   **XTV Pro™**: Seamless integration with a Userbot session to handle **Large Files (up to 4GB)**, bypassing standard bot limitations (Premium required). The perfect **4GB Telegram bot** solution.
+*   **𝕏TV Pro™ Ephemeral Tunnels (Market First!)**: Seamless integration with a Premium Userbot session to handle **Large Files (>2GB up to 4GB)**. The system generates secure, temporary private tunnels for every single large file transfer, bypassing API limits, cache crashing, and `PEER_ID_INVALID` errors.
 
 ### 🔹 Intelligent Recognition
 *   **Auto-Detection Matrix**: Automatically scans filenames to detect Movie/Series titles, Years, Qualities, and Episode numbers with high accuracy.
 *   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork.
 
-### 🔹 Media Management
-*   **Multiple Dumb Channels (Storage/Forwarding)**: Configure multiple destination channels (globally or per-user). The bot automatically queues files and strictly forwards them in sequential order (e.g., sorting series by Season/Episode and movies by resolution precedence: 2160p > 1080p > 720p > 480p).
+### 🔹 Media Management & Workflows
+*   **Multiple Dumb Channels & Sequential Batch Forwarding**: Configure multiple independent destination channels (globally or per-user). The bot automatically queues seasons or movie collections in bulk and strictly forwards them in sequential order (e.g., sorting series by Season/Episode and movies by resolution precedence: 2160p > 1080p > 720p > 480p).
 *   **Smart Debounce Queue Manager**: Automatically sorts batched media uploads logically. Instead of simple alphabetical sorting, series are ordered by SxxExx and movies by quality precedence, preventing out-of-order uploads to your channels.
 *   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit (configurable by the CEO).
 *   **Spam-Proof Forwarding**: Utilizing Pyrogram's `copy()` method, the bot cleanly removes 'Forwarded from' tags when sending to Dumb Channels, preventing Telegram's spam detection from flagging bulk media (which can result in 0KB files and stripped thumbnails).
 *   **Personal Media & Unlisted Content**: Direct menu options to bypass metadata databases (e.g., TMDb) for personal files, camera footage, photos, and unlisted regional content. Smartly preserves original file extensions (like `.jpeg`) and lets you choose your preferred output format.
+*   **Multipurpose File Utilities**: Built-in direct editing tools accessible via shortcuts for general renaming (`/g`), audio metadata & cover art editing (`/a`), media format conversion (`/c`), and automated image watermarking (`/w`).
 *   **Series & Movies**: Specialized handling for different media types.
     *   *Series*: Season/Episode numbering (S01E01) format.
     *   *Movies*: Clean Title.Year.Quality format.
@@ -85,12 +86,12 @@ To bypass Telegram's standard 2GB bot upload limit, the **𝕏TV Rename Bot** fe
 **How to Setup:**
 1. Send `/admin` to your bot.
 2. Click the **"🚀 Manage 𝕏TV Pro™"** button.
-3. Follow the interactive setup guide. You will be asked to provide your **API ID**, **API Hash**, and **Phone Number**.
+3. Follow the completely interactive, fast, and fail-safe setup guide. You will be asked to provide your **API ID**, **API Hash**, and **Phone Number**.
 4. The bot will request a login code from Telegram. *(Enter the code with spaces, e.g., `1 2 3 4 5`, to avoid Telegram's security triggers).*
 5. If 2FA is enabled, enter your password.
 6. The bot will verify that the account has **Telegram Premium**. If successful, it securely saves the session credentials to the MongoDB database and hot-starts the Userbot instantly—**no restart required**.
 
-> **Privacy & Ephemeral Tunneling:** When processing a file > 2GB, the Premium Userbot creates a temporary, private "Ephemeral Tunnel" channel specific to that file. It uploads the transcoded file to this tunnel, and the Main Bot seamlessly copies the file from the tunnel directly to the user. After the transfer, the Userbot instantly deletes the temporary channel. This entirely bypasses standard bot API limitations, completely hides the Userbot's identity, prevents `PEER_ID_INVALID` caching errors, and removes any "Forwarded from" tags for a flawless delivery!
+> **Privacy & Ephemeral Tunneling (Market First!):** When processing a file > 2GB, the Premium Userbot creates a temporary, private "Ephemeral Tunnel" channel specific to that file. It uploads the transcoded file to this tunnel, and the Main Bot seamlessly copies the file from the tunnel directly to the user. After the transfer, the Userbot instantly deletes the temporary channel. This entirely bypasses standard bot API limitations, completely hides the Userbot's identity, prevents `PEER_ID_INVALID` caching errors, and removes any "Forwarded from" tags for a flawless delivery!
 
 ## 🌍 Public Mode vs Private Mode
 
