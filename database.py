@@ -165,7 +165,6 @@ class Database:
             logger.error(f"Error adding dumb channel for {doc_id}: {e}")
 
     async def get_all_dumb_channel_links(self):
-        """Fetch all dumb channel links to cache peers on startup."""
         if self.settings is None:
             return []
         links = set()
@@ -215,7 +214,6 @@ class Database:
             logger.error(f"Error setting default dumb channel for {doc_id}: {e}")
 
     async def get_dumb_channel_timeout(self):
-        """Fetch the global dumb channel timeout (applies to both modes)."""
         if self.settings is None:
             return 3600
         if Config.PUBLIC_MODE:
@@ -243,7 +241,6 @@ class Database:
             logger.error(f"Error updating dumb channel timeout: {e}")
 
     async def get_pro_session(self):
-        """Fetch the 𝕏TV Pro™ (Userbot) session credentials."""
         if self.settings is None:
             return None
         doc = await self.settings.find_one({"_id": "xtv_pro_settings"})
@@ -258,7 +255,6 @@ class Database:
         return None
 
     async def save_pro_tunnel(self, tunnel_id: int, tunnel_link: str):
-        """Save the XTV Pro Internal Tunnel channel info."""
         if self.settings is None:
             return
         await self.settings.update_one(
@@ -270,7 +266,6 @@ class Database:
     async def save_pro_session(
         self, session_string: str, api_id: int = None, api_hash: str = None
     ):
-        """Save the XTV Pro session credentials to the database."""
         if self.settings is None:
             return
         update_doc = {"session_string": session_string}
@@ -283,13 +278,11 @@ class Database:
         )
 
     async def delete_pro_session(self):
-        """Delete the XTV Pro session from the database."""
         if self.settings is None:
             return
         await self.settings.delete_one({"_id": "xtv_pro_settings"})
 
     async def get_public_config(self):
-        """Fetch the global public mode configuration set by the CEO."""
         if self.settings is None:
             return {}
         try:
@@ -322,7 +315,6 @@ class Database:
             logger.error(f"Error updating public config: {e}")
 
     async def check_rate_limit(self, user_id: int) -> bool:
-        """Check if a user is currently rate limited."""
         if self.settings is None:
             return True
         config = await self.get_public_config()
@@ -348,7 +340,6 @@ class Database:
             return True
 
     async def update_rate_limit(self, user_id: int):
-        """Update the last used timestamp for a user."""
         if self.settings is None:
             return
         import time

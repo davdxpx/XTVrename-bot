@@ -13,7 +13,6 @@ class Colors:
 
 
 class ConsoleFormatter(logging.Formatter):
-    """Formatierung für Railway Console mit Farben und Emojis"""
 
     FORMATS = {
         logging.DEBUG: "🐞",

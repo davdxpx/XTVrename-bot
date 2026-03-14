@@ -6,9 +6,6 @@ logger = get_logger("utils.detect")
 
 
 def analyze_filename(filename):
-    """
-    Uses guessit to parse the filename and extract metadata.
-    """
     try:
         guess = guessit(filename)
 
@@ -69,9 +66,6 @@ def analyze_filename(filename):
 
 
 async def auto_match_tmdb(metadata):
-    """
-    Searches TMDB based on the extracted metadata and returns the best match.
-    """
     title = metadata.get("title")
     year = metadata.get("year")
     media_type = metadata.get("type")

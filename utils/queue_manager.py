@@ -29,11 +29,6 @@ class BatchQueue:
         return self.items.get(item_id)
 
     def is_blocked(self, item_id: str) -> Optional[QueueItem]:
-        """
-        Checks if the given item is blocked by any earlier item in the batch
-        that hasn't finished its dumb channel upload yet.
-        Returns the blocking QueueItem if blocked, None otherwise.
-        """
         item = self.items.get(item_id)
         if not item:
             return None

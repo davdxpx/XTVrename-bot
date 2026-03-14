@@ -19,7 +19,6 @@ class XTVEngine:
 
     @classmethod
     def get_signature(cls, mode="core"):
-        """Returns the official engine signature string."""
         if mode.lower() == "pro":
             name = cls.NAME_PRO
             version = cls.VERSION_PRO
@@ -31,7 +30,6 @@ class XTVEngine:
 
     @classmethod
     def get_footer(cls):
-        """Returns the standard footer for completion messages."""
         return (
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"{cls.ICON_DEV} **Developer:** {cls.DEVELOPER}\n"
@@ -40,7 +38,6 @@ class XTVEngine:
 
     @staticmethod
     def humanbytes(size):
-        """Standard human-readable size formatter for the engine."""
         if not size:
             return "0 B"
         power = 2**10
@@ -53,7 +50,6 @@ class XTVEngine:
 
     @staticmethod
     def time_formatter(milliseconds: int) -> str:
-        """Formats milliseconds into readable duration (H:M:S)."""
         seconds, milliseconds = divmod(int(milliseconds), 1000)
         minutes, seconds = divmod(seconds, 60)
         hours, minutes = divmod(minutes, 60)

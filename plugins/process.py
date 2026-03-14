@@ -25,18 +25,12 @@ _SEMAPHORES = {"download": None, "process": None, "upload": None}
 
 
 def get_semaphore(phase: str) -> asyncio.Semaphore:
-    """Retrieve or create the semaphore for the given phase."""
     if _SEMAPHORES[phase] is None:
         _SEMAPHORES[phase] = asyncio.Semaphore(3)
     return _SEMAPHORES[phase]
 
 
 class TaskProcessor:
-    """
-    Handles the end-to-end processing of a media file:
-    Download -> Metadata/Thumbnail Preparation -> FFmpeg Processing -> Upload.
-    Designed with a focus on clean architecture, robust error handling, and business-grade feedback.
-    """
 
     def __init__(self, client: Client, message: Message, data: Dict[str, Any]):
         self.client = client
@@ -99,7 +93,6 @@ class TaskProcessor:
             logger.warning(f"Error determining mode: {e}")
 
     async def run(self):
-        """Execute the full processing pipeline with concurrency limits."""
         try:
             if not await self._initialize():
                 return
@@ -123,7 +116,6 @@ class TaskProcessor:
             await self._cleanup()
 
     async def _initialize(self) -> bool:
-        """Check system requirements and initialize status."""
         if not shutil.which("ffmpeg"):
             await self.message.edit_text(
                 "❌ **System Error**\n\n`ffmpeg` binary not found. Contact administrator."
@@ -155,7 +147,6 @@ class TaskProcessor:
         return True
 
     async def _download_media(self) -> bool:
-        """Download the media file from Telegram."""
         await self._update_status(
             "📥 **Acquiring Media Resources**\n\n"
             "Establishing connection to Telegram servers...\n"
@@ -300,7 +291,6 @@ class TaskProcessor:
             return False
 
     async def _prepare_resources(self):
-        """Prepare thumbnail and calculate final filename/metadata."""
         await self._update_status(
             "🎨 **Preparing Metadata Assets**\n\n"
             "Optimizing thumbnails and configuring metadata...\n"
@@ -493,7 +483,6 @@ class TaskProcessor:
         )
 
     async def _process_media(self) -> bool:
-        """Run the FFmpeg processing command."""
         await self._update_status(
             "⚙️ **Executing Transcoding Matrix**\n\n"
             "Injecting metadata and optimizing container...\n"
@@ -633,7 +622,6 @@ class TaskProcessor:
         return True
 
     async def _upload_media(self):
-        """Upload the final file."""
         await self._update_status(
             "📤 **Finalizing & Uploading**\n\n"
             "Transferring optimized asset to cloud...\n"
@@ -901,7 +889,6 @@ class TaskProcessor:
                     )
 
     def _generate_caption(self, filename: str) -> str:
-        """Generate a secure caption based on templates."""
         template = self.templates.get("caption", "{random}")
 
         if "{random}" in template or template == "{random}":
@@ -936,7 +923,6 @@ class TaskProcessor:
             logger.warning(f"Failed to update status message: {e}")
 
     async def _cleanup(self):
-        """Clean up temporary files and tunnel."""
         for path in [self.input_path, self.output_path, self.thumb_path]:
             if path and os.path.exists(path):
                 try:

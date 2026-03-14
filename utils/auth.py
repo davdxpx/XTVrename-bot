@@ -19,7 +19,6 @@ def is_admin(user_id):
 
 
 async def check_force_sub(client, user_id):
-    """Check if the user is subscribed to the Force-Sub Channel in Public Mode."""
     if not Config.PUBLIC_MODE:
         return True
 

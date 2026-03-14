@@ -771,7 +771,6 @@ async def handle_cancel(client, callback_query):
 
 
 async def process_batch(client, user_id):
-    """Processes a batch of files for a user, sorting them and sending confirmations in order."""
     if user_id not in batch_sessions:
         return
 
