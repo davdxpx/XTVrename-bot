@@ -88,6 +88,41 @@ class QueueManager:
             return self.batches[batch_id].is_batch_complete()
         return True
 
+    def get_batch_summary(self, batch_id: str, usage_text: str) -> str:
+        if batch_id not in self.batches:
+            return f"✅ **Batch Processing Complete!**\n\n📊 **Usage:** {usage_text}"
+
+        batch = self.batches[batch_id]
+        success_items = []
+        failed_items = []
+
+        for item in sorted(batch.items.values(), key=lambda x: x.sort_key):
+            if item.status == "failed":
+                failed_items.append(item.display_name)
+            else:
+                success_items.append(item.display_name)
+
+        total = len(batch.items)
+        success_count = len(success_items)
+        failed_count = len(failed_items)
+
+        text = f"✅ **Batch Processing Complete!**\n\n"
+        text += f"**Processed:** `{success_count}/{total}` files successfully.\n"
+
+        if success_items:
+            # Show a brief list if it's not too long, or just a range/summary
+            if len(success_items) <= 5:
+                items_str = ", ".join(success_items)
+                text += f"**Included:** `{items_str}`\n"
+            else:
+                text += f"**Included:** `{success_items[0]} ... {success_items[-1]}`\n"
+
+        if failed_items:
+            text += f"**Failed:** `{failed_count}` files.\n"
+
+        text += f"\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
+        return text
+
 
 queue_manager = QueueManager()
 

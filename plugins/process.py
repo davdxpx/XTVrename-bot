@@ -856,8 +856,9 @@ class TaskProcessor:
 
                 if queue_manager.is_batch_complete(batch_id):
                     try:
+                        summary_msg = queue_manager.get_batch_summary(batch_id, usage_text)
                         await self.client.send_message(
-                            self.user_id, f"✅ **Done!** — {usage_text}"
+                            self.user_id, summary_msg
                         )
                     except Exception as e:
                         logger.warning(f"Failed to send batch completion msg: {e}")
@@ -925,8 +926,9 @@ class TaskProcessor:
 
             elif not batch_id:
                 try:
+                    # Fallback if no batch mechanism (should be rare)
                     await self.client.send_message(
-                        self.user_id, f"✅ **Done!** — {usage_text}"
+                        self.user_id, f"✅ **Processing Complete!**\n\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
                     )
                 except Exception as e:
                     logger.warning(f"Failed to send single completion msg: {e}")
