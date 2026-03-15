@@ -11,7 +11,7 @@ async def debug_all_messages(client, message):
         if message.from_user
         else (message.sender_chat.id if message.sender_chat else "Unknown")
     )
-    logger.info(
+    logger.debug(
         f"Received message from {sender_id}: {message.text or message.caption or '[Media]'}"
     )
 

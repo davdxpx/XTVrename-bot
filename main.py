@@ -40,7 +40,16 @@ if __name__ == "__main__":
         logger.error("BOT_TOKEN is not set!")
         exit(1)
 
-    logger.info("Starting XTV Rename Bot...")
+    # Print stylish startup banner
+    startup_msg = (
+        f"\n{'='*50}\n"
+        f"🚀 Starting XTV Rename Bot {Config.VERSION}\n"
+        f"🛠️  Debug Mode: {'ON' if Config.DEBUG_MODE else 'OFF'}\n"
+        f"🌍 Public Mode: {'ON' if Config.PUBLIC_MODE else 'OFF'}\n"
+        f"{'='*50}"
+    )
+    logger.info(startup_msg)
+
     app.start()
 
     try:

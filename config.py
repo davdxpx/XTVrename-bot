@@ -5,6 +5,7 @@ load_dotenv()
 
 
 class Config:
+    VERSION = "v1.2.0"
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     API_ID = int(os.getenv("API_ID", 0))
     API_HASH = os.getenv("API_HASH")

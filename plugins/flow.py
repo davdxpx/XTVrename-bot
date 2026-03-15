@@ -42,7 +42,7 @@ async def handle_start_renaming(client, callback_query):
             return
     await callback_query.answer()
     user_id = callback_query.from_user.id
-    logger.info(f"Start renaming flow for {user_id}")
+    logger.debug(f"Start renaming flow for {user_id}")
     clear_session(user_id)
     set_state(user_id, "awaiting_type")
 
@@ -106,7 +106,7 @@ async def handle_type_general(client, callback_query):
             return
     await callback_query.answer()
     user_id = callback_query.from_user.id
-    logger.info(f"User {user_id} selected general type")
+    logger.debug(f"User {user_id} selected general type")
 
     update_data(user_id, "type", "general")
     update_data(user_id, "tmdb_id", None)
@@ -145,7 +145,7 @@ async def handle_type_personal(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
     personal_type = callback_query.data.split("_")[2]
-    logger.info(f"User {user_id} selected personal type: {personal_type}")
+    logger.debug(f"User {user_id} selected personal type: {personal_type}")
 
     update_data(user_id, "type", "movie")
     update_data(user_id, "tmdb_id", None)
@@ -193,7 +193,7 @@ async def handle_type_selection(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
     media_type = callback_query.data.split("_")[1]
-    logger.info(f"User {user_id} selected type: {media_type}")
+    logger.debug(f"User {user_id} selected type: {media_type}")
 
     update_data(user_id, "type", media_type)
     set_state(user_id, f"awaiting_search_{media_type}")
@@ -267,7 +267,7 @@ async def handle_subtitle_type_selection(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
     media_type = callback_query.data.split("_")[2]
-    logger.info(f"User {user_id} selected subtitle type: {media_type}")
+    logger.debug(f"User {user_id} selected subtitle type: {media_type}")
 
     update_data(user_id, "type", media_type)
     update_data(user_id, "is_subtitle", True)
@@ -336,7 +336,7 @@ async def manual_title_handler(client, message):
 
 async def search_handler(client, message, media_type):
     query = message.text
-    logger.info(f"Searching {media_type} for: {query}")
+    logger.debug(f"Searching {media_type} for: {query}")
     msg = await message.reply_text(f"🔍 Searching for '{query}'...")
 
     try:
@@ -451,7 +451,7 @@ async def handle_text_input(client, message):
             return
 
     state = get_state(user_id)
-    logger.info(f"Text input from {user_id}: {message.text} | State: {state}")
+    logger.debug(f"Text input from {user_id}: {message.text} | State: {state}")
 
     if not state:
         return
@@ -639,7 +639,7 @@ async def handle_manual_entry(client, callback_query):
             return
     await callback_query.answer()
     user_id = callback_query.from_user.id
-    logger.info(f"User {user_id} selected manual entry.")
+    logger.debug(f"User {user_id} selected manual entry.")
 
     update_data(user_id, "tmdb_id", None)
 

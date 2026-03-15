@@ -45,8 +45,9 @@ class ConsoleFormatter(logging.Formatter):
 
 
 def get_logger(name):
+    from config import Config
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG if Config.DEBUG_MODE else logging.INFO)
 
     if not logger.handlers:
         ch = logging.StreamHandler(sys.stdout)

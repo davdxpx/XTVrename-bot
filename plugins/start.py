@@ -15,7 +15,7 @@ from utils.auth import check_force_sub
 @Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)
 async def handle_start_command_unique(client, message):
     user_id = message.from_user.id
-    logger.info(f"CMD received: {message.text} from {user_id}")
+    logger.debug(f"CMD received: {message.text} from {user_id}")
 
     if not Config.PUBLIC_MODE:
         if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
@@ -224,7 +224,7 @@ async def handle_watermark_command(client, message):
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
     user_id = message.from_user.id
-    logger.info(f"CMD received: {message.text} from {user_id}")
+    logger.debug(f"CMD received: {message.text} from {user_id}")
 
     await message.reply_text(
         "**📖 Help & Guide**\n\n"
@@ -259,7 +259,7 @@ async def handle_help_command_unique(client, message):
 @Client.on_message(filters.command("end") & filters.private, group=0)
 async def handle_end_command_unique(client, message):
     user_id = message.from_user.id
-    logger.info(f"CMD received: {message.text} from {user_id}")
+    logger.debug(f"CMD received: {message.text} from {user_id}")
     clear_session(user_id)
     await message.reply_text(
         "**Current Task Cancelled** ❌\n\n"
