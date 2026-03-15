@@ -19,7 +19,7 @@ def get_user_main_menu():
                     "🖼 Manage Thumbnail", callback_data="user_thumb_menu"
                 ),
                 InlineKeyboardButton(
-                    "📋 Templates", callback_data="user_main"
+                    "📋 Templates", callback_data="user_templates_menu"
                 ),
             ],
             [
@@ -418,6 +418,14 @@ async def user_settings_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
+    elif data == "user_templates_menu":
+        try:
+            await callback_query.message.edit_text(
+                "📋 **Templates Menu**\n\n" "Select a template category to edit:",
+                reply_markup=get_user_templates_menu(),
+            )
+        except MessageNotModified:
+            pass
     elif data == "user_templates":
         try:
             await callback_query.message.edit_text(
@@ -448,7 +456,11 @@ async def user_settings_callback(client, callback_query):
                                 "Subtitle", callback_data="edit_user_template_subtitle"
                             ),
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_main")],
+                        [
+                            InlineKeyboardButton(
+                                "← Back", callback_data="user_templates_menu"
+                            )
+                        ],
                     ]
                 ),
             )
@@ -474,7 +486,11 @@ async def user_settings_callback(client, callback_query):
                                 "✏️ Change", callback_data="prompt_user_caption"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_main")],
+                        [
+                            InlineKeyboardButton(
+                                "← Back", callback_data="user_templates_menu"
+                            )
+                        ],
                     ]
                 ),
             )
@@ -486,7 +502,13 @@ async def user_settings_callback(client, callback_query):
             await callback_query.message.edit_text(
                 "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="user_main")]]
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "❌ Cancel", callback_data="user_templates_menu"
+                            )
+                        ]
+                    ]
                 ),
             )
         except MessageNotModified:
@@ -555,7 +577,11 @@ async def user_settings_callback(client, callback_query):
                                 "Subtitles", callback_data="user_fn_templates_subtitles"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_main")],
+                        [
+                            InlineKeyboardButton(
+                                "← Back", callback_data="user_templates_menu"
+                            )
+                        ],
                     ]
                 ),
             )
@@ -702,55 +728,18 @@ async def user_settings_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-    elif data == "user_main" or data == "user_cancel":
+    elif data == "user_cancel":
+        user_sessions.pop(user_id, None)
+        await callback_query.message.delete()
+        return
+    elif data == "user_main":
         user_sessions.pop(user_id, None)
         try:
             await callback_query.message.edit_text(
                 "🛠 **Personal Settings Panel** 🛠\n\n"
                 "Welcome to your personal settings.\n"
                 "Here you can customize templates and thumbnails for your own files.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "🖼 Manage Thumbnail", callback_data="user_thumb_menu"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📝 Edit Metadata Templates",
-                                callback_data="user_templates",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📝 Edit Filename Templates",
-                                callback_data="user_filename_templates",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📝 Edit Caption Template", callback_data="user_caption"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📺 Dumb Channels", callback_data="user_dumb_channels"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "⚙️ General Settings",
-                                callback_data="user_general_settings",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "👀 View Current Settings", callback_data="user_view"
-                            )
-                        ],
-                    ]
-                ),
+                reply_markup=get_user_main_menu(),
             )
         except MessageNotModified:
             pass
@@ -917,7 +906,7 @@ async def handle_user_text(client, message):
 
         if field == "caption":
             reply_markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back", callback_data="user_main")]]
+                [[InlineKeyboardButton("← Back", callback_data="user_templates_menu")]]
             )
         else:
             reply_markup = InlineKeyboardMarkup(
@@ -969,6 +958,7 @@ async def handle_user_text(client, message):
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)
+
 
 async def _send_usage(client, target, user_id, is_callback=False):
     if user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS:
