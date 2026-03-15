@@ -1,3 +1,4 @@
+from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from config import Config
@@ -281,8 +282,25 @@ async def handle_end_command_unique(client, message):
 from utils.logger import debug
 
 debug("✅ Loaded handler: help_callback")
+
+
 @Client.on_callback_query(filters.regex(r"^help_"))
 async def handle_help_callbacks(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     data = callback_query.data
     debug(f"Help callback received: {data} from {user_id}")
@@ -292,91 +310,107 @@ async def handle_help_callbacks(client, callback_query):
     ]
 
     if data == "help_guide":
-        await callback_query.message.edit_text(
-            "**📖 Help & Guide**\n\n"
-            "Welcome to the Rename Bot Guide!\n"
-            "Whether you are organizing a massive media library of popular series and movies, "
-            "or just want to rename and manage your **personal home videos** and files, I can help!\n\n"
-            "Please select a topic below to learn more:",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "**📖 Help & Guide**\n\n"
+                "Welcome to the Rename Bot Guide!\n"
+                "Whether you are organizing a massive media library of popular series and movies, "
+                "or just want to rename and manage your **personal home videos** and files, I can help!\n\n"
+                "Please select a topic below to learn more:",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "🛠 How to Use", callback_data="help_how_to_use"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🤖 Auto-Detect Magic", callback_data="help_auto_detect"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📁 Personal Files & Home Videos",
-                            callback_data="help_personal",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📄 General Mode & Variables", callback_data="help_general"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "⚙️ Settings & Info", callback_data="help_settings"
-                        )
-                    ],
-                    [InlineKeyboardButton("❌ Close", callback_data="help_close")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "🛠 How to Use", callback_data="help_how_to_use"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🤖 Auto-Detect Magic", callback_data="help_auto_detect"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "📁 Personal Files & Home Videos",
+                                callback_data="help_personal",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "📄 General Mode & Variables",
+                                callback_data="help_general",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "⚙️ Settings & Info", callback_data="help_settings"
+                            )
+                        ],
+                        [InlineKeyboardButton("❌ Close", callback_data="help_close")],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "help_how_to_use":
-        await callback_query.message.edit_text(
-            "**🛠 How to Use**\n\n"
-            "1. **The Quick Way**: Simply send or forward any media file directly to me. I will scan the file and start the renaming process.\n\n"
-            "2. **The Manual Way**: Press the 'Start Renaming Manually' button or use `/start` to begin the guided process.\n\n"
-            "3. **Cancel Anytime**: Made a mistake? Use `/end` or the Cancel button at any point to reset your progress.",
-            reply_markup=InlineKeyboardMarkup(back_button),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "**🛠 How to Use**\n\n"
+                "1. **The Quick Way**: Simply send or forward any media file directly to me. I will scan the file and start the renaming process.\n\n"
+                "2. **The Manual Way**: Press the 'Start Renaming Manually' button or use `/start` to begin the guided process.\n\n"
+                "3. **Cancel Anytime**: Made a mistake? Use `/end` or the Cancel button at any point to reset your progress.",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
     elif data == "help_auto_detect":
-        await callback_query.message.edit_text(
-            "**🤖 Auto-Detect Magic**\n\n"
-            "When you send a file directly, my Auto-Detection Matrix scans the filename.\n\n"
-            "• **Series/Movies:** I look for the title, year, season, episode, and quality.\n"
-            "• **Smart Metadata:** If it's a known movie or series, I pull official posters and metadata from TMDb!\n\n"
-            "You always get a chance to confirm or correct the details before processing begins.",
-            reply_markup=InlineKeyboardMarkup(back_button),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "**🤖 Auto-Detect Magic**\n\n"
+                "When you send a file directly, my Auto-Detection Matrix scans the filename.\n\n"
+                "• **Series/Movies:** I look for the title, year, season, episode, and quality.\n"
+                "• **Smart Metadata:** If it's a known movie or series, I pull official posters and metadata from TMDb!\n\n"
+                "You always get a chance to confirm or correct the details before processing begins.",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
     elif data == "help_personal":
-        await callback_query.message.edit_text(
-            "**📁 Personal Files & Home Videos**\n\n"
-            "Not just for popular movies! Many users manage their personal home videos, tutorials, or family archives.\n\n"
-            "**How?**\n"
-            "1. Send your personal video.\n"
-            "2. When prompted with TMDb search results, select **'Skip / Manual'** or similar option if it's not a public release.\n"
-            "3. You can still set custom names, add your own thumbnails, and organize them exactly how you want them!",
-            reply_markup=InlineKeyboardMarkup(back_button),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "**📁 Personal Files & Home Videos**\n\n"
+                "Not just for popular movies! Many users manage their personal home videos, tutorials, or family archives.\n\n"
+                "**How?**\n"
+                "1. Send your personal video.\n"
+                "2. When prompted with TMDb search results, select **'Skip / Manual'** or similar option if it's not a public release.\n"
+                "3. You can still set custom names, add your own thumbnails, and organize them exactly how you want them!",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
     elif data == "help_general":
-        await callback_query.message.edit_text(
-            "**📄 General Mode & Variables**\n\n"
-            "General mode allows you to rename ANY file exactly how you want, bypassing all metadata lookups.\n\n"
-            "**Available Variables for Renaming:**\n"
-            "• `{filename}` - The original filename (without extension)\n"
-            "• `{Season_Episode}` - Example: S01E01 (if detected)\n"
-            "• `{Quality}` - Example: 1080p, 720p (if detected)\n"
-            "• `{Year}` - Example: 2024 (if detected)\n"
-            "• `{Title}` - Example: The Matrix (if detected)\n\n"
-            "*(The file extension like .mkv or .pdf is always added automatically!)*\n\n"
-            "**Shortcuts:**\n"
-            "• `/r` or `/rename` - Start rename flow\n"
-            "• `/p` or `/personal` - Open Personal Files mode directly\n"
-            "• `/g` or `/general` - Open General Mode directly\n"
-            "• `/a` or `/audio` - Open Audio Metadata Editor\n"
-            "• `/c` or `/convert` - Open File Converter\n"
-            "• `/w` or `/watermark` - Open Image Watermarker",
-            reply_markup=InlineKeyboardMarkup(back_button),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "**📄 General Mode & Variables**\n\n"
+                "General mode allows you to rename ANY file exactly how you want, bypassing all metadata lookups.\n\n"
+                "**Available Variables for Renaming:**\n"
+                "• `{filename}` - The original filename (without extension)\n"
+                "• `{Season_Episode}` - Example: S01E01 (if detected)\n"
+                "• `{Quality}` - Example: 1080p, 720p (if detected)\n"
+                "• `{Year}` - Example: 2024 (if detected)\n"
+                "• `{Title}` - Example: The Matrix (if detected)\n\n"
+                "*(The file extension like .mkv or .pdf is always added automatically!)*\n\n"
+                "**Shortcuts:**\n"
+                "• `/r` or `/rename` - Start rename flow\n"
+                "• `/p` or `/personal` - Open Personal Files mode directly\n"
+                "• `/g` or `/general` - Open General Mode directly\n"
+                "• `/a` or `/audio` - Open Audio Metadata Editor\n"
+                "• `/c` or `/convert` - Open File Converter\n"
+                "• `/w` or `/watermark` - Open Image Watermarker",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
     elif data == "help_settings":
         if Config.PUBLIC_MODE:
             text = (
@@ -397,9 +431,12 @@ async def handle_help_callbacks(client, callback_query):
                 "• Set a **Default Thumbnail** for all your uploads.\n"
                 "• Customize **Caption Templates** and more!"
             )
-        await callback_query.message.edit_text(
-            text, reply_markup=InlineKeyboardMarkup(back_button)
-        )
+        try:
+            await callback_query.message.edit_text(
+                text, reply_markup=InlineKeyboardMarkup(back_button)
+            )
+        except MessageNotModified:
+            pass
     elif data == "help_close":
         await callback_query.message.delete()
 

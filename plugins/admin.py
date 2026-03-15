@@ -1,3 +1,4 @@
+from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -11,7 +12,152 @@ logger = get_logger("plugins.admin")
 admin_sessions = {}
 
 
+def get_admin_main_menu(pro_session, public_mode):
+    pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
+
+    keyboard = [
+        [
+            InlineKeyboardButton("⚙️ Bot Settings", callback_data="admin_bot_settings"),
+            InlineKeyboardButton("📋 Templates", callback_data="admin_templates_menu"),
+        ]
+    ]
+
+    if public_mode:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "🔒 Access & Limits", callback_data="admin_access_limits"
+                ),
+                InlineKeyboardButton(
+                    "🌐 Public Mode Settings", callback_data="admin_public_settings"
+                ),
+            ]
+        )
+
+    bottom_row = [
+        InlineKeyboardButton(
+            "📊 Usage Dashboard", callback_data="admin_usage_dashboard"
+        )
+    ]
+
+    if public_mode:
+        bottom_row.append(
+            InlineKeyboardButton(
+                "📢 Broadcast Message", callback_data="admin_broadcast"
+            )
+        )
+    else:
+        bottom_row.append(
+            InlineKeyboardButton("👀 View Settings", callback_data="admin_view")
+        )
+
+    keyboard.append(bottom_row)
+
+    keyboard.append(
+        [InlineKeyboardButton(pro_btn_text, callback_data="pro_setup_menu")]
+    )
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_admin_bot_settings_menu(public_mode):
+    keyboard = [
+        [InlineKeyboardButton("🖼 Global Thumbnail", callback_data="admin_thumb_menu")],
+        [InlineKeyboardButton("📺 Dumb Channels", callback_data="admin_dumb_channels")],
+    ]
+    if public_mode:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "⏱ Edit Dumb Channel Timeout", callback_data="admin_dumb_timeout"
+                )
+            ]
+        )
+    keyboard.append(
+        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]
+    )
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_admin_templates_menu():
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "📝 Edit Filename Templates",
+                    callback_data="admin_filename_templates",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📝 Edit Caption Template", callback_data="admin_caption"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📝 Edit Metadata Templates", callback_data="admin_templates"
+                )
+            ],
+            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
+        ]
+    )
+
+
+def get_admin_access_limits_menu():
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "📢 Edit Force-Sub Channel", callback_data="admin_public_force_sub"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📦 Set Daily Egress Limit", callback_data="admin_daily_egress"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📄 Set Daily File Limit", callback_data="admin_daily_files"
+                )
+            ],
+            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
+        ]
+    )
+
+
+def get_admin_public_settings_menu():
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🤖 Edit Bot Name", callback_data="admin_public_bot_name"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "👥 Edit Community Name",
+                    callback_data="admin_public_community_name",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔗 Edit Support Contact",
+                    callback_data="admin_public_support_contact",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "👀 View Public Config", callback_data="admin_public_view"
+                )
+            ],
+            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
+        ]
+    )
+
+
 def is_admin(user_id):
+
     return user_id == Config.CEO_ID
 
 
@@ -21,146 +167,62 @@ async def admin_panel(client, message):
         return
 
     pro_session = await db.get_pro_session()
-    pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
 
     if Config.PUBLIC_MODE:
-        await message.reply_text(
+        text = (
             "🛠 **Public Mode Admin Panel** 🛠\n\n"
             "Welcome, CEO.\n"
             "Manage global settings for Public Mode.\n"
             "These settings apply globally to the bot, such as branding and rate limits.\n"
-            "*(Use /settings to configure your personal renaming templates)*",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🤖 Edit Bot Name", callback_data="admin_public_bot_name"
-                        ),
-                        InlineKeyboardButton(
-                            "👥 Edit Community Name",
-                            callback_data="admin_public_community_name",
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔗 Edit Support Contact",
-                            callback_data="admin_public_support_contact",
-                        ),
-                        InlineKeyboardButton(
-                            "📢 Edit Force-Sub Channel",
-                            callback_data="admin_public_force_sub",
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📦 Set Daily Egress Limit",
-                            callback_data="admin_daily_egress",
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📄 Set Daily File Limit",
-                            callback_data="admin_daily_files",
-                        ),
-                        InlineKeyboardButton(
-                            "⏱ Edit Dumb Channel Timeout",
-                            callback_data="admin_dumb_timeout",
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📊 Usage Dashboard",
-                            callback_data="admin_usage_dashboard",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "👀 View Public Config", callback_data="admin_public_view"
-                        ),
-                        InlineKeyboardButton(
-                            "📢 Broadcast Message", callback_data="admin_broadcast"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            pro_btn_text, callback_data="pro_setup_menu"
-                        )
-                    ],
-                ]
-            ),
+            "*(Use /settings to configure your personal renaming templates)*"
         )
     else:
-        await message.reply_text(
+        text = (
             "🛠 **XTV Admin Panel** 🛠\n\n"
             "Welcome, CEO.\n"
             "Manage global settings for the XTV Rename Bot.\n"
-            "These settings affect all files processed by the bot.",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🖼 Manage Thumbnail", callback_data="admin_thumb_menu"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📝 Edit Metadata Templates",
-                            callback_data="admin_templates",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📝 Edit Filename Templates",
-                            callback_data="admin_filename_templates",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📝 Edit Caption Template", callback_data="admin_caption"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📺 Dumb Channels", callback_data="admin_dumb_channels"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "⚙️ Settings", callback_data="admin_settings"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "👀 View Current Settings", callback_data="admin_view"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            pro_btn_text, callback_data="pro_setup_menu"
-                        )
-                    ],
-                ]
-            ),
+            "These settings affect all files processed by the bot."
         )
+
+    await message.reply_text(
+        text, reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE)
+    )
 
 
 from pyrogram import ContinuePropagation
 from utils.logger import debug
 
 debug("✅ Loaded handler: admin_callback")
+
+
 @Client.on_callback_query(
     filters.regex(
         r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_fn_template_|prompt_template_|dumb_(?!user_))"
     )
 )
 async def admin_callback(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     if not is_admin(user_id):
         raise ContinuePropagation
     data = callback_query.data
     debug(f"Admin callback: {data} from user {user_id}")
 
-    if not Config.PUBLIC_MODE and data.startswith("dumb_"):
+    if data.startswith("dumb_"):
         if data == "dumb_menu":
             channels = await db.get_dumb_channels()
             default_ch = await db.get_default_dumb_channel()
@@ -174,41 +236,52 @@ async def admin_callback(client, callback_query):
                     marker = " (Default)" if str(ch_id) == default_ch else ""
                     text += f"- {ch_name} `{ch_id}`{marker}\n"
 
-            await callback_query.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "➕ Add New Dumb Channel", callback_data="dumb_add"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "➖ Remove Dumb Channel", callback_data="dumb_remove"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "⭐ Set Default", callback_data="dumb_set_default"
-                            )
-                        ],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "➕ Add New Dumb Channel", callback_data="dumb_add"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "➖ Remove Dumb Channel",
+                                    callback_data="dumb_remove",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "⭐ Set Default", callback_data="dumb_set_default"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
         elif data == "dumb_add":
             admin_sessions[user_id] = "awaiting_dumb_add"
-            await callback_query.message.edit_text(
-                "➕ **Add Dumb Channel**\n\n"
-                "Please add me as an Administrator in the desired channel.\n"
-                "Then, forward any message from that channel to me, OR send the Channel ID (e.g. `-100...`) or Public Username.\n\n"
-                "*(Send `disable` to cancel)*",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]]
-                ),
-            )
+            try:
+                await callback_query.message.edit_text(
+                    "➕ **Add Dumb Channel**\n\n"
+                    "Please add me as an Administrator in the desired channel.\n"
+                    "Then, forward any message from that channel to me, OR send the Channel ID (e.g. `-100...`) or Public Username.\n\n"
+                    "*(Send `disable` to cancel)*",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
         elif data == "dumb_remove":
             channels = await db.get_dumb_channels()
@@ -224,11 +297,14 @@ async def admin_callback(client, callback_query):
                         )
                     ]
                 )
-            buttons.append([InlineKeyboardButton("🔙 Back", callback_data="dumb_menu")])
-            await callback_query.message.edit_text(
-                "Select a channel to remove:",
-                reply_markup=InlineKeyboardMarkup(buttons),
-            )
+            buttons.append([InlineKeyboardButton("← Back", callback_data="dumb_menu")])
+            try:
+                await callback_query.message.edit_text(
+                    "Select a channel to remove:",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+            except MessageNotModified:
+                pass
             return
         elif data.startswith("dumb_del_"):
             ch_id = data.replace("dumb_del_", "")
@@ -251,11 +327,14 @@ async def admin_callback(client, callback_query):
                         )
                     ]
                 )
-            buttons.append([InlineKeyboardButton("🔙 Back", callback_data="dumb_menu")])
-            await callback_query.message.edit_text(
-                "Select default auto-detect channel:",
-                reply_markup=InlineKeyboardMarkup(buttons),
-            )
+            buttons.append([InlineKeyboardButton("← Back", callback_data="dumb_menu")])
+            try:
+                await callback_query.message.edit_text(
+                    "Select default auto-detect channel:",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+            except MessageNotModified:
+                pass
             return
         elif data.startswith("dumb_def_"):
             ch_id = data.replace("dumb_def_", "")
@@ -272,34 +351,46 @@ async def admin_callback(client, callback_query):
 
     if data == "admin_dumb_timeout":
         current_val = await db.get_dumb_channel_timeout()
-        await callback_query.message.edit_text(
-            f"⏱ **Edit Dumb Channel Timeout**\n\n"
-            f"This is the max time (in seconds) the bot will wait for earlier files before uploading to the Dumb Channel.\n\n"
-            f"Current: `{current_val}` seconds\n\nClick below to change it.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                f"⏱ **Edit Dumb Channel Timeout**\n\n"
+                f"This is the max time (in seconds) the bot will wait for earlier files before uploading to the Dumb Channel.\n\n"
+                f"Current: `{current_val}` seconds\n\nClick below to change it.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "✏️ Change", callback_data="prompt_admin_dumb_timeout"
-                        )
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "✏️ Change", callback_data="prompt_admin_dumb_timeout"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back to Admin Panel", callback_data="admin_main"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
         return
 
     if data == "prompt_admin_dumb_timeout":
         admin_sessions[user_id] = "awaiting_dumb_timeout"
-        await callback_query.message.edit_text(
-            "⏱ **Send the new timeout in seconds (e.g., 3600 for 1 hour):**",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "⏱ **Send the new timeout in seconds (e.g., 3600 for 1 hour):**",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
         return
 
-    if Config.PUBLIC_MODE and (data.startswith("admin_public_") or data.startswith("admin_daily_")):
+    if Config.PUBLIC_MODE and (
+        data.startswith("admin_public_") or data.startswith("admin_daily_")
+    ):
         if data == "admin_public_view":
             config = await db.get_public_config()
             text = "👀 **Public Mode Config**\n\n"
@@ -309,132 +400,181 @@ async def admin_callback(client, callback_query):
             text += (
                 f"**Force-Sub Channel:** {config.get('force_sub_channel', 'Not set')}\n"
             )
-            text += (
-                f"**Daily Egress Limit:** {config.get('daily_egress_mb', 0)} MB\n"
-            )
-            text += (
-                f"**Daily File Limit:** {config.get('daily_file_count', 0)} files\n"
-            )
+            text += f"**Daily Egress Limit:** {config.get('daily_egress_mb', 0)} MB\n"
+            text += f"**Daily File Limit:** {config.get('daily_file_count', 0)} files\n"
 
-            await callback_query.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔙 Back", callback_data="admin_main")]]
-                ),
-            )
+            try:
+                await callback_query.message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ]
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
 
         elif data == "admin_public_bot_name":
             config = await db.get_public_config()
             current_val = config.get("bot_name", "Not set")
-            await callback_query.message.edit_text(
-                f"🤖 **Edit Bot Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    f"🤖 **Edit Bot Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_public_bot_name"
-                            )
-                        ],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "✏️ Change", callback_data="prompt_public_bot_name"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
 
         elif data == "admin_public_community_name":
             config = await db.get_public_config()
             current_val = config.get("community_name", "Not set")
-            await callback_query.message.edit_text(
-                f"👥 **Edit Community Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    f"👥 **Edit Community Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "✏️ Change",
-                                callback_data="prompt_public_community_name",
-                            )
-                        ],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "✏️ Change",
+                                    callback_data="prompt_public_community_name",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
 
         elif data == "admin_public_support_contact":
             config = await db.get_public_config()
             current_val = config.get("support_contact", "Not set")
-            await callback_query.message.edit_text(
-                f"🔗 **Edit Support Contact**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    f"🔗 **Edit Support Contact**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "✏️ Change",
-                                callback_data="prompt_public_support_contact",
-                            )
-                        ],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "✏️ Change",
+                                    callback_data="prompt_public_support_contact",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
 
         elif data == "admin_public_force_sub":
             config = await db.get_public_config()
             current_val = config.get("force_sub_channel", "Not set")
-            await callback_query.message.edit_text(
-                f"📢 **Edit Force-Sub Channel**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    f"📢 **Edit Force-Sub Channel**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_public_force_sub"
-                            )
-                        ],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "✏️ Change", callback_data="prompt_public_force_sub"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
 
         elif data == "admin_daily_egress":
             config = await db.get_public_config()
             current_val = config.get("daily_egress_mb", 0)
-            await callback_query.message.edit_text(
-                f"📦 **Edit Daily Egress Limit**\n\nCurrent: `{current_val}` MB\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    f"📦 **Edit Daily Egress Limit**\n\nCurrent: `{current_val}` MB\n\nClick below to change it.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_daily_egress"
-                            )
-                        ],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "✏️ Change", callback_data="prompt_daily_egress"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
 
         elif data == "admin_daily_files":
             config = await db.get_public_config()
             current_val = config.get("daily_file_count", 0)
-            await callback_query.message.edit_text(
-                f"📄 **Edit Daily File Limit**\n\nCurrent: `{current_val}` files\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    f"📄 **Edit Daily File Limit**\n\nCurrent: `{current_val}` files\n\nClick below to change it.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_daily_files"
-                            )
-                        ],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "✏️ Change", callback_data="prompt_daily_files"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "← Back to Admin Panel", callback_data="admin_main"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             return
 
-    if Config.PUBLIC_MODE and (data.startswith("prompt_public_") or data.startswith("prompt_daily_")):
+    if Config.PUBLIC_MODE and (
+        data.startswith("prompt_public_") or data.startswith("prompt_daily_")
+    ):
         field = data.replace("prompt_public_", "").replace("prompt_daily_", "daily_")
         admin_sessions[user_id] = f"awaiting_public_{field}"
 
@@ -460,32 +600,42 @@ async def admin_callback(client, callback_query):
         else:
             text = "Send the new value:"
 
-        await callback_query.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
         return
     if data == "admin_thumb_menu":
-        await callback_query.message.edit_text(
-            "🖼 **Manage Thumbnail**\n\n" "Select an action:",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "🖼 **Manage Thumbnail**\n\n" "Select an action:",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "👀 View Current", callback_data="admin_thumb_view"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📤 Set Default", callback_data="admin_thumb_set"
-                        )
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "👀 View Current", callback_data="admin_thumb_view"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "📤 Set Default", callback_data="admin_thumb_set"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back to Admin Panel", callback_data="admin_main"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_thumb_view":
         thumb_bin, _ = await db.get_thumbnail()
         if thumb_bin:
@@ -523,93 +673,126 @@ async def admin_callback(client, callback_query):
         else:
             await callback_query.answer("No thumbnail set in DB!", show_alert=True)
     elif data == "admin_thumb_set":
-        await callback_query.message.edit_text(
-            "📤 **Set Default Thumbnail**\n\n"
-            "Click below to upload a new thumbnail. "
-            "This will be embedded into every video processed.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "📤 **Set Default Thumbnail**\n\n"
+                "Click below to upload a new thumbnail. "
+                "This will be embedded into every video processed.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "📤 Upload New", callback_data="prompt_admin_thumb_set"
-                        )
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_thumb_menu")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "📤 Upload New", callback_data="prompt_admin_thumb_set"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back", callback_data="admin_thumb_menu"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "prompt_admin_thumb_set":
         admin_sessions[user_id] = "awaiting_thumb"
-        await callback_query.message.edit_text(
-            "🖼 **Send the new photo** to set as the default thumbnail:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_thumb_menu")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "🖼 **Send the new photo** to set as the default thumbnail:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "❌ Cancel", callback_data="admin_thumb_menu"
+                            )
+                        ]
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_templates":
-        await callback_query.message.edit_text(
-            "📝 **Edit Metadata Templates**\n\n" "Select a field to edit:",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "📝 **Edit Metadata Templates**\n\n" "Select a field to edit:",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "Title", callback_data="edit_template_title"
-                        ),
-                        InlineKeyboardButton(
-                            "Author", callback_data="edit_template_author"
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Artist", callback_data="edit_template_artist"
-                        ),
-                        InlineKeyboardButton(
-                            "Video", callback_data="edit_template_video"
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Audio", callback_data="edit_template_audio"
-                        ),
-                        InlineKeyboardButton(
-                            "Subtitle", callback_data="edit_template_subtitle"
-                        ),
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "Title", callback_data="edit_template_title"
+                            ),
+                            InlineKeyboardButton(
+                                "Author", callback_data="edit_template_author"
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Artist", callback_data="edit_template_artist"
+                            ),
+                            InlineKeyboardButton(
+                                "Video", callback_data="edit_template_video"
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Audio", callback_data="edit_template_audio"
+                            ),
+                            InlineKeyboardButton(
+                                "Subtitle", callback_data="edit_template_subtitle"
+                            ),
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back to Admin Panel", callback_data="admin_main"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_caption":
         templates = await db.get_all_templates()
         current_caption = templates.get("caption", "{random}")
-        await callback_query.message.edit_text(
-            f"📝 **Edit Caption Template**\n\n"
-            f"Current: `{current_caption}`\n\n"
-            "**Variables:**\n"
-            "- `{filename}` : The final filename\n"
-            "- `{size}` : File size (e.g. 1.5 GB)\n"
-            "- `{duration}` : Video duration\n"
-            "- `{random}` : Random string (Anti-Hash)\n\n"
-            "Click below to change it.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                f"📝 **Edit Caption Template**\n\n"
+                f"Current: `{current_caption}`\n\n"
+                "**Variables:**\n"
+                "- `{filename}` : The final filename\n"
+                "- `{size}` : File size (e.g. 1.5 GB)\n"
+                "- `{duration}` : Video duration\n"
+                "- `{random}` : Random string (Anti-Hash)\n\n"
+                "Click below to change it.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "✏️ Change", callback_data="prompt_admin_caption"
-                        )
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "✏️ Change", callback_data="prompt_admin_caption"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back to Admin Panel", callback_data="admin_main"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "prompt_admin_caption":
         admin_sessions[user_id] = "awaiting_template_caption"
-        await callback_query.message.edit_text(
-            "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_view":
         settings = await db.get_settings()
         templates = settings.get("templates", {}) if settings else {}
@@ -635,154 +818,197 @@ async def admin_callback(client, callback_query):
         else:
             text += "No filename templates set.\n"
         text += f"\n**Channel Variable:** `{settings.get('channel', Config.DEFAULT_CHANNEL) if settings else Config.DEFAULT_CHANNEL}`\n"
-        await callback_query.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Back", callback_data="admin_main")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "← Back to Admin Panel", callback_data="admin_main"
+                            )
+                        ]
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_filename_templates":
-        await callback_query.message.edit_text(
-            "📝 **Edit Filename Templates**\n\n" "Select media type to edit:",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "📝 **Edit Filename Templates**\n\n" "Select media type to edit:",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "Movies", callback_data="edit_fn_template_movies"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Series", callback_data="edit_fn_template_series"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Personal", callback_data="admin_fn_templates_personal"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Subtitles", callback_data="admin_fn_templates_subtitles"
-                        )
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "Movies", callback_data="edit_fn_template_movies"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Series", callback_data="edit_fn_template_series"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Personal", callback_data="admin_fn_templates_personal"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Subtitles",
+                                callback_data="admin_fn_templates_subtitles",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back to Admin Panel", callback_data="admin_main"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_fn_templates_personal":
-        await callback_query.message.edit_text(
-            "📝 **Edit Personal Filename Templates**\n\n" "Select media type to edit:",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "📝 **Edit Personal Filename Templates**\n\n"
+                "Select media type to edit:",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "Personal Files",
-                            callback_data="edit_fn_template_personal_file",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Personal Photos",
-                            callback_data="edit_fn_template_personal_photo",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Personal Videos",
-                            callback_data="edit_fn_template_personal_video",
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔙 Back", callback_data="admin_filename_templates"
-                        )
-                    ],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "Personal Files",
+                                callback_data="edit_fn_template_personal_file",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Personal Photos",
+                                callback_data="edit_fn_template_personal_photo",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Personal Videos",
+                                callback_data="edit_fn_template_personal_video",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back", callback_data="admin_filename_templates"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_fn_templates_subtitles":
-        await callback_query.message.edit_text(
-            "📝 **Edit Subtitles Filename Templates**\n\n" "Select media type to edit:",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "📝 **Edit Subtitles Filename Templates**\n\n"
+                "Select media type to edit:",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "Movies", callback_data="edit_fn_template_subtitles_movies"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "Series", callback_data="edit_fn_template_subtitles_series"
-                        )
-                    ],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "Movies",
+                                callback_data="edit_fn_template_subtitles_movies",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Series",
+                                callback_data="edit_fn_template_subtitles_series",
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data.startswith("edit_fn_template_"):
         field = data.replace("edit_fn_template_", "")
         templates = await db.get_filename_templates()
         current_val = templates.get(field, "")
-        await callback_query.message.edit_text(
-            f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
-            f"Current: `{current_val}`\n\n"
-            f"Variables: `{{Title}}`, `{{Year}}`, `{{Quality}}`, `{{Season}}`, `{{Episode}}`, `{{Season_Episode}}`, `{{Language}}`, `{{Channel}}`\n"
-            f"Note: File extension will be added automatically.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
+                f"Current: `{current_val}`\n\n"
+                f"Variables: `{{Title}}`, `{{Year}}`, `{{Quality}}`, `{{Season}}`, `{{Episode}}`, `{{Season_Episode}}`, `{{Language}}`, `{{Channel}}`\n"
+                f"Note: File extension will be added automatically.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "✏️ Change", callback_data=f"prompt_fn_template_{field}"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔙 Back", callback_data="admin_filename_templates"
-                        )
-                    ],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "✏️ Change", callback_data=f"prompt_fn_template_{field}"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back", callback_data="admin_filename_templates"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data.startswith("prompt_fn_template_"):
         field = data.replace("prompt_fn_template_", "")
         admin_sessions[user_id] = f"awaiting_fn_template_{field}"
-        await callback_query.message.edit_text(
-            f"✏️ **Send the new filename template for {field.capitalize()}:**",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                f"✏️ **Send the new filename template for {field.capitalize()}:**",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "❌ Cancel", callback_data="admin_filename_templates"
-                        )
+                        [
+                            InlineKeyboardButton(
+                                "❌ Cancel", callback_data="admin_filename_templates"
+                            )
+                        ]
                     ]
-                ]
-            ),
-        )
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_settings":
         current_channel = await db.get_channel()
-        await callback_query.message.edit_text(
-            f"⚙️ **General Settings**\n\n"
-            f"Current Channel Variable: `{current_channel}`\n\n"
-            "Click below to change it.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                f"⚙️ **General Settings**\n\n"
+                f"Current Channel Variable: `{current_channel}`\n\n"
+                "Click below to change it.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "✏️ Change", callback_data="prompt_admin_channel"
-                        )
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_main")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "✏️ Change", callback_data="prompt_admin_channel"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back to Admin Panel", callback_data="admin_main"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "prompt_admin_channel":
         admin_sessions[user_id] = "awaiting_channel"
-        await callback_query.message.edit_text(
-            "⚙️ **Send the new Channel name (e.g. `@XTVglobal`):**",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "⚙️ **Send the new Channel name (e.g. `@XTVglobal`):**",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data == "admin_main" or data == "admin_cancel":
         admin_sessions.pop(user_id, None)
 
@@ -790,145 +1016,170 @@ async def admin_callback(client, callback_query):
         pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
 
         if Config.PUBLIC_MODE:
-            await callback_query.message.edit_text(
-                "🛠 **Public Mode Admin Panel** 🛠\n\n"
-                "Welcome, CEO.\n"
-                "Manage global settings for Public Mode.\n"
-                "These settings apply globally to the bot, such as branding and rate limits.\n"
-                "*(Use /settings to configure your personal renaming templates)*",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    "🛠 **Public Mode Admin Panel** 🛠\n\n"
+                    "Welcome, CEO.\n"
+                    "Manage global settings for Public Mode.\n"
+                    "These settings apply globally to the bot, such as branding and rate limits.\n"
+                    "*(Use /settings to configure your personal renaming templates)*",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "🤖 Edit Bot Name",
-                                callback_data="admin_public_bot_name",
-                            ),
-                            InlineKeyboardButton(
-                                "👥 Edit Community Name",
-                                callback_data="admin_public_community_name",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "🔗 Edit Support Contact",
-                                callback_data="admin_public_support_contact",
-                            ),
-                            InlineKeyboardButton(
-                                "📢 Edit Force-Sub Channel",
-                                callback_data="admin_public_force_sub",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "⏱ Edit Rate Limits",
-                                callback_data="admin_public_rate_limit",
-                            ),
-                            InlineKeyboardButton(
-                                "⏱ Edit Dumb Channel Timeout",
-                                callback_data="admin_dumb_timeout",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "👀 View Public Config",
-                                callback_data="admin_public_view",
-                            ),
-                            InlineKeyboardButton(
-                                "📢 Broadcast Message",
-                                callback_data="admin_broadcast",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                pro_btn_text, callback_data="pro_setup_menu"
-                            )
-                        ],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "🤖 Edit Bot Name",
+                                    callback_data="admin_public_bot_name",
+                                ),
+                                InlineKeyboardButton(
+                                    "👥 Edit Community Name",
+                                    callback_data="admin_public_community_name",
+                                ),
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "🔗 Edit Support Contact",
+                                    callback_data="admin_public_support_contact",
+                                ),
+                                InlineKeyboardButton(
+                                    "📢 Edit Force-Sub Channel",
+                                    callback_data="admin_public_force_sub",
+                                ),
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "⏱ Edit Rate Limits",
+                                    callback_data="admin_public_rate_limit",
+                                ),
+                                InlineKeyboardButton(
+                                    "⏱ Edit Dumb Channel Timeout",
+                                    callback_data="admin_dumb_timeout",
+                                ),
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "👀 View Public Config",
+                                    callback_data="admin_public_view",
+                                ),
+                                InlineKeyboardButton(
+                                    "📢 Broadcast Message",
+                                    callback_data="admin_broadcast",
+                                ),
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    pro_btn_text, callback_data="pro_setup_menu"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
         else:
-            await callback_query.message.edit_text(
-                "🛠 **XTV Admin Panel** 🛠\n\n"
-                "Welcome, CEO.\n"
-                "Manage global settings for the XTV Rename Bot.\n"
-                "These settings affect all files processed by the bot.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await callback_query.message.edit_text(
+                    "🛠 **XTV Admin Panel** 🛠\n\n"
+                    "Welcome, CEO.\n"
+                    "Manage global settings for the XTV Rename Bot.\n"
+                    "These settings affect all files processed by the bot.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "🖼 Manage Thumbnail", callback_data="admin_thumb_menu"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📝 Edit Metadata Templates",
-                                callback_data="admin_templates",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📝 Edit Filename Templates",
-                                callback_data="admin_filename_templates",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📝 Edit Caption Template",
-                                callback_data="admin_caption",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📺 Dumb Channels", callback_data="admin_dumb_channels"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "⚙️ Settings", callback_data="admin_settings"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "👀 View Current Settings", callback_data="admin_view"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                pro_btn_text, callback_data="pro_setup_menu"
-                            )
-                        ],
-                    ]
-                ),
-            )
+                            [
+                                InlineKeyboardButton(
+                                    "🖼 Manage Thumbnail",
+                                    callback_data="admin_thumb_menu",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "📝 Edit Metadata Templates",
+                                    callback_data="admin_templates",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "📝 Edit Filename Templates",
+                                    callback_data="admin_filename_templates",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "📝 Edit Caption Template",
+                                    callback_data="admin_caption",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "📺 Dumb Channels",
+                                    callback_data="admin_dumb_channels",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "⚙️ Settings", callback_data="admin_settings"
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "👀 View Current Settings",
+                                    callback_data="admin_view",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    pro_btn_text, callback_data="pro_setup_menu"
+                                )
+                            ],
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
     elif data.startswith("edit_template_"):
         field = data.split("_")[-1]
         templates = await db.get_all_templates()
         current_val = templates.get(field, "")
-        await callback_query.message.edit_text(
-            f"✏️ **Edit {field.capitalize()} Template**\n\n"
-            f"Current: `{current_val}`\n\n"
-            f"Variables: `{{title}}`, `{{season_episode}}`, `{{lang}}` (for audio/subtitle)\n\n"
-            "Click below to change it.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                f"✏️ **Edit {field.capitalize()} Template**\n\n"
+                f"Current: `{current_val}`\n\n"
+                f"Variables: `{{title}}`, `{{season_episode}}`, `{{lang}}` (for audio/subtitle)\n\n"
+                "Click below to change it.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "✏️ Change", callback_data=f"prompt_template_{field}"
-                        )
-                    ],
-                    [InlineKeyboardButton("🔙 Back", callback_data="admin_templates")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "✏️ Change", callback_data=f"prompt_template_{field}"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back", callback_data="admin_templates"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
     elif data.startswith("prompt_template_"):
         field = data.replace("prompt_template_", "")
         admin_sessions[user_id] = f"awaiting_template_{field}"
-        await callback_query.message.edit_text(
-            f"✏️ **Send the new template text for {field.capitalize()}:**",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_templates")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                f"✏️ **Send the new template text for {field.capitalize()}:**",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "❌ Cancel", callback_data="admin_templates"
+                            )
+                        ]
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
 
 
 from pyrogram import ContinuePropagation
@@ -962,7 +1213,10 @@ async def handle_admin_photo(client, message):
         admin_sessions.pop(user_id, None)
     except Exception as e:
         logger.error(f"Thumbnail upload failed: {e}")
-        await msg.edit_text(f"❌ Error: {e}")
+        try:
+            await msg.edit_text(f"❌ Error: {e}")
+        except MessageNotModified:
+            pass
 
 
 @Client.on_message(
@@ -991,8 +1245,18 @@ async def handle_admin_text(client, message):
                 user = await client.get_users(val)
                 user_id = user.id
             except Exception:
-                await message.reply_text("❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
-                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_usage_dashboard")]]))
+                await message.reply_text(
+                    "❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "← Back", callback_data="admin_usage_dashboard"
+                                )
+                            ]
+                        ]
+                    ),
+                )
                 clear_session(message.from_user.id)
                 return
 
@@ -1014,7 +1278,13 @@ async def handle_admin_text(client, message):
         await message.reply_text(
             f"✅ Dumb channel timeout updated to `{val}` seconds.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]
+                [
+                    [
+                        InlineKeyboardButton(
+                            "← Back to Admin Panel", callback_data="admin_main"
+                        )
+                    ]
+                ]
             ),
         )
         admin_sessions.pop(user_id, None)
@@ -1198,7 +1468,13 @@ async def handle_admin_text(client, message):
         await db.update_template(field, new_template)
         if field == "caption":
             reply_markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]
+                [
+                    [
+                        InlineKeyboardButton(
+                            "← Back to Admin Panel", callback_data="admin_main"
+                        )
+                    ]
+                ]
             )
         else:
             reply_markup = InlineKeyboardMarkup(
@@ -1238,7 +1514,13 @@ async def handle_admin_text(client, message):
         new_channel = message.text
         await db.update_channel(new_channel)
         reply_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]
+            [
+                [
+                    InlineKeyboardButton(
+                        "← Back to Admin Panel", callback_data="admin_main"
+                    )
+                ]
+            ]
         )
         await message.reply_text(
             f"✅ Channel variable updated to:\n`{new_channel}`",
@@ -1257,8 +1539,26 @@ async def handle_admin_text(client, message):
 # --------------------------------------------------------------------------
 
 debug("✅ Loaded handler: admin_dashboard_overview_cb")
-@Client.on_callback_query(filters.regex("^admin_usage_dashboard$") & filters.user(Config.CEO_ID))
+
+
+@Client.on_callback_query(
+    filters.regex("^admin_usage_dashboard$") & filters.user(Config.CEO_ID)
+)
 async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQuery):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer()
     stats = await db.get_dashboard_stats()
 
@@ -1269,7 +1569,7 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
     for phase in ["download", "process", "upload"]:
         if _SEMAPHORES.get(phase):
             # value of semaphore is internal counter. Max is 3. So acquired = 3 - value
-            active_slots += (3 - _SEMAPHORES[phase]._value)
+            active_slots += 3 - _SEMAPHORES[phase]._value
 
     # Format egress strings
     def format_egress(mb):
@@ -1281,6 +1581,7 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
             return f"{mb:.2f} MB"
 
     import datetime
+
     current_time_str = datetime.datetime.utcnow().strftime("%d %b %Y, %H:%M UTC")
     start_date_obj = datetime.datetime.strptime(stats.get("bot_start_date"), "%Y-%m-%d")
     start_date_str = start_date_obj.strftime("%d %b %Y")
@@ -1316,25 +1617,57 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
 
     text += f"─────────────────────────"
 
-    await callback_query.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton("🔝 Top Users", callback_data="admin_dashboard_top_0"),
-                    InlineKeyboardButton("📅 Daily Breakdown", callback_data="admin_dashboard_daily")
-                ],
-                [
-                    InlineKeyboardButton("🔍 User Lookup", callback_data="prompt_user_lookup"),
-                ],
-                [InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_main")]
-            ]
+                    [
+                        InlineKeyboardButton(
+                            "🔝 Top Users", callback_data="admin_dashboard_top_0"
+                        ),
+                        InlineKeyboardButton(
+                            "📅 Daily Breakdown", callback_data="admin_dashboard_daily"
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔍 User Lookup", callback_data="prompt_user_lookup"
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "← Back to Admin Panel", callback_data="admin_main"
+                        )
+                    ],
+                ]
+            ),
         )
-    )
+    except MessageNotModified:
+        pass
+
 
 debug("✅ Loaded handler: admin_dashboard_top_cb")
-@Client.on_callback_query(filters.regex(r"^admin_dashboard_top_(\d+)$") & filters.user(Config.CEO_ID))
+
+
+@Client.on_callback_query(
+    filters.regex(r"^admin_dashboard_top_(\d+)$") & filters.user(Config.CEO_ID)
+)
 async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer()
     page = int(callback_query.matches[0].group(1))
     limit = 10
@@ -1343,6 +1676,7 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
     users, total = await db.get_top_users_today(limit=limit, skip=skip)
 
     import datetime
+
     current_date = datetime.datetime.utcnow().strftime("%d %b")
 
     text = f"🏆 **Top Users — Today ({current_date})**\n\n"
@@ -1357,7 +1691,11 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
             # Try to get user info if possible (fallback to ID)
             try:
                 user_obj = await client.get_users(int(user_id))
-                display_name = f"@{user_obj.username}" if user_obj.username else f"{user_obj.first_name}"
+                display_name = (
+                    f"@{user_obj.username}"
+                    if user_obj.username
+                    else f"{user_obj.first_name}"
+                )
             except Exception:
                 display_name = f"User {user_id}"
 
@@ -1376,26 +1714,65 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
     buttons = []
     nav_row = []
 
-    if page > 0:
-        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"admin_dashboard_top_{page-1}"))
-
     total_pages = (total + limit - 1) // limit if total > 0 else 1
 
-    nav_row.append(InlineKeyboardButton(f"Page {page+1}/{total_pages}", callback_data="ignore"))
+    if page > 0:
+        nav_row.append(
+            InlineKeyboardButton(
+                "← Prev", callback_data=f"admin_dashboard_top_{page-1}"
+            )
+        )
+    else:
+        nav_row.append(InlineKeyboardButton("← Prev", callback_data="noop"))
+
+    nav_row.append(
+        InlineKeyboardButton(f"Page {page+1} / {total_pages}", callback_data="noop")
+    )
 
     if skip + limit < total:
-        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"admin_dashboard_top_{page+1}"))
+        nav_row.append(
+            InlineKeyboardButton(
+                "Next →", callback_data=f"admin_dashboard_top_{page+1}"
+            )
+        )
+    else:
+        nav_row.append(InlineKeyboardButton("Next →", callback_data="noop"))
 
-    if len(nav_row) > 1:
-        buttons.append(nav_row)
+    buttons.append(nav_row)
 
-    buttons.append([InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_usage_dashboard")])
+    buttons.append(
+        [InlineKeyboardButton("← Back", callback_data="admin_usage_dashboard")]
+    )
 
-    await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    try:
+        await callback_query.message.edit_text(
+            text, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except MessageNotModified:
+        pass
+
 
 debug("✅ Loaded handler: admin_dashboard_daily_cb")
-@Client.on_callback_query(filters.regex("^admin_dashboard_daily$") & filters.user(Config.CEO_ID))
+
+
+@Client.on_callback_query(
+    filters.regex("^admin_dashboard_daily$") & filters.user(Config.CEO_ID)
+)
 async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer()
     daily_stats = await db.get_daily_stats(limit=7)
 
@@ -1407,6 +1784,7 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
         text += "No history available."
     else:
         import datetime
+
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         for stat in daily_stats:
@@ -1428,21 +1806,35 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
             # Format columns
             text += f"`{date_str:<13} {files:<7} {egress_str:>7}`{is_today}\n"
 
-    await callback_query.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_usage_dashboard")]])
-    )
+    try:
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "← Back", callback_data="admin_usage_dashboard"
+                        )
+                    ]
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
+
 
 @Client.on_message(filters.regex(r"^/lookup (\d+)$") & filters.user(Config.CEO_ID))
 async def admin_lookup_user(client: Client, message: Message):
     user_id = int(message.matches[0].group(1))
     await show_user_lookup(client, message, user_id)
 
+
 async def show_user_lookup(client: Client, message: Message, user_id: int):
     usage = await db.get_user_usage(user_id)
     is_blocked = await db.is_user_blocked(user_id)
 
     import datetime
+
     current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     current_date_display = datetime.datetime.utcnow().strftime("%d %b")
 
@@ -1483,7 +1875,9 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
     current_template = "Default"
 
     if user_settings:
-        if user_settings.get("thumbnail_file_id") or user_settings.get("thumbnail_binary"):
+        if user_settings.get("thumbnail_file_id") or user_settings.get(
+            "thumbnail_binary"
+        ):
             has_thumb = "Yes"
 
         templates = user_settings.get("templates", {})
@@ -1496,6 +1890,7 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
             try:
                 # ObjectId contains a timestamp
                 import bson
+
                 if isinstance(_id, bson.ObjectId):
                     joined_date = _id.generation_time.strftime("%d %b %Y")
                 else:
@@ -1528,58 +1923,169 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
     buttons = []
 
     if is_blocked:
-        buttons.append([InlineKeyboardButton("✅ Unblock User", callback_data=f"admin_unblock_{user_id}")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "✅ Unblock User", callback_data=f"admin_unblock_{user_id}"
+                )
+            ]
+        )
     else:
-        buttons.append([InlineKeyboardButton("🚫 Block User", callback_data=f"admin_block_{user_id}")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "🚫 Block User", callback_data=f"admin_block_{user_id}"
+                )
+            ]
+        )
 
-    buttons.append([InlineKeyboardButton("🗑️ Reset Today's Quota", callback_data=f"admin_reset_quota_{user_id}")])
-    buttons.append([InlineKeyboardButton("🔙 Dashboard", callback_data="admin_usage_dashboard")])
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                "🗑️ Reset Today's Quota", callback_data=f"admin_reset_quota_{user_id}"
+            )
+        ]
+    )
+    buttons.append(
+        [InlineKeyboardButton("← Back", callback_data="admin_usage_dashboard")]
+    )
 
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
+
 debug("✅ Loaded handler: admin_block_user_cb")
-@Client.on_callback_query(filters.regex(r"^admin_block_(\d+)$") & filters.user(Config.CEO_ID))
+
+
+@Client.on_callback_query(
+    filters.regex(r"^admin_block_(\d+)$") & filters.user(Config.CEO_ID)
+)
 async def admin_block_user_cb(client: Client, callback_query: CallbackQuery):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer("User Blocked", show_alert=True)
     user_id = int(callback_query.matches[0].group(1))
     await db.block_user(user_id)
     await show_user_lookup(client, callback_query.message, user_id)
     await callback_query.message.delete()
 
+
 debug("✅ Loaded handler: admin_unblock_user_cb")
-@Client.on_callback_query(filters.regex(r"^admin_unblock_(\d+)$") & filters.user(Config.CEO_ID))
+
+
+@Client.on_callback_query(
+    filters.regex(r"^admin_unblock_(\d+)$") & filters.user(Config.CEO_ID)
+)
 async def admin_unblock_user_cb(client: Client, callback_query: CallbackQuery):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer("User Unblocked", show_alert=True)
     user_id = int(callback_query.matches[0].group(1))
     await db.unblock_user(user_id)
     await show_user_lookup(client, callback_query.message, user_id)
     await callback_query.message.delete()
 
+
 debug("✅ Loaded handler: admin_reset_quota_cb")
-@Client.on_callback_query(filters.regex(r"^admin_reset_quota_(\d+)$") & filters.user(Config.CEO_ID))
+
+
+@Client.on_callback_query(
+    filters.regex(r"^admin_reset_quota_(\d+)$") & filters.user(Config.CEO_ID)
+)
 async def admin_reset_quota_cb(client: Client, callback_query: CallbackQuery):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer("Quota Reset", show_alert=True)
     user_id = int(callback_query.matches[0].group(1))
     await db.reset_user_quota(user_id)
     await show_user_lookup(client, callback_query.message, user_id)
     await callback_query.message.delete()
 
+
 debug("✅ Loaded handler: admin_prompt_lookup_cb")
-@Client.on_callback_query(filters.regex("^prompt_user_lookup$") & filters.user(Config.CEO_ID))
+
+
+@Client.on_callback_query(
+    filters.regex("^prompt_user_lookup$") & filters.user(Config.CEO_ID)
+)
 async def admin_prompt_lookup_cb(client: Client, callback_query: CallbackQuery):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer()
-    await callback_query.message.edit_text(
-        "🔍 **User Lookup**\n\n"
-        "Please send the user's Telegram ID (e.g., 123456789) to view their profile.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_usage_dashboard")]])
-    )
+    try:
+        await callback_query.message.edit_text(
+            "🔍 **User Lookup**\n\n"
+            "Please send the user's Telegram ID (e.g., 123456789) to view their profile.",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "← Back", callback_data="admin_usage_dashboard"
+                        )
+                    ]
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
     from utils.state import set_state
+
     set_state(callback_query.from_user.id, "awaiting_user_lookup")
 
 
-@Client.on_message(filters.text & filters.private & filters.user(Config.CEO_ID), group=2)
+@Client.on_message(
+    filters.text & filters.private & filters.user(Config.CEO_ID), group=2
+)
 async def admin_handle_user_lookup_text(client: Client, message: Message):
     from utils.state import get_state, clear_session
+
     state = get_state(message.from_user.id)
 
     if state == "awaiting_user_lookup":
@@ -1594,11 +2100,29 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
                 user = await client.get_users(val)
                 user_id = user.id
             except Exception:
-                await message.reply_text("❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
-                                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Dashboard", callback_data="admin_usage_dashboard")]]))
+                await message.reply_text(
+                    "❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "← Back", callback_data="admin_usage_dashboard"
+                                )
+                            ]
+                        ]
+                    ),
+                )
                 clear_session(message.from_user.id)
                 return
 
         await show_user_lookup(client, message, user_id)
         clear_session(message.from_user.id)
         raise ContinuePropagation
+
+
+@Client.on_callback_query(filters.regex("^noop$"))
+async def noop_cb(client, callback_query):
+    try:
+        await callback_query.answer()
+    except Exception:
+        pass

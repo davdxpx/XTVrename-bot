@@ -9,6 +9,7 @@ import shutil
 import aiohttp
 from typing import Optional, Dict, Tuple, Any
 
+from pyrogram.errors import MessageNotModified
 from pyrogram import Client
 from pyrogram.enums import ChatType
 from pyrogram.types import Message
@@ -117,16 +118,22 @@ class TaskProcessor:
 
     async def _initialize(self) -> bool:
         if not shutil.which("ffmpeg"):
-            await self.message.edit_text(
-                "❌ **System Error**\n\n`ffmpeg` binary not found. Contact administrator."
-            )
+            try:
+                await self.message.edit_text(
+                    "❌ **System Error**\n\n`ffmpeg` binary not found. Contact administrator."
+                )
+            except MessageNotModified:
+                pass
             return False
 
-        self.status_msg = await self.message.edit_text(
-            "⏳ **Initializing Task...**\n"
-            "Allocating resources and preparing environment.\n\n"
-            f"{XTVEngine.get_signature(mode=self.mode)}"
-        )
+        try:
+            self.status_msg = await self.message.edit_text(
+                "⏳ **Initializing Task...**\n"
+                "Allocating resources and preparing environment.\n\n"
+                f"{XTVEngine.get_signature(mode=self.mode)}"
+            )
+        except MessageNotModified:
+            pass
 
         self.settings = await db.get_settings(self.user_id)
         if self.settings:
@@ -140,8 +147,6 @@ class TaskProcessor:
             self.templates = Config.DEFAULT_TEMPLATES
             self.filename_templates = Config.DEFAULT_FILENAME_TEMPLATES
             self.channel = Config.DEFAULT_CHANNEL
-
-
 
         return True
 
@@ -831,11 +836,12 @@ class TaskProcessor:
 
                     # Send standalone confirmation msg since status_msg is deleted
                     await self.client.send_message(
-                        self.user_id,
-                        f"✅ **Done!** — {usage_text}"
+                        self.user_id, f"✅ **Done!** — {usage_text}"
                     )
                 except Exception as usage_e:
-                    logger.error(f"Error fetching/updating usage for success message: {usage_e}")
+                    logger.error(
+                        f"Error fetching/updating usage for success message: {usage_e}"
+                    )
             # --- END USAGE TRACKING INJECTION ---
 
             await self.status_msg.delete()
@@ -978,7 +984,11 @@ class TaskProcessor:
 
 async def process_file(client, message, data):
     file_msg = data.get("file_message")
-    user_id = file_msg.from_user.id if file_msg else (message.from_user.id if message else None)
+    user_id = (
+        file_msg.from_user.id
+        if file_msg
+        else (message.from_user.id if message else None)
+    )
 
     if user_id:
         # Before we actually spawn the task, do the quota check!
@@ -992,7 +1002,10 @@ async def process_file(client, message, data):
         quota_ok, error_msg, _ = await db.check_daily_quota(user_id, file_size)
         if not quota_ok:
             if message:
-                await message.edit_text(f"🛑 **Quota Exceeded**\n\n{error_msg}")
+                try:
+                    await message.edit_text(f"🛑 **Quota Exceeded**\n\n{error_msg}")
+                except MessageNotModified:
+                    pass
             return
 
     processor = TaskProcessor(client, message, data)

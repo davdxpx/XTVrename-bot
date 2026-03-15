@@ -1,3 +1,4 @@
+from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from utils.tmdb import tmdb
@@ -25,48 +26,85 @@ batch_status_msgs = {}
 
 @Client.on_callback_query(filters.regex(r"^start_renaming$"))
 async def handle_start_renaming(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     logger.info(f"Start renaming flow for {user_id}")
     clear_session(user_id)
     set_state(user_id, "awaiting_type")
 
-    await callback_query.message.edit_text(
-        "**Select Media Type**\n\n" "What are you renaming today?",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            "**Select Media Type**\n\n" "What are you renaming today?",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        "📄 General Mode (Any File)", callback_data="type_general"
-                    )
-                ],
-                [
-                    InlineKeyboardButton("🎬 Movie", callback_data="type_movie"),
-                    InlineKeyboardButton("📺 Series", callback_data="type_series"),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📹 Personal Video", callback_data="type_personal_video"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📸 Personal Photo", callback_data="type_personal_photo"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📁 Personal File", callback_data="type_personal_file"
-                    )
-                ],
-                [InlineKeyboardButton("📝 Subtitles", callback_data="type_subtitles")],
-                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
-            ]
-        ),
-    )
+                    [
+                        InlineKeyboardButton(
+                            "📄 General Mode (Any File)", callback_data="type_general"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton("🎬 Movie", callback_data="type_movie"),
+                        InlineKeyboardButton("📺 Series", callback_data="type_series"),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📹 Personal Video", callback_data="type_personal_video"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📸 Personal Photo", callback_data="type_personal_photo"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📁 Personal File", callback_data="type_personal_file"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📝 Subtitles", callback_data="type_subtitles"
+                        )
+                    ],
+                    [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^type_general$"))
 async def handle_type_general(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     logger.info(f"User {user_id} selected general type")
 
@@ -75,18 +113,36 @@ async def handle_type_general(client, callback_query):
 
     set_state(user_id, "awaiting_general_file")
 
-    await callback_query.message.edit_text(
-        "📄 **General Mode**\n\n"
-        "Please **send me the file** you want to rename.\n"
-        "*(You can send any type of file: Documents, Videos, Audio, etc.)*",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            "📄 **General Mode**\n\n"
+            "Please **send me the file** you want to rename.\n"
+            "*(You can send any type of file: Documents, Videos, Audio, etc.)*",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^type_personal_(video|photo|file)$"))
 async def handle_type_personal(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     personal_type = callback_query.data.split("_")[2]
     logger.info(f"User {user_id} selected personal type: {personal_type}")
@@ -104,19 +160,37 @@ async def handle_type_personal(client, callback_query):
     else:
         label = "File"
 
-    await callback_query.message.edit_text(
-        f"✍️ **Personal {label} Details**\n\n"
-        "Please enter the name you want to use for this file.\n"
-        "Format: `Title (Year)` or just `Title`\n"
-        "Example: `Family Vacation Hawaii (2024)`",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            f"✍️ **Personal {label} Details**\n\n"
+            "Please enter the name you want to use for this file.\n"
+            "Format: `Title (Year)` or just `Title`\n"
+            "Example: `Family Vacation Hawaii (2024)`",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^type_(movie|series)$"))
 async def handle_type_selection(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     media_type = callback_query.data.split("_")[1]
     logger.info(f"User {user_id} selected type: {media_type}")
@@ -124,33 +198,73 @@ async def handle_type_selection(client, callback_query):
     update_data(user_id, "type", media_type)
     set_state(user_id, f"awaiting_search_{media_type}")
 
-    await callback_query.message.edit_text(
-        f"🔍 **Search {media_type.capitalize()}**\n\n"
-        f"Please enter the name of the {media_type} (e.g. 'Zootopia' or 'The Rookie').",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            f"🔍 **Search {media_type.capitalize()}**\n\n"
+            f"Please enter the name of the {media_type} (e.g. 'Zootopia' or 'The Rookie').",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^type_subtitles$"))
 async def handle_type_subtitles(client, callback_query):
-    await callback_query.message.edit_text(
-        "**Select Subtitle Type**\n\n" "Is this for a Movie or a Series?",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
+    try:
+        await callback_query.message.edit_text(
+            "**Select Subtitle Type**\n\n" "Is this for a Movie or a Series?",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton("🎬 Movie", callback_data="type_sub_movie"),
-                    InlineKeyboardButton("📺 Series", callback_data="type_sub_series"),
-                ],
-                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
-            ]
-        ),
-    )
+                    [
+                        InlineKeyboardButton(
+                            "🎬 Movie", callback_data="type_sub_movie"
+                        ),
+                        InlineKeyboardButton(
+                            "📺 Series", callback_data="type_sub_series"
+                        ),
+                    ],
+                    [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^type_sub_(movie|series)$"))
 async def handle_subtitle_type_selection(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     media_type = callback_query.data.split("_")[2]
     logger.info(f"User {user_id} selected subtitle type: {media_type}")
@@ -159,13 +273,16 @@ async def handle_subtitle_type_selection(client, callback_query):
     update_data(user_id, "is_subtitle", True)
     set_state(user_id, f"awaiting_search_{media_type}")
 
-    await callback_query.message.edit_text(
-        f"🔍 **Search {media_type.capitalize()} (Subtitles)**\n\n"
-        f"Please enter the name of the {media_type}.",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            f"🔍 **Search {media_type.capitalize()} (Subtitles)**\n\n"
+            f"Please enter the name of the {media_type}.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 async def manual_title_handler(client, message):
@@ -229,25 +346,35 @@ async def search_handler(client, message, media_type):
             results = await tmdb.search_tv(query)
     except Exception as e:
         logger.error(f"TMDb search failed: {e}")
-        await msg.edit_text(f"❌ Search Error: {e}")
+        try:
+            await msg.edit_text(f"❌ Search Error: {e}")
+        except MessageNotModified:
+            pass
         return
 
     if not results:
-        await msg.edit_text(
-            "❌ **No results found.**\n\n"
-            "This could be a personal file, home video, or a regional/unknown series not listed on TMDb.\n"
-            "You can enter the details manually by clicking below.",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await msg.edit_text(
+                "❌ **No results found.**\n\n"
+                "This could be a personal file, home video, or a regional/unknown series not listed on TMDb.\n"
+                "You can enter the details manually by clicking below.",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "✍️ Skip / Enter Manually", callback_data="manual_entry"
-                        )
-                    ],
-                    [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
-                ]
-            ),
-        )
+                        [
+                            InlineKeyboardButton(
+                                "✍️ Skip / Enter Manually", callback_data="manual_entry"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "❌ Cancel", callback_data="cancel_rename"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
         return
 
     buttons = []
@@ -263,11 +390,14 @@ async def search_handler(client, message, media_type):
 
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
 
-    await msg.edit_text(
-        f"**Select {media_type.capitalize()}**\n\n"
-        f"Found {len(results)} results for '{query}':",
-        reply_markup=InlineKeyboardMarkup(buttons),
-    )
+    try:
+        await msg.edit_text(
+            f"**Select {media_type.capitalize()}**\n\n"
+            f"Found {len(results)} results for '{query}':",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+    except MessageNotModified:
+        pass
 
 
 async def season_handler(client, message):
@@ -451,18 +581,21 @@ async def handle_text_input(client, message):
                 return
 
             if not results:
-                await msg.edit_text(
-                    "No results found.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
+                try:
+                    await msg.edit_text(
+                        "No results found.",
+                        reply_markup=InlineKeyboardMarkup(
                             [
-                                InlineKeyboardButton(
-                                    "Back", callback_data=f"back_confirm_{msg_id}"
-                                )
+                                [
+                                    InlineKeyboardButton(
+                                        "Back", callback_data=f"back_confirm_{msg_id}"
+                                    )
+                                ]
                             ]
-                        ]
-                    ),
-                )
+                        ),
+                    )
+                except MessageNotModified:
+                    pass
                 return
 
             buttons = []
@@ -479,13 +612,32 @@ async def handle_text_input(client, message):
                 [InlineKeyboardButton("Cancel", callback_data=f"back_confirm_{msg_id}")]
             )
 
-            await msg.edit_text(
-                f"Select correct {mtype}:", reply_markup=InlineKeyboardMarkup(buttons)
-            )
+            try:
+                await msg.edit_text(
+                    f"Select correct {mtype}:",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+            except MessageNotModified:
+                pass
 
 
 @Client.on_callback_query(filters.regex(r"^manual_entry$"))
 async def handle_manual_entry(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     logger.info(f"User {user_id} selected manual entry.")
 
@@ -494,19 +646,36 @@ async def handle_manual_entry(client, callback_query):
     media_type = get_data(user_id).get("type", "movie")
 
     set_state(user_id, "awaiting_manual_title")
-    await callback_query.message.edit_text(
-        f"✍️ **Manual Entry ({media_type.capitalize()})**\n\n"
-        "Please enter the exact title and year you want to use.\n"
-        "Format: `Title (Year)`\n"
-        "Example: `My Family Vacation (2023)`",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            f"✍️ **Manual Entry ({media_type.capitalize()})**\n\n"
+            "Please enter the exact title and year you want to use.\n"
+            "Format: `Title (Year)`\n"
+            "Example: `My Family Vacation (2023)`",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^send_as_(photo|document)$"))
 async def handle_send_as_preference(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     user_id = callback_query.from_user.id
     pref = callback_query.data.split("_")[2]
 
@@ -516,6 +685,20 @@ async def handle_send_as_preference(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     user_id = callback_query.from_user.id
     data = callback_query.data.split("_")
     media_type = data[2]
@@ -550,13 +733,16 @@ async def handle_tmdb_selection(client, callback_query):
 
     if media_type == "series":
         set_state(user_id, "awaiting_season")
-        await callback_query.message.edit_text(
-            f"**Selected Series:** {title} ({year})\n\n"
-            "Please enter the **Season Number** (e.g. 1, 2, ...):",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                f"**Selected Series:** {title} ({year})\n\n"
+                "Please enter the **Season Number** (e.g. 1, 2, ...):",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
     else:
         data = get_data(user_id)
         if data.get("is_subtitle"):
@@ -576,7 +762,10 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
             [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
         )
         if is_edit:
-            await message_obj.edit_text(text, reply_markup=reply_markup)
+            try:
+                await message_obj.edit_text(text, reply_markup=reply_markup)
+            except MessageNotModified:
+                pass
         else:
             await message_obj.reply_text(text, reply_markup=reply_markup)
         return
@@ -602,13 +791,33 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
 
     if is_edit:
-        await message_obj.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        try:
+            await message_obj.edit_text(
+                text, reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except MessageNotModified:
+            pass
     else:
         await message_obj.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 @Client.on_callback_query(filters.regex(r"^sel_dumb_(.*)$"))
 async def handle_dumb_selection(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     ch_id = callback_query.data.split("_")[2]
 
@@ -652,12 +861,15 @@ async def handle_dumb_selection(client, callback_query):
         return
 
     set_state(user_id, "awaiting_file_upload")
-    await callback_query.message.edit_text(
-        f"✅ **Ready!**\n\n" f"Now, **send me the file(s)** you want to rename.",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            f"✅ **Ready!**\n\n" f"Now, **send me the file(s)** you want to rename.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 async def initiate_language_selection(client, user_id, message_obj):
@@ -686,25 +898,48 @@ async def initiate_language_selection(client, user_id, message_obj):
             user_id, text, reply_markup=InlineKeyboardMarkup(buttons)
         )
     elif hasattr(message_obj, "edit_text"):
-        await message_obj.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        try:
+            await message_obj.edit_text(
+                text, reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except MessageNotModified:
+            pass
     else:
         await message_obj.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 @Client.on_callback_query(filters.regex(r"^lang_"))
 async def handle_language_callback(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     data = callback_query.data.split("_")[1]
 
     if data == "custom":
         set_state(user_id, "awaiting_language_custom")
-        await callback_query.message.edit_text(
-            "✍️ **Enter Custom Language Code**\n\n"
-            "Please type the language code (e.g. `por`, `hin`, `jpn`, `pt-br`):",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "✍️ **Enter Custom Language Code**\n\n"
+                "Please type the language code (e.g. `por`, `hin`, `jpn`, `pt-br`):",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
         return
 
     update_data(user_id, "language", data)
@@ -713,6 +948,21 @@ async def handle_language_callback(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^gen_send_as_(document|media)$"))
 async def handle_gen_send_as(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     pref = callback_query.data.split("_")[3]
 
@@ -720,54 +970,101 @@ async def handle_gen_send_as(client, callback_query):
 
     file_name = get_data(user_id).get("original_name", "unknown")
 
-    await callback_query.message.edit_text(
-        f"📄 **File:** `{file_name}`\n\n"
-        f"**Output Format:** `{pref.capitalize()}`\n\n"
-        "Click the button below to rename the file.",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("✏️ Rename", callback_data="gen_prompt_rename")],
-                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
-            ]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            f"📄 **File:** `{file_name}`\n\n"
+            f"**Output Format:** `{pref.capitalize()}`\n\n"
+            "Click the button below to rename the file.",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "✏️ Rename", callback_data="gen_prompt_rename"
+                        )
+                    ],
+                    [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^gen_prompt_rename$"))
 async def handle_gen_prompt_rename(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     set_state(user_id, "awaiting_general_name")
 
-    await callback_query.message.edit_text(
-        "✏️ **Enter the new name for the file:**\n\n"
-        "You can use variables like `{filename}`, `{Season_Episode}`, `{Quality}`, `{Year}`, `{Title}`.\n"
-        "*(The extension is added automatically)*\n\n"
-        "Example: `My File - {filename}`",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            "✏️ **Enter the new name for the file:**\n\n"
+            "You can use variables like `{filename}`, `{Season_Episode}`, `{Quality}`, `{Year}`, `{Title}`.\n"
+            "*(The extension is added automatically)*\n\n"
+            "Example: `My File - {filename}`",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^cancel_rename$"))
 async def handle_cancel(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     clear_session(user_id)
-    await callback_query.message.edit_text(
-        "**Current Task Cancelled** ❌\n\n"
-        "Your progress has been cleared.\n"
-        "You can simply send me a file anytime to start over, or use the buttons below.",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            "**Current Task Cancelled** ❌\n\n"
+            "Your progress has been cleared.\n"
+            "You can simply send me a file anytime to start over, or use the buttons below.",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        "🎬 Start Renaming Manually", callback_data="start_renaming"
-                    )
-                ],
-                [InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")],
-            ]
-        ),
-    )
+                    [
+                        InlineKeyboardButton(
+                            "🎬 Start Renaming Manually", callback_data="start_renaming"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📖 Help & Guide", callback_data="help_guide"
+                        )
+                    ],
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 async def process_batch(client, user_id):
@@ -1107,7 +1404,9 @@ async def handle_file_upload(client, message):
             return
 
     if await db.is_user_blocked(user_id):
-        await message.reply_text("🚫 **Access Blocked**\n\nYou have been blocked from using this bot.")
+        await message.reply_text(
+            "🚫 **Access Blocked**\n\nYou have been blocked from using this bot."
+        )
         return
 
     media = message.document or message.video
@@ -1383,12 +1682,15 @@ async def update_auto_detected_message(client, msg_id, user_id):
         [InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")]
     )
 
-    await client.edit_message_text(
-        chat_id=user_id,
-        message_id=msg_id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(buttons),
-    )
+    try:
+        await client.edit_message_text(
+            chat_id=user_id,
+            message_id=msg_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+    except MessageNotModified:
+        pass
 
 
 async def update_confirmation_message(client, msg_id, user_id):
@@ -1438,16 +1740,33 @@ async def update_confirmation_message(client, msg_id, user_id):
         [InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")]
     )
 
-    await client.edit_message_text(
-        chat_id=user_id,
-        message_id=msg_id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(buttons),
-    )
+    try:
+        await client.edit_message_text(
+            chat_id=user_id,
+            message_id=msg_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^confirm_(\d+)$"))
 async def handle_confirm(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     msg_id = int(callback_query.data.split("_")[1])
     user_id = callback_query.from_user.id
 
@@ -1469,40 +1788,73 @@ async def handle_confirm(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^qual_menu_(\d+)$"))
 async def handle_quality_menu(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
 
-    await callback_query.message.edit_text(
-        "Select Quality:",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            "Select Quality:",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        "480p", callback_data=f"set_qual_{msg_id}_480p"
-                    ),
-                    InlineKeyboardButton(
-                        "720p", callback_data=f"set_qual_{msg_id}_720p"
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "1080p", callback_data=f"set_qual_{msg_id}_1080p"
-                    ),
-                    InlineKeyboardButton(
-                        "2160p", callback_data=f"set_qual_{msg_id}_2160p"
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🔙 Back", callback_data=f"back_confirm_{msg_id}"
-                    )
-                ],
-            ]
-        ),
-    )
+                    [
+                        InlineKeyboardButton(
+                            "480p", callback_data=f"set_qual_{msg_id}_480p"
+                        ),
+                        InlineKeyboardButton(
+                            "720p", callback_data=f"set_qual_{msg_id}_720p"
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "1080p", callback_data=f"set_qual_{msg_id}_1080p"
+                        ),
+                        InlineKeyboardButton(
+                            "2160p", callback_data=f"set_qual_{msg_id}_2160p"
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back", callback_data=f"back_confirm_{msg_id}"
+                        )
+                    ],
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^set_qual_(\d+)_(.+)$"))
 async def handle_set_quality(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     data = callback_query.data.split("_")
     msg_id = int(data[2])
     qual = data[3]
@@ -1514,52 +1866,118 @@ async def handle_set_quality(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^back_confirm_(\d+)$"))
 async def handle_back_confirm(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
 
 
 @Client.on_callback_query(filters.regex(r"^ep_change_(\d+)$"))
 async def handle_ep_change_prompt(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     user_id = callback_query.from_user.id
 
     set_state(user_id, f"awaiting_episode_correction_{msg_id}")
-    await callback_query.message.edit_text(
-        "**Enter Episode Number:**\n" "Send a number (e.g. 5)",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            "**Enter Episode Number:**\n" "Send a number (e.g. 5)",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        "❌ Cancel", callback_data=f"back_confirm_{msg_id}"
-                    )
+                    [
+                        InlineKeyboardButton(
+                            "❌ Cancel", callback_data=f"back_confirm_{msg_id}"
+                        )
+                    ]
                 ]
-            ]
-        ),
-    )
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^season_change_(\d+)$"))
 async def handle_season_change_prompt(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     user_id = callback_query.from_user.id
 
     set_state(user_id, f"awaiting_season_correction_{msg_id}")
-    await callback_query.message.edit_text(
-        "**Enter Season Number:**\n" "Send a number (e.g. 2)",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            "**Enter Season Number:**\n" "Send a number (e.g. 2)",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        "❌ Cancel", callback_data=f"back_confirm_{msg_id}"
-                    )
+                    [
+                        InlineKeyboardButton(
+                            "❌ Cancel", callback_data=f"back_confirm_{msg_id}"
+                        )
+                    ]
                 ]
-            ]
-        ),
-    )
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^cancel_file_(\d+)$"))
 async def handle_file_cancel(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     file_sessions.pop(msg_id, None)
     await callback_query.message.delete()
@@ -1567,23 +1985,56 @@ async def handle_file_cancel(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^audio_editor_menu$"))
 async def handle_audio_editor_menu(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     clear_session(user_id)
     set_state(user_id, "awaiting_audio_file")
 
-    await callback_query.message.edit_text(
-        "🎵 **Audio Metadata Editor**\n\n"
-        "Please **send me the audio file** (e.g., MP3, FLAC, M4A) you want to edit.",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            "🎵 **Audio Metadata Editor**\n\n"
+            "Please **send me the audio file** (e.g., MP3, FLAC, M4A) you want to edit.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(
     filters.regex(r"^audio_edit_(title|artist|album|thumb|process)$")
 )
 async def handle_audio_edit_callbacks(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     action = callback_query.data.split("_")[2]
 
@@ -1624,16 +2075,34 @@ async def handle_audio_edit_callbacks(client, callback_query):
     else:
         text = f"✏️ **Send me the new {action.capitalize()} for this audio file:**\n*(Send '-' to clear the current value)*"
 
-    await callback_query.message.edit_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🔙 Back", callback_data="audio_menu_back")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔙 Back", callback_data="audio_menu_back")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^audio_menu_back$"))
 async def handle_audio_menu_back(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     set_state(user_id, "awaiting_audio_menu")
     await render_audio_menu(client, callback_query.message, user_id)
@@ -1684,26 +2153,62 @@ async def render_audio_menu(client, message, user_id):
     if isinstance(message, Message):
         await message.reply_text(text, reply_markup=markup)
     else:
-        await message.edit_text(text, reply_markup=markup)
+        try:
+            await message.edit_text(text, reply_markup=markup)
+        except MessageNotModified:
+            pass
 
 
 @Client.on_callback_query(filters.regex(r"^file_converter_menu$"))
 async def handle_file_converter_menu(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     clear_session(user_id)
     set_state(user_id, "awaiting_convert_file")
 
-    await callback_query.message.edit_text(
-        "🔀 **File Converter**\n\n"
-        "Please **send me the file** (Video or Image) you want to convert.",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            "🔀 **File Converter**\n\n"
+            "Please **send me the file** (Video or Image) you want to convert.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^convert_to_(.+)$"))
 async def handle_convert_to(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     target_format = callback_query.data.split("_")[2]
 
@@ -1737,21 +2242,54 @@ async def handle_convert_to(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^watermarker_menu$"))
 async def handle_watermarker_menu(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     clear_session(user_id)
     set_state(user_id, "awaiting_watermark_image")
 
-    await callback_query.message.edit_text(
-        "© **Image Watermarker**\n\n"
-        "Please **send me the image** you want to watermark.",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            "© **Image Watermarker**\n\n"
+            "Please **send me the image** you want to watermark.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^watermark_type_(text|image)$"))
 async def handle_watermark_type(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     wtype = callback_query.data.split("_")[2]
 
@@ -1766,43 +2304,79 @@ async def handle_watermark_type(client, callback_query):
             "🖼 **Send me the image (PNG/JPG)** you want to use as a watermark overlay:"
         )
 
-    await callback_query.message.edit_text(
-        msg,
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            msg,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^wm_pos_(.*)$"))
 async def handle_watermark_position(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     pos = callback_query.data.split("_")[2]
     update_data(user_id, "watermark_position", pos)
 
     set_state(user_id, "awaiting_watermark_size")
-    await callback_query.message.edit_text(
-        "📏 **Select Watermark Size**\n\nHow large should the watermark be?",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            "📏 **Select Watermark Size**\n\nHow large should the watermark be?",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton("Small", callback_data="wm_size_small"),
-                    InlineKeyboardButton("Medium", callback_data="wm_size_medium"),
-                    InlineKeyboardButton("Large", callback_data="wm_size_large"),
-                ],
-                [
-                    InlineKeyboardButton("10% width", callback_data="wm_size_10"),
-                    InlineKeyboardButton("20% width", callback_data="wm_size_20"),
-                ],
-                [InlineKeyboardButton("30% width", callback_data="wm_size_30")],
-                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
-            ]
-        ),
-    )
+                    [
+                        InlineKeyboardButton("Small", callback_data="wm_size_small"),
+                        InlineKeyboardButton("Medium", callback_data="wm_size_medium"),
+                        InlineKeyboardButton("Large", callback_data="wm_size_large"),
+                    ],
+                    [
+                        InlineKeyboardButton("10% width", callback_data="wm_size_10"),
+                        InlineKeyboardButton("20% width", callback_data="wm_size_20"),
+                    ],
+                    [InlineKeyboardButton("30% width", callback_data="wm_size_30")],
+                    [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^wm_size_(.*)$"))
 async def handle_watermark_size(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     size = callback_query.data.split("_")[2]
     update_data(user_id, "watermark_size", size)
@@ -1839,6 +2413,21 @@ async def handle_watermark_size(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^change_type_(\d+)$"))
 async def handle_change_type(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     if msg_id not in file_sessions:
         return
@@ -1866,6 +2455,21 @@ async def handle_change_type(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^change_tmdb_(\d+)$"))
 async def handle_change_tmdb_init(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     user_id = callback_query.from_user.id
 
@@ -1873,42 +2477,84 @@ async def handle_change_tmdb_init(client, callback_query):
     fs = file_sessions[msg_id]
     mtype = fs["type"]
 
-    await callback_query.message.edit_text(
-        f"🔍 **Search {mtype.capitalize()}**\n\n" "Please enter the correct name:",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🔙 Back", callback_data=f"back_confirm_{msg_id}")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            f"🔍 **Search {mtype.capitalize()}**\n\n" "Please enter the correct name:",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back", callback_data=f"back_confirm_{msg_id}"
+                        )
+                    ]
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^change_se_(\d+)$"))
 async def handle_change_se_menu(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
 
-    await callback_query.message.edit_text(
-        "Select what to change:",
-        reply_markup=InlineKeyboardMarkup(
-            [
+    try:
+        await callback_query.message.edit_text(
+            "Select what to change:",
+            reply_markup=InlineKeyboardMarkup(
                 [
-                    InlineKeyboardButton(
-                        "Change Season", callback_data=f"season_change_{msg_id}"
-                    ),
-                    InlineKeyboardButton(
-                        "Change Episode", callback_data=f"ep_change_{msg_id}"
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🔙 Back", callback_data=f"back_confirm_{msg_id}"
-                    )
-                ],
-            ]
-        ),
-    )
+                    [
+                        InlineKeyboardButton(
+                            "Change Season", callback_data=f"season_change_{msg_id}"
+                        ),
+                        InlineKeyboardButton(
+                            "Change Episode", callback_data=f"ep_change_{msg_id}"
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back", callback_data=f"back_confirm_{msg_id}"
+                        )
+                    ],
+                ]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^correct_tmdb_(\d+)_(\d+)$"))
 async def handle_correct_tmdb_selection(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     data = callback_query.data.split("_")
     msg_id = int(data[2])
     tmdb_id = data[3]

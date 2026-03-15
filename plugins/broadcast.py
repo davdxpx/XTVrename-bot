@@ -1,5 +1,6 @@
 import asyncio
 import time
+from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database import db
@@ -17,6 +18,20 @@ debug("✅ Loaded handler: broadcast_callback")
     )
 )
 async def broadcast_callback(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     await callback_query.answer()
     user_id = callback_query.from_user.id
     if not is_admin(user_id):
@@ -24,7 +39,9 @@ async def broadcast_callback(client, callback_query):
         return
 
     if not Config.PUBLIC_MODE:
-        await callback_query.answer("Broadcast is only available in Public Mode.", show_alert=True)
+        await callback_query.answer(
+            "Broadcast is only available in Public Mode.", show_alert=True
+        )
         return
 
     data = callback_query.data
@@ -32,30 +49,42 @@ async def broadcast_callback(client, callback_query):
     if data == "admin_broadcast":
         set_state(user_id, "awaiting_broadcast_message")
         update_data(user_id, "broadcast_buttons", [])
-        await callback_query.message.edit_text(
-            "📢 **Broadcast Message**\n\n"
-            "Please send the message (text, photo, video, etc.) that you want to broadcast to all users.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="broadcast_cancel")]]
-            ),
-        )
+        try:
+            await callback_query.message.edit_text(
+                "📢 **Broadcast Message**\n\n"
+                "Please send the message (text, photo, video, etc.) that you want to broadcast to all users.",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "❌ Cancel", callback_data="broadcast_cancel"
+                            )
+                        ]
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
 
     elif data == "broadcast_add_btn":
         set_state(user_id, "awaiting_broadcast_button")
-        await callback_query.message.edit_text(
-            "➕ **Add Inline Button**\n\n"
-            "Please send the button text and URL separated by a pipe `|`.\n\n"
-            "Example:\n`Click Here | https://google.com`",
-            reply_markup=InlineKeyboardMarkup(
-                [
+        try:
+            await callback_query.message.edit_text(
+                "➕ **Add Inline Button**\n\n"
+                "Please send the button text and URL separated by a pipe `|`.\n\n"
+                "Example:\n`Click Here | https://google.com`",
+                reply_markup=InlineKeyboardMarkup(
                     [
-                        InlineKeyboardButton(
-                            "🔙 Back to Menu", callback_data="broadcast_preview"
-                        )
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back to Menu", callback_data="broadcast_preview"
+                            )
+                        ]
                     ]
-                ]
-            ),
-        )
+                ),
+            )
+        except MessageNotModified:
+            pass
 
     elif data == "broadcast_preview":
         set_state(user_id, "broadcast_ready")
@@ -101,19 +130,27 @@ async def broadcast_callback(client, callback_query):
         )
 
     elif data == "broadcast_send":
-        await callback_query.message.edit_text(
-            "🚀 **Broadcast started!**\n\nFetching users..."
-        )
+        try:
+            await callback_query.message.edit_text(
+                "🚀 **Broadcast started!**\n\nFetching users..."
+            )
+        except MessageNotModified:
+            pass
         # Pass necessary data directly to the task before clearing session
         ud = get_data(user_id)
         msg_id = ud.get("broadcast_message_id")
         buttons = ud.get("broadcast_buttons", [])
-        asyncio.create_task(run_broadcast(client, user_id, callback_query.message, msg_id, buttons))
+        asyncio.create_task(
+            run_broadcast(client, user_id, callback_query.message, msg_id, buttons)
+        )
         clear_session(user_id)
 
     elif data == "broadcast_cancel":
         clear_session(user_id)
-        await callback_query.message.edit_text("❌ **Broadcast cancelled.**")
+        try:
+            await callback_query.message.edit_text("❌ **Broadcast cancelled.**")
+        except MessageNotModified:
+            pass
 
 
 @Client.on_message(filters.private, group=1)
@@ -209,9 +246,12 @@ async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
     sent = 0
     failed = 0
 
-    await status_message.edit_text(
-        f"🚀 **Broadcast started!**\n\nSending to {total} users..."
-    )
+    try:
+        await status_message.edit_text(
+            f"🚀 **Broadcast started!**\n\nSending to {total} users..."
+        )
+    except MessageNotModified:
+        pass
 
     start_time = time.time()
 
@@ -240,14 +280,17 @@ async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
     end_time = time.time()
     duration = round(end_time - start_time, 2)
 
-    await status_message.edit_text(
-        f"✅ **Broadcast Complete!**\n\n"
-        f"📊 **Statistics:**\n"
-        f"Total Users: `{total}`\n"
-        f"Successfully Sent: `{sent}`\n"
-        f"Failed/Blocked: `{failed}`\n"
-        f"Time Taken: `{duration}s`"
-    )
+    try:
+        await status_message.edit_text(
+            f"✅ **Broadcast Complete!**\n\n"
+            f"📊 **Statistics:**\n"
+            f"Total Users: `{total}`\n"
+            f"Successfully Sent: `{sent}`\n"
+            f"Failed/Blocked: `{failed}`\n"
+            f"Time Taken: `{duration}s`"
+        )
+    except MessageNotModified:
+        pass
 
 
 # --------------------------------------------------------------------------

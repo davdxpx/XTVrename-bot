@@ -2,6 +2,7 @@ import asyncio
 import os
 import random
 import string
+from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import (
@@ -27,6 +28,20 @@ def get_pro_session_data(user_id):
 
 @Client.on_callback_query(filters.regex(r"^pro_setup_menu$"))
 async def pro_menu(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
     user_id = callback_query.from_user.id
     if user_id != Config.CEO_ID:
         return await callback_query.answer("Not authorized.", show_alert=True)
@@ -59,13 +74,31 @@ async def pro_menu(client, callback_query):
             [InlineKeyboardButton("🔙 Back to Admin Menu", callback_data="admin_main")],
         ]
 
-    await callback_query.message.edit_text(
-        status, reply_markup=InlineKeyboardMarkup(buttons)
-    )
+    try:
+        await callback_query.message.edit_text(
+            status, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_callback_query(filters.regex(r"^pro_setup_delete$"))
 async def delete_setup(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     if user_id != Config.CEO_ID:
         return
@@ -90,19 +123,37 @@ async def delete_setup(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^pro_setup_start$"))
 async def start_setup(client, callback_query):
+    from utils.state import get_state
+
+    if get_state(callback_query.from_user.id):
+        if callback_query.data not in [
+            "cancel",
+            "admin_main",
+            "user_main",
+            "settings_main",
+            "dumb_menu",
+        ] and not callback_query.data.startswith("cancel"):
+            await callback_query.answer(
+                "⚠️ Session expired. Please start again.", show_alert=True
+            )
+            return
+    await callback_query.answer()
     user_id = callback_query.from_user.id
     if user_id != Config.CEO_ID:
         return
 
     pro_setup_sessions[user_id] = {"state": "awaiting_api_id"}
-    await callback_query.message.edit_text(
-        "🚀 **𝕏TV Pro™ Setup**\n\n"
-        "Let's configure the Userbot tunnel for 4GB files.\n"
-        "First, please send me your **API ID** (e.g., `1234567`):",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
-        ),
-    )
+    try:
+        await callback_query.message.edit_text(
+            "🚀 **𝕏TV Pro™ Setup**\n\n"
+            "Let's configure the Userbot tunnel for 4GB files.\n"
+            "First, please send me your **API ID** (e.g., `1234567`):",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
+            ),
+        )
+    except MessageNotModified:
+        pass
 
 
 @Client.on_message(filters.private & filters.user(Config.CEO_ID))
@@ -178,44 +229,74 @@ async def pro_setup_handler(client, message, group=0):
             data["phone_code_hash"] = sent_code.phone_code_hash
             data["state"] = "awaiting_code"
 
-            await msg.edit_text(
-                "✅ **Verification Code Sent!**\n\n"
-                "Check your Telegram app for the login code.\n"
-                "**IMPORTANT:** Enter the code with spaces to avoid Telegram's security triggers.\n"
-                "For example, if your code is `12345`, enter `1 2 3 4 5`.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await msg.edit_text(
+                    "✅ **Verification Code Sent!**\n\n"
+                    "Check your Telegram app for the login code.\n"
+                    "**IMPORTANT:** Enter the code with spaces to avoid Telegram's security triggers.\n"
+                    "For example, if your code is `12345`, enter `1 2 3 4 5`.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="pro_setup_menu"
-                            )
+                            [
+                                InlineKeyboardButton(
+                                    "❌ Cancel", callback_data="pro_setup_menu"
+                                )
+                            ]
                         ]
-                    ]
-                ),
-            )
+                    ),
+                )
+            except MessageNotModified:
+                pass
         except ApiIdInvalid:
-            await msg.edit_text(
-                "❌ **Invalid API ID / Hash**. Setup failed.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]
-                ),
-            )
+            try:
+                await msg.edit_text(
+                    "❌ **Invalid API ID / Hash**. Setup failed.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🔙 Back", callback_data="pro_setup_menu"
+                                )
+                            ]
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             del pro_setup_sessions[user_id]
         except PhoneNumberInvalid:
-            await msg.edit_text(
-                "❌ **Invalid Phone Number**. Setup failed.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]
-                ),
-            )
+            try:
+                await msg.edit_text(
+                    "❌ **Invalid Phone Number**. Setup failed.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🔙 Back", callback_data="pro_setup_menu"
+                                )
+                            ]
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             del pro_setup_sessions[user_id]
         except Exception as e:
-            await msg.edit_text(
-                f"❌ **Error requesting code:** {e}",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]
-                ),
-            )
+            try:
+                await msg.edit_text(
+                    f"❌ **Error requesting code:** {e}",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🔙 Back", callback_data="pro_setup_menu"
+                                )
+                            ]
+                        ]
+                    ),
+                )
+            except MessageNotModified:
+                pass
             del pro_setup_sessions[user_id]
 
     elif state == "awaiting_code":
@@ -242,31 +323,37 @@ async def pro_setup_handler(client, message, group=0):
                 ),
             )
         except PhoneCodeInvalid:
-            await msg.edit_text(
-                "❌ **Invalid Code**. Try again or restart setup.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await msg.edit_text(
+                    "❌ **Invalid Code**. Try again or restart setup.",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="pro_setup_menu"
-                            )
+                            [
+                                InlineKeyboardButton(
+                                    "❌ Cancel", callback_data="pro_setup_menu"
+                                )
+                            ]
                         ]
-                    ]
-                ),
-            )
+                    ),
+                )
+            except MessageNotModified:
+                pass
         except Exception as e:
-            await msg.edit_text(
-                f"❌ **Sign In Error:** {e}",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await msg.edit_text(
+                    f"❌ **Sign In Error:** {e}",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="pro_setup_menu"
-                            )
+                            [
+                                InlineKeyboardButton(
+                                    "❌ Cancel", callback_data="pro_setup_menu"
+                                )
+                            ]
                         ]
-                    ]
-                ),
-            )
+                    ),
+                )
+            except MessageNotModified:
+                pass
             del pro_setup_sessions[user_id]
 
     elif state == "awaiting_password":
@@ -289,18 +376,21 @@ async def pro_setup_handler(client, message, group=0):
                 ),
             )
         except Exception as e:
-            await msg.edit_text(
-                f"❌ **Error:** {e}",
-                reply_markup=InlineKeyboardMarkup(
-                    [
+            try:
+                await msg.edit_text(
+                    f"❌ **Error:** {e}",
+                    reply_markup=InlineKeyboardMarkup(
                         [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="pro_setup_menu"
-                            )
+                            [
+                                InlineKeyboardButton(
+                                    "❌ Cancel", callback_data="pro_setup_menu"
+                                )
+                            ]
                         ]
-                    ]
-                ),
-            )
+                    ),
+                )
+            except MessageNotModified:
+                pass
             del pro_setup_sessions[user_id]
 
 
@@ -338,24 +428,36 @@ async def finalize_setup(userbot, user_id, msg):
             await main_app.user_bot.start()
             logger.info("𝕏TV Pro™ Premium Userbot Hot-Started Successfully!")
 
-        await msg.edit_text(
-            "✅ **𝕏TV Pro™ Setup Complete!**\n\n"
-            f"Successfully authenticated as **{me.first_name}**.\n"
-            "Session string and credentials saved to the database.\n"
-            "**𝕏TV Pro™ is now active and ready to process >2GB files.**",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_main")]]
-            ),
-        )
+        try:
+            await msg.edit_text(
+                "✅ **𝕏TV Pro™ Setup Complete!**\n\n"
+                f"Successfully authenticated as **{me.first_name}**.\n"
+                "Session string and credentials saved to the database.\n"
+                "**𝕏TV Pro™ is now active and ready to process >2GB files.**",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back to Menu", callback_data="admin_main"
+                            )
+                        ]
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
         await userbot.disconnect()
         del pro_setup_sessions[user_id]
     except Exception as e:
-        await msg.edit_text(
-            f"❌ **Failed to finalize setup:** {e}",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]
-            ),
-        )
+        try:
+            await msg.edit_text(
+                f"❌ **Failed to finalize setup:** {e}",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
         del pro_setup_sessions[user_id]
 
 
