@@ -146,7 +146,7 @@ from pyrogram import ContinuePropagation
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_fn_template_|prompt_template_|dumb_(?!user_))"
+        r"^(admin_(?!usage_dashboard|dashboard_.*|unblock_|block_|reset_quota_|prompt_lookup)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_fn_template_|prompt_template_|dumb_(?!user_))"
     )
 )
 async def admin_callback(client, callback_query):
@@ -295,7 +295,7 @@ async def admin_callback(client, callback_query):
         )
         return
 
-    if Config.PUBLIC_MODE and data.startswith("admin_public_"):
+    if Config.PUBLIC_MODE and (data.startswith("admin_public_") or data == "admin_daily_egress" or data == "admin_daily_files"):
         if data == "admin_public_view":
             config = await db.get_public_config()
             text = "👀 **Public Mode Config**\n\n"
@@ -430,8 +430,12 @@ async def admin_callback(client, callback_query):
             )
             return
 
-    if Config.PUBLIC_MODE and data.startswith("prompt_public_"):
-        field = data.replace("prompt_public_", "")
+    if Config.PUBLIC_MODE and (data.startswith("prompt_public_") or data.startswith("prompt_daily_")):
+        if data.startswith("prompt_daily_"):
+            field = data.replace("prompt_", "")
+        else:
+            field = data.replace("prompt_public_", "")
+
         admin_sessions[user_id] = f"awaiting_public_{field}"
 
         if field == "bot_name":
