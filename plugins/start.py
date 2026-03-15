@@ -287,7 +287,7 @@ debug("✅ Loaded handler: help_callback")
 async def handle_help_callbacks(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -296,7 +296,7 @@ async def handle_help_callbacks(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()

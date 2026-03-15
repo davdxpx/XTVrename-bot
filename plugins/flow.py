@@ -28,7 +28,7 @@ batch_status_msgs = {}
 async def handle_start_renaming(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -37,7 +37,7 @@ async def handle_start_renaming(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -92,7 +92,7 @@ async def handle_start_renaming(client, callback_query):
 async def handle_type_general(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -101,7 +101,7 @@ async def handle_type_general(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -130,7 +130,7 @@ async def handle_type_general(client, callback_query):
 async def handle_type_personal(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -139,7 +139,7 @@ async def handle_type_personal(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -178,7 +178,7 @@ async def handle_type_personal(client, callback_query):
 async def handle_type_selection(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -187,7 +187,7 @@ async def handle_type_selection(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -214,7 +214,7 @@ async def handle_type_selection(client, callback_query):
 async def handle_type_subtitles(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -223,7 +223,7 @@ async def handle_type_subtitles(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -252,7 +252,7 @@ async def handle_type_subtitles(client, callback_query):
 async def handle_subtitle_type_selection(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -261,7 +261,7 @@ async def handle_subtitle_type_selection(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -625,7 +625,7 @@ async def handle_text_input(client, message):
 async def handle_manual_entry(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -634,7 +634,7 @@ async def handle_manual_entry(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -664,7 +664,7 @@ async def handle_manual_entry(client, callback_query):
 async def handle_send_as_preference(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -673,7 +673,7 @@ async def handle_send_as_preference(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     user_id = callback_query.from_user.id
@@ -687,7 +687,7 @@ async def handle_send_as_preference(client, callback_query):
 async def handle_tmdb_selection(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -696,7 +696,7 @@ async def handle_tmdb_selection(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     user_id = callback_query.from_user.id
@@ -805,7 +805,7 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
 async def handle_dumb_selection(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -814,7 +814,7 @@ async def handle_dumb_selection(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -912,7 +912,7 @@ async def initiate_language_selection(client, user_id, message_obj):
 async def handle_language_callback(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -921,7 +921,7 @@ async def handle_language_callback(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -950,7 +950,7 @@ async def handle_language_callback(client, callback_query):
 async def handle_gen_send_as(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -959,7 +959,7 @@ async def handle_gen_send_as(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -994,7 +994,7 @@ async def handle_gen_send_as(client, callback_query):
 async def handle_gen_prompt_rename(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1003,7 +1003,7 @@ async def handle_gen_prompt_rename(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -1028,7 +1028,7 @@ async def handle_gen_prompt_rename(client, callback_query):
 async def handle_cancel(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1037,7 +1037,7 @@ async def handle_cancel(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -1762,7 +1762,7 @@ async def update_confirmation_message(client, msg_id, user_id):
 async def handle_confirm(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1771,7 +1771,7 @@ async def handle_confirm(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     msg_id = int(callback_query.data.split("_")[1])
@@ -1797,7 +1797,7 @@ async def handle_confirm(client, callback_query):
 async def handle_quality_menu(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1806,7 +1806,7 @@ async def handle_quality_menu(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -1849,7 +1849,7 @@ async def handle_quality_menu(client, callback_query):
 async def handle_set_quality(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1858,7 +1858,7 @@ async def handle_set_quality(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -1875,7 +1875,7 @@ async def handle_set_quality(client, callback_query):
 async def handle_back_confirm(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1884,7 +1884,7 @@ async def handle_back_confirm(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -1896,7 +1896,7 @@ async def handle_back_confirm(client, callback_query):
 async def handle_ep_change_prompt(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1905,7 +1905,7 @@ async def handle_ep_change_prompt(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -1934,7 +1934,7 @@ async def handle_ep_change_prompt(client, callback_query):
 async def handle_season_change_prompt(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1943,7 +1943,7 @@ async def handle_season_change_prompt(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -1972,7 +1972,7 @@ async def handle_season_change_prompt(client, callback_query):
 async def handle_file_cancel(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -1981,7 +1981,7 @@ async def handle_file_cancel(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2003,7 +2003,7 @@ async def handle_file_cancel(client, callback_query):
 async def handle_audio_editor_menu(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2012,7 +2012,7 @@ async def handle_audio_editor_menu(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2038,7 +2038,7 @@ async def handle_audio_editor_menu(client, callback_query):
 async def handle_audio_edit_callbacks(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2047,7 +2047,7 @@ async def handle_audio_edit_callbacks(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2106,7 +2106,7 @@ async def handle_audio_edit_callbacks(client, callback_query):
 async def handle_audio_menu_back(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2115,7 +2115,7 @@ async def handle_audio_menu_back(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2179,7 +2179,7 @@ async def render_audio_menu(client, message, user_id):
 async def handle_file_converter_menu(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2188,7 +2188,7 @@ async def handle_file_converter_menu(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2212,7 +2212,7 @@ async def handle_file_converter_menu(client, callback_query):
 async def handle_convert_to(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2221,7 +2221,7 @@ async def handle_convert_to(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2260,7 +2260,7 @@ async def handle_convert_to(client, callback_query):
 async def handle_watermarker_menu(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2269,7 +2269,7 @@ async def handle_watermarker_menu(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2293,7 +2293,7 @@ async def handle_watermarker_menu(client, callback_query):
 async def handle_watermark_type(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2302,7 +2302,7 @@ async def handle_watermark_type(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2335,7 +2335,7 @@ async def handle_watermark_type(client, callback_query):
 async def handle_watermark_position(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2344,7 +2344,7 @@ async def handle_watermark_position(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2380,7 +2380,7 @@ async def handle_watermark_position(client, callback_query):
 async def handle_watermark_size(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2389,7 +2389,7 @@ async def handle_watermark_size(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2431,7 +2431,7 @@ async def handle_watermark_size(client, callback_query):
 async def handle_change_type(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2440,7 +2440,7 @@ async def handle_change_type(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2473,7 +2473,7 @@ async def handle_change_type(client, callback_query):
 async def handle_change_tmdb_init(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2482,7 +2482,7 @@ async def handle_change_tmdb_init(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2514,7 +2514,7 @@ async def handle_change_tmdb_init(client, callback_query):
 async def handle_change_se_menu(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2523,7 +2523,7 @@ async def handle_change_se_menu(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
@@ -2558,7 +2558,7 @@ async def handle_change_se_menu(client, callback_query):
 async def handle_correct_tmdb_selection(client, callback_query):
     from utils.state import get_state
 
-    if get_state(callback_query.from_user.id):
+    if not get_state(callback_query.from_user.id):
         if callback_query.data not in [
             "cancel",
             "admin_main",
@@ -2567,7 +2567,7 @@ async def handle_correct_tmdb_selection(client, callback_query):
             "dumb_menu",
         ] and not callback_query.data.startswith("cancel"):
             await callback_query.answer(
-                "⚠️ Session expired. Please start again.", show_alert=True
+                "⚠️ Session expired. Please start again or use /end to clear the current session.", show_alert=True
             )
             return
     await callback_query.answer()
