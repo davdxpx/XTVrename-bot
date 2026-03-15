@@ -961,20 +961,12 @@ async def handle_user_text(client, message):
 
 
 async def _send_usage(client, target, user_id, is_callback=False):
-    if user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS:
-        text = "👑 **Admin Account**\n\nYou have unlimited processing capabilities."
-        if is_callback:
-            try:
-                await target.edit_message_text(text)
-            except MessageNotModified:
-                pass
-        else:
-            await target.reply_text(text)
-        return
+    is_admin_user = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
 
     config = await db.get_public_config()
     daily_egress_mb_limit = config.get("daily_egress_mb", 0)
     daily_file_count_limit = config.get("daily_file_count", 0)
+    global_limit_mb = await db.get_global_daily_egress_limit()
 
     usage = await db.get_user_usage(user_id)
 
@@ -1007,43 +999,65 @@ async def _send_usage(client, target, user_id, is_callback=False):
         else:
             return f"{mb:.2f} MB"
 
-    files_limit_str = (
-        f"{daily_file_count_limit}" if daily_file_count_limit > 0 else "Unlimited"
-    )
-    egress_limit_str = (
-        format_egress(daily_egress_mb_limit)
-        if daily_egress_mb_limit > 0
-        else "Unlimited"
-    )
+    if is_admin_user:
+        files_limit_str = "Unlimited"
+        if global_limit_mb > 0:
+            egress_limit_str = format_egress(global_limit_mb) + " (Global)"
+            limit_to_check = global_limit_mb
+        else:
+            egress_limit_str = "Unlimited"
+            limit_to_check = 0
 
-    percent_files = (
-        (files_today / daily_file_count_limit) * 100
-        if daily_file_count_limit > 0
-        else 0
-    )
-    percent_egress = (
-        (egress_today_mb / daily_egress_mb_limit) * 100
-        if daily_egress_mb_limit > 0
-        else 0
-    )
+        percent_files = 0
+        percent_egress = (egress_today_mb / global_limit_mb) * 100 if global_limit_mb > 0 else 0
+    else:
+        files_limit_str = (
+            f"{daily_file_count_limit}" if daily_file_count_limit > 0 else "Unlimited"
+        )
+
+        limit_to_check = daily_egress_mb_limit
+        if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
+            limit_to_check = global_limit_mb
+
+        egress_limit_str = (
+            format_egress(limit_to_check)
+            if limit_to_check > 0
+            else "Unlimited"
+        )
+
+        percent_files = (
+            (files_today / daily_file_count_limit) * 100
+            if daily_file_count_limit > 0
+            else 0
+        )
+        percent_egress = (
+            (egress_today_mb / limit_to_check) * 100
+            if limit_to_check > 0
+            else 0
+        )
 
     max_percent = max(percent_files, percent_egress)
     if max_percent > 100:
         max_percent = 100
 
-    filled_blocks = int((max_percent / 100) * 12)
-    empty_blocks = 12 - filled_blocks
-    progress_bar = ("█" * filled_blocks) + ("░" * empty_blocks)
+    filled_blocks = int((max_percent / 100) * 10)
+    empty_blocks = 10 - filled_blocks
+    progress_bar = ("■" * filled_blocks) + ("□" * empty_blocks)
 
-    text = (
+    if is_admin_user:
+        text = "👑 **Admin Account**\n──────────────────────────\n"
+    else:
+        text = ""
+
+    text += (
         f"📊 **Your Usage — {current_date_display}**\n\n"
         f"**Today**\n"
         f"📁 Files: `{files_today} / {files_limit_str}`\n"
         f"📦 Egress: `{format_egress(egress_today_mb)} / {egress_limit_str}`\n"
     )
 
-    if daily_file_count_limit > 0 or daily_egress_mb_limit > 0:
-        text += f"`{progress_bar}` {int(max_percent)}%\n\n"
+    if limit_to_check > 0 or (not is_admin_user and daily_file_count_limit > 0):
+        text += f"`{progress_bar}` {max_percent:.1f}%\n\n"
     else:
         text += f"*(No limits currently applied)*\n\n"
 

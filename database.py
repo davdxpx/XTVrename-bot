@@ -298,6 +298,7 @@ class Database:
                     "force_sub_link": None,
                     "daily_egress_mb": 0,
                     "daily_file_count": 0,
+                    "global_daily_egress_mb": 0,
                 }
                 await self.settings.insert_one(default_config)
                 return default_config
@@ -316,6 +317,34 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating public config: {e}")
 
+    async def get_global_daily_egress_limit(self) -> float:
+        if self.settings is None:
+            return 0.0
+
+        if Config.PUBLIC_MODE:
+            config = await self.get_public_config()
+            return float(config.get("global_daily_egress_mb", 0))
+        else:
+            doc = await self.settings.find_one({"_id": "global_settings"})
+            if doc:
+                return float(doc.get("global_daily_egress_mb", 0))
+            return 0.0
+
+    async def update_global_daily_egress_limit(self, limit_mb: float):
+        if self.settings is None:
+            return
+        try:
+            if Config.PUBLIC_MODE:
+                await self.update_public_config("global_daily_egress_mb", limit_mb)
+            else:
+                await self.settings.update_one(
+                    {"_id": "global_settings"},
+                    {"$set": {"global_daily_egress_mb": limit_mb}},
+                    upsert=True,
+                )
+        except Exception as e:
+            logger.error(f"Error updating global daily egress limit: {e}")
+
     async def get_user_usage(self, user_id: int) -> dict:
         if self.settings is None:
             return {}
@@ -328,14 +357,47 @@ class Database:
             logger.error(f"Error fetching usage for user {user_id}: {e}")
             return {}
 
-    async def check_daily_quota(self, user_id: int, file_size_bytes: int) -> tuple[bool, str, dict]:
-        # Always allow CEO and Admins
-        if user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS:
-            return True, "", {}
+    async def get_global_usage_today(self) -> float:
+        if self.settings is None:
+            return 0.0
 
+        import datetime
+        current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+
+        try:
+            doc = await self.daily_stats.find_one({"date": current_utc_date})
+            if doc:
+                return float(doc.get("egress_mb", 0.0)) + float(doc.get("reserved_egress_mb", 0.0))
+            return 0.0
+        except Exception as e:
+            logger.error(f"Error fetching global usage: {e}")
+            return 0.0
+
+    async def check_daily_quota(self, user_id: int, file_size_bytes: int) -> tuple[bool, str, dict]:
         if self.settings is None:
             return True, "", {}
 
+        import datetime
+        current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        incoming_mb = file_size_bytes / (1024 * 1024)
+
+        # Global Limit Check First (applies to ALL users including admins)
+        global_limit_mb = await self.get_global_daily_egress_limit()
+        if global_limit_mb > 0:
+            current_global_usage = await self.get_global_usage_today()
+            if current_global_usage + incoming_mb > global_limit_mb:
+                mb_limit_str = f"{global_limit_mb} MB"
+                if global_limit_mb >= 1024:
+                    mb_limit_str = f"{global_limit_mb / 1024:.2f} GB"
+
+                # We do not record quota hit for global limits to user accounts
+                return False, f"Global Bot Usage Limit reached for today ({mb_limit_str}). Please try again tomorrow.", {}
+
+        # If user is admin/CEO, they bypass personal limits
+        if user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS:
+            return True, "", {}
+
+        # If not public mode, no personal limits apply
         if not Config.PUBLIC_MODE:
             return True, "", {}
 
@@ -343,27 +405,21 @@ class Database:
         daily_egress_mb_limit = config.get("daily_egress_mb", 0)
         daily_file_count_limit = config.get("daily_file_count", 0)
 
-        # No limits configured
+        # No personal limits configured
         if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0:
             return True, "", {}
 
-        import datetime
-        current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-
         try:
             doc = await self.settings.find_one({"_id": f"user_{user_id}"})
-
-            # Use dictionary representation since MongoDB nested updates don't initialize the root automatically if using multiple paths
             usage = doc.get("usage", {}) if doc else {}
 
-            # Reset daily usage if it's a new day
             if usage.get("date") != current_utc_date:
                 usage["date"] = current_utc_date
                 usage["egress_mb"] = 0.0
+                usage["reserved_egress_mb"] = 0.0
                 usage["file_count"] = 0
                 usage["quota_hits"] = 0
 
-                # Make sure all-time fields exist
                 if "egress_mb_alltime" not in usage:
                     usage["egress_mb_alltime"] = 0.0
                 if "file_count_alltime" not in usage:
@@ -375,9 +431,6 @@ class Database:
                     upsert=True
                 )
 
-            incoming_mb = file_size_bytes / (1024 * 1024)
-
-            # Calculate time to midnight
             current_utc = datetime.datetime.utcnow()
             tomorrow = current_utc + datetime.timedelta(days=1)
             midnight = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day)
@@ -386,12 +439,14 @@ class Database:
             minutes, _ = divmod(remainder, 60)
             reset_str = f"Resets at midnight UTC — roughly {hours}h {minutes}m from now."
 
-            # Check limits
+            # Check personal file count limit
             if daily_file_count_limit > 0 and usage.get("file_count", 0) >= daily_file_count_limit:
                 await self.record_quota_hit(user_id)
                 return False, f"You've reached your daily {daily_file_count_limit} file limit. {reset_str}", usage
 
-            if daily_egress_mb_limit > 0 and (usage.get("egress_mb", 0.0) + incoming_mb) > daily_egress_mb_limit:
+            # Check personal egress limit (usage + currently reserved)
+            current_user_egress = usage.get("egress_mb", 0.0) + usage.get("reserved_egress_mb", 0.0)
+            if daily_egress_mb_limit > 0 and (current_user_egress + incoming_mb) > daily_egress_mb_limit:
                 await self.record_quota_hit(user_id)
                 mb_limit_str = f"{daily_egress_mb_limit} MB"
                 if daily_egress_mb_limit >= 1024:
@@ -403,6 +458,74 @@ class Database:
         except Exception as e:
             logger.error(f"Error checking daily quota for {user_id}: {e}")
             return True, "", {}
+
+    async def reserve_quota(self, user_id: int, file_size_bytes: int):
+        if self.settings is None:
+            return
+
+        import datetime
+        current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        incoming_mb = file_size_bytes / (1024 * 1024)
+
+        try:
+            # Reserve global quota
+            await self.daily_stats.update_one(
+                {"date": current_utc_date},
+                {"$inc": {"reserved_egress_mb": incoming_mb}},
+                upsert=True
+            )
+
+            # Reserve user quota
+            user_doc = await self.settings.find_one({"_id": f"user_{user_id}"})
+            usage = user_doc.get("usage", {}) if user_doc else {}
+
+            if usage.get("date") != current_utc_date:
+                await self.settings.update_one(
+                    {"_id": f"user_{user_id}"},
+                    {"$set": {
+                        "usage.date": current_utc_date,
+                        "usage.egress_mb": 0.0,
+                        "usage.reserved_egress_mb": incoming_mb,
+                        "usage.file_count": 0,
+                        "usage.quota_hits": 0
+                    }},
+                    upsert=True
+                )
+            else:
+                await self.settings.update_one(
+                    {"_id": f"user_{user_id}"},
+                    {"$inc": {"usage.reserved_egress_mb": incoming_mb}},
+                    upsert=True
+                )
+        except Exception as e:
+            logger.error(f"Error reserving quota: {e}")
+
+    async def release_quota(self, user_id: int, file_size_bytes: int):
+        if self.settings is None:
+            return
+
+        import datetime
+        current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        incoming_mb = file_size_bytes / (1024 * 1024)
+
+        try:
+            # Release global quota
+            await self.daily_stats.update_one(
+                {"date": current_utc_date},
+                {"$inc": {"reserved_egress_mb": -incoming_mb}},
+                upsert=True
+            )
+
+            # Release user quota
+            # We must make sure it doesn't drop below 0 due to float precision, but $inc doesn't have min bounds
+            # For simplicity, we just decrement. It's temporary anyway.
+            await self.settings.update_one(
+                {"_id": f"user_{user_id}"},
+                {"$inc": {"usage.reserved_egress_mb": -incoming_mb}},
+                upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error releasing quota: {e}")
 
     async def record_quota_hit(self, user_id: int):
         if self.settings is None:
@@ -428,13 +551,14 @@ class Database:
         except Exception as e:
             logger.error(f"Error recording quota hit: {e}")
 
-    async def update_usage(self, user_id: int, processed_file_size_bytes: int):
+    async def update_usage(self, user_id: int, processed_file_size_bytes: int, reserved_file_size_bytes: int = 0):
         if self.settings is None:
             return
 
         import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         processed_mb = processed_file_size_bytes / (1024 * 1024)
+        reserved_mb = reserved_file_size_bytes / (1024 * 1024)
 
         try:
             # Ensure the user has the current date set in case they bypassed check_daily_quota (e.g. CEO/Admins)
@@ -447,17 +571,20 @@ class Database:
                     {"$set": {
                         "usage.date": current_utc_date,
                         "usage.egress_mb": 0.0,
+                        "usage.reserved_egress_mb": 0.0,
                         "usage.file_count": 0,
                         "usage.quota_hits": 0
                     }},
                     upsert=True
                 )
 
-            # Increment usage
+            # Update user
+            # We decrement the reserved_mb that was originally allocated, and increment actual usage
             await self.settings.update_one(
                 {"_id": f"user_{user_id}"},
                 {"$inc": {
                     "usage.egress_mb": processed_mb,
+                    "usage.reserved_egress_mb": -reserved_mb,
                     "usage.file_count": 1,
                     "usage.egress_mb_alltime": processed_mb,
                     "usage.file_count_alltime": 1
@@ -465,11 +592,12 @@ class Database:
                 upsert=True
             )
 
-            # Update daily stats globally
+            # Update global stats
             await self.daily_stats.update_one(
                 {"date": current_utc_date},
                 {"$inc": {
                     "egress_mb": processed_mb,
+                    "reserved_egress_mb": -reserved_mb,
                     "file_count": 1
                 }},
                 upsert=True

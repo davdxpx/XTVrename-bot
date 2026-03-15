@@ -809,9 +809,16 @@ class TaskProcessor:
             # --- USAGE TRACKING INJECTION ---
             usage_text = ""
             try:
-                # Update usage stats using the actual output size
+                # Get the original file size from the message to release the reservation
+                media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
+                original_size = getattr(media, "file_size", 0) if media else 0
+
+                # Update usage stats using the actual output size, and release the original reservation
                 processed_size = os.path.getsize(self.output_path)
-                await db.update_usage(self.user_id, processed_size)
+                await db.update_usage(self.user_id, processed_size, reserved_file_size_bytes=original_size)
+
+                # Set success flag so cleanup doesn't release quota again
+                self.processing_successful = True
 
                 # Add usage to success message
                 usage = await db.get_user_usage(self.user_id)
@@ -819,22 +826,44 @@ class TaskProcessor:
 
                 daily_egress_mb_limit = config.get("daily_egress_mb", 0)
                 daily_file_count_limit = config.get("daily_file_count", 0)
+                global_limit_mb = await db.get_global_daily_egress_limit()
 
                 user_files = usage.get("file_count", 0)
                 user_egress_mb = usage.get("egress_mb", 0.0)
 
-                if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0:
-                    usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB — No limits set"
+                if self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS:
+                    if global_limit_mb > 0:
+                        limit_str = f"{global_limit_mb} MB"
+                        if global_limit_mb >= 1024:
+                            limit_str = f"{global_limit_mb / 1024:.2f} GB"
+
+                        used_str = f"{user_egress_mb:.2f} MB"
+                        if user_egress_mb >= 1024:
+                            used_str = f"{user_egress_mb / 1024:.2f} GB"
+
+                        usage_text = f"Today: {user_files} files · {used_str} used of {limit_str} (Global Limit)"
+                    else:
+                        usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (Unlimited)"
                 else:
-                    limit_str = f"{daily_egress_mb_limit} MB"
-                    if daily_egress_mb_limit >= 1024:
-                        limit_str = f"{daily_egress_mb_limit / 1024:.2f} GB"
+                    if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0 and global_limit_mb <= 0:
+                        usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (No limits set)"
+                    else:
+                        limit_to_show = daily_egress_mb_limit
+                        if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
+                            limit_to_show = global_limit_mb
 
-                    used_str = f"{user_egress_mb:.2f} MB"
-                    if user_egress_mb >= 1024:
-                        used_str = f"{user_egress_mb / 1024:.2f} GB"
+                        if limit_to_show > 0:
+                            limit_str = f"{limit_to_show} MB"
+                            if limit_to_show >= 1024:
+                                limit_str = f"{limit_to_show / 1024:.2f} GB"
+                        else:
+                            limit_str = "Unlimited"
 
-                    usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}"
+                        used_str = f"{user_egress_mb:.2f} MB"
+                        if user_egress_mb >= 1024:
+                            used_str = f"{user_egress_mb / 1024:.2f} GB"
+
+                        usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}"
 
             except Exception as usage_e:
                 logger.error(
@@ -998,33 +1027,19 @@ class TaskProcessor:
             except Exception:
                 pass
 
+        # If processing didn't complete successfully, release the reserved quota
+        if not getattr(self, "processing_successful", False):
+            try:
+                media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
+                original_size = getattr(media, "file_size", 0) if media else 0
+                if original_size > 0:
+                    await db.release_quota(self.user_id, original_size)
+            except Exception as e:
+                logger.error(f"Failed to release quota in cleanup: {e}")
+
 
 async def process_file(client, message, data):
-    file_msg = data.get("file_message")
-    user_id = (
-        file_msg.from_user.id
-        if file_msg
-        else (message.from_user.id if message else None)
-    )
-
-    if user_id:
-        # Before we actually spawn the task, do the quota check!
-        file_size = 0
-        if file_msg:
-            media = file_msg.document or file_msg.video
-            if media:
-                file_size = media.file_size
-
-        # Check quota
-        quota_ok, error_msg, _ = await db.check_daily_quota(user_id, file_size)
-        if not quota_ok:
-            if message:
-                try:
-                    await message.edit_text(f"🛑 **Quota Exceeded**\n\n{error_msg}")
-                except MessageNotModified:
-                    pass
-            return
-
+    # Quota check and reservation is now done upstream in handle_file_upload
     processor = TaskProcessor(client, message, data)
     await processor.run()
 

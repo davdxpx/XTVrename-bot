@@ -1409,12 +1409,11 @@ async def handle_file_upload(client, message):
         )
         return
 
-    media = message.document or message.video
-    if media:
-        file_size = media.file_size
+    media = message.document or message.video or message.audio or message.photo
 
-        # WE MOVED QUOTA CHECK OUT OF HERE AND INTO process_file()
+    file_size = getattr(media, "file_size", 0) if media else 0
 
+    if file_size > 0:
         if file_size > 4000 * 1024 * 1024:
             await message.reply_text(
                 "❌ **File Too Large**\n\nTelegram's absolute maximum file size is 4GB. This file cannot be processed."
@@ -1426,6 +1425,14 @@ async def handle_file_upload(client, message):
                 "❌ **𝕏TV Pro™ Required**\n\nThis file is larger than 2GB. You must configure the 𝕏TV Pro™ Premium Userbot in the `/admin` panel to process files of this size."
             )
             return
+
+        # Perform quota pre-flight check and reserve usage
+        quota_ok, error_msg, _ = await db.check_daily_quota(user_id, file_size)
+        if not quota_ok:
+            await message.reply_text(f"🛑 **Quota Exceeded**\n\n{error_msg}")
+            return
+
+        await db.reserve_quota(user_id, file_size)
 
     if state != "awaiting_file_upload":
         if state is None:
@@ -1979,7 +1986,16 @@ async def handle_file_cancel(client, callback_query):
             return
     await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
-    file_sessions.pop(msg_id, None)
+
+    # Check if we have the file_message saved in file_sessions to release quota
+    if msg_id in file_sessions:
+        fs = file_sessions.pop(msg_id)
+        if "file_message" in fs:
+            media = fs["file_message"].document or fs["file_message"].video or fs["file_message"].audio or fs["file_message"].photo
+            file_size = getattr(media, "file_size", 0) if media else 0
+            if file_size > 0:
+                await db.release_quota(callback_query.from_user.id, file_size)
+
     await callback_query.message.delete()
 
 
