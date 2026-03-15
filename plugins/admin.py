@@ -63,6 +63,9 @@ async def admin_panel(client, message):
                     [
                         InlineKeyboardButton(
                             "👀 View Public Config", callback_data="admin_public_view"
+                        ),
+                        InlineKeyboardButton(
+                            "📢 Broadcast Message", callback_data="admin_broadcast"
                         )
                     ],
                     [
@@ -792,6 +795,10 @@ async def admin_callback(client, callback_query):
                             InlineKeyboardButton(
                                 "👀 View Public Config",
                                 callback_data="admin_public_view",
+                            ),
+                            InlineKeyboardButton(
+                                "📢 Broadcast Message",
+                                callback_data="admin_broadcast",
                             )
                         ],
                         [

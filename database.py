@@ -353,6 +353,19 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating rate limit: {e}")
 
+    async def get_all_users(self):
+        if self.settings is None:
+            return []
+        users = []
+        try:
+            async for doc in self.settings.find({"_id": {"$regex": "^user_"}}):
+                user_id_str = str(doc["_id"]).replace("user_", "")
+                if user_id_str.isdigit():
+                    users.append(int(user_id_str))
+        except Exception as e:
+            logger.error(f"Error fetching all users: {e}")
+        return users
+
 
 db = Database()
 
