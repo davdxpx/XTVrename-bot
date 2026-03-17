@@ -114,8 +114,8 @@ async def start_setup(client, callback_query):
         pass
 
 
-@Client.on_message(filters.private & filters.user(Config.CEO_ID))
-async def pro_setup_handler(client, message, group=0):
+@Client.on_message(filters.private & filters.user(Config.CEO_ID), group=1)
+async def pro_setup_handler(client, message):
     user_id = message.from_user.id
     if user_id not in pro_setup_sessions:
         raise ContinuePropagation

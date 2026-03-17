@@ -2310,7 +2310,7 @@ async def admin_prompt_lookup_cb(client: Client, callback_query: CallbackQuery):
 
 
 @Client.on_message(
-    filters.text & filters.private & filters.user(Config.CEO_ID), group=2
+    filters.text & filters.private & filters.user(Config.CEO_ID), group=1
 )
 async def admin_handle_user_lookup_text(client: Client, message: Message):
     from utils.state import get_state, clear_session
