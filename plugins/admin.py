@@ -437,7 +437,10 @@ async def admin_callback(client, callback_query):
         return
 
     if Config.PUBLIC_MODE and (
-        data.startswith("admin_public_") or data.startswith("admin_daily_")
+        data.startswith("admin_public_")
+        or data.startswith("admin_daily_")
+        or data.startswith("admin_force_sub_")
+        or data.startswith("admin_fs_")
     ):
         if data == "admin_public_view":
             config = await db.get_public_config()
