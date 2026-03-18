@@ -406,7 +406,9 @@ class TaskProcessor:
                 )
 
             if " " not in template and "." in template:
-                base_name = base_name.replace(" ", ".").replace("_", ".")
+                base_name = base_name.replace(" ", ".")
+                if "_" not in template:
+                    base_name = base_name.replace("_", ".")
             base_name = base_name.replace("..", ".").replace(" .", ".").replace(". ", ".")
 
             final_filename = f"{base_name}{ext}"
@@ -433,7 +435,9 @@ class TaskProcessor:
             try:
                 base_name = template.format(**fmt_dict)
                 if " " not in template and "." in template:
-                    base_name = base_name.replace(" ", ".").replace("_", ".")
+                    base_name = base_name.replace(" ", ".")
+                    if "_" not in template:
+                        base_name = base_name.replace("_", ".")
                 base_name = re.sub(r"\s+", " ", base_name).strip()
                 base_name = (
                     base_name.replace("..", ".").replace(" .", ".").replace(". ", ".")
@@ -448,7 +452,9 @@ class TaskProcessor:
                     else f"{safe_title}.{year_str}.{self.language}"
                 )
                 if " " not in template and "." in template:
-                    base_name = base_name.replace(" ", ".").replace("_", ".")
+                    base_name = base_name.replace(" ", ".")
+                    if "_" not in template:
+                        base_name = base_name.replace("_", ".")
                 base_name = base_name.replace("..", ".").replace(" .", ".").replace(". ", ".")
 
             final_filename = f"{base_name}{ext}"
