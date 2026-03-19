@@ -854,6 +854,17 @@ async def handle_gen_prompt_rename(client, callback_query):
 async def handle_cancel(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
+
+    # Clean up archive if cancelled during password prompt
+    data = get_data(user_id)
+    if data and data.get("archive_path"):
+        archive_path = data.get("archive_path")
+        if os.path.exists(archive_path):
+            try:
+                os.remove(archive_path)
+            except Exception as e:
+                logger.warning(f"Failed to remove archive on cancel: {e}")
+
     clear_session(user_id)
     try:
         await callback_query.message.edit_text(
@@ -1493,6 +1504,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         # Create a completely separate dummy message to avoid MessageIdInvalid and quota races
         # Deep copy msg logic using Message properties manually to keep it detached
         from pyrogram.types import Message
+        import random
         class DummyMessage:
             def __init__(self, original_msg):
                 self.id = original_msg.id + random.randint(1000, 999999)

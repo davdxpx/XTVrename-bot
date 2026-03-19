@@ -103,20 +103,20 @@ class TaskProcessor:
         try:
             if not await self._initialize():
                 if batch_id and item_id:
-                    queue_manager.update_status(batch_id, item_id, "failed", "Initialization failed")
+                    queue_manager.update_status(batch_id, item_id, "failed")
                 return
 
             async with get_semaphore(self.user_id, "download"):
                 if not await self._download_media():
                     if batch_id and item_id:
-                        queue_manager.update_status(batch_id, item_id, "failed", "Download failed")
+                        queue_manager.update_status(batch_id, item_id, "failed")
                     return
 
             async with get_semaphore(self.user_id, "process"):
                 await self._prepare_resources()
                 if not await self._process_media():
                     if batch_id and item_id:
-                        queue_manager.update_status(batch_id, item_id, "failed", "Processing failed")
+                        queue_manager.update_status(batch_id, item_id, "failed")
                     return
 
             async with get_semaphore(self.user_id, "upload"):
@@ -126,7 +126,7 @@ class TaskProcessor:
             logger.exception(f"Critical error in task for user {self.user_id}: {e}")
             await self._update_status(f"❌ **Critical System Error**\n\n`{str(e)}`")
             if batch_id and item_id:
-                queue_manager.update_status(batch_id, item_id, "failed", str(e))
+                queue_manager.update_status(batch_id, item_id, "failed")
         finally:
             await self._cleanup()
             if batch_id and queue_manager.is_batch_complete(batch_id):
@@ -1141,21 +1141,19 @@ class TaskProcessor:
             except Exception:
                 pass
 
-        # Clean up the extraction directory ONLY if it's completely empty (all files moved)
-        if self.data.get("extract_dir"):
+        # Clean up the extraction directory if this is the last item in the batch
+        if self.data.get("extract_dir") and self.data.get("batch_id"):
             extract_dir = self.data.get("extract_dir")
-            if os.path.exists(extract_dir):
-                try:
-                    # Check if directory has any files left
-                    has_files = False
-                    for root, dirs, files in os.walk(extract_dir):
-                        if files:
-                            has_files = True
-                            break
-                    if not has_files:
+            batch_id = self.data.get("batch_id")
+
+            # Use queue_manager to check if this is the last pending item
+            # If all other items in the batch are completed or failed, we can safely delete the dir
+            if queue_manager.is_batch_complete(batch_id):
+                if os.path.exists(extract_dir):
+                    try:
                         shutil.rmtree(extract_dir, ignore_errors=True)
-                except Exception as e:
-                    logger.warning(f"Failed to remove extraction directory {extract_dir}: {e}")
+                    except Exception as e:
+                        logger.warning(f"Failed to remove extraction directory {extract_dir}: {e}")
 
         # If processing didn't complete successfully, release the reserved quota
         if not getattr(self, "processing_successful", False):
