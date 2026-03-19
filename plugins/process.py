@@ -431,7 +431,7 @@ class TaskProcessor:
                 except Exception as e:
                     logger.warning(f"Failed to download poster: {e}")
 
-        safe_title = re.sub(r'[\\/*?:"<>|]', "", self.title)
+        safe_title = re.sub(r'[\\/*?:"<>|,;\'!]', "", self.title)
         safe_title = safe_title.replace("&", "and")
 
         ext = ".mkv" if not self.is_subtitle else ".srt"
