@@ -251,14 +251,15 @@ class TaskProcessor:
             if self.data.get("audio_album"):
                 self.metadata["album"] = self.data.get("audio_album", "")
 
-        # If we have a local_file_path (from archive extraction), just copy it instead of downloading
+        # If we have a local_file_path (from archive extraction), just move it instead of downloading
         if self.data.get("local_file_path"):
             local_path = self.data.get("local_file_path")
             if os.path.exists(local_path):
                 import shutil
-                shutil.copy2(local_path, self.input_path)
+                # Use asyncio.to_thread to prevent blocking the event loop on large files
+                await asyncio.to_thread(shutil.move, local_path, self.input_path)
                 file_size = os.path.getsize(self.input_path)
-                logger.info(f"Local file used: {self.input_path} ({file_size} bytes)")
+                logger.info(f"Local file moved: {self.input_path} ({file_size} bytes)")
 
                 # We need to artificially set file_size on the dummy message object so cleanup/quota works later
                 if self.file_message:
@@ -1140,12 +1141,19 @@ class TaskProcessor:
             except Exception:
                 pass
 
-        # Clean up the extraction directory if this file was generated from an archive
+        # Clean up the extraction directory ONLY if it's completely empty (all files moved)
         if self.data.get("extract_dir"):
             extract_dir = self.data.get("extract_dir")
             if os.path.exists(extract_dir):
                 try:
-                    shutil.rmtree(extract_dir, ignore_errors=True)
+                    # Check if directory has any files left
+                    has_files = False
+                    for root, dirs, files in os.walk(extract_dir):
+                        if files:
+                            has_files = True
+                            break
+                    if not has_files:
+                        shutil.rmtree(extract_dir, ignore_errors=True)
                 except Exception as e:
                     logger.warning(f"Failed to remove extraction directory {extract_dir}: {e}")
 

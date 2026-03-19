@@ -929,6 +929,7 @@ from utils.gate import send_force_sub_gate, check_and_send_welcome
 from utils.archive import is_archive, check_password_protected, extract_archive
 from utils.progress import progress_for_pyrogram
 import time
+import random
 
 
 @Client.on_message(
