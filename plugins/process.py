@@ -251,6 +251,32 @@ class TaskProcessor:
             if self.data.get("audio_album"):
                 self.metadata["album"] = self.data.get("audio_album", "")
 
+        # If we have a local_file_path (from archive extraction), just copy it instead of downloading
+        if self.data.get("local_file_path"):
+            local_path = self.data.get("local_file_path")
+            if os.path.exists(local_path):
+                import shutil
+                shutil.copy2(local_path, self.input_path)
+                file_size = os.path.getsize(self.input_path)
+                logger.info(f"Local file used: {self.input_path} ({file_size} bytes)")
+
+                # We need to artificially set file_size on the dummy message object so cleanup/quota works later
+                if self.file_message:
+                    # Create a dummy object with file_size attribute to satisfy quota check
+                    class DummyMedia:
+                        def __init__(self, size):
+                            self.file_size = size
+
+                    if not hasattr(self.file_message, "document") or self.file_message.document is None:
+                        self.file_message.document = DummyMedia(file_size)
+                    else:
+                        self.file_message.document.file_size = file_size
+
+                return True
+            else:
+                await self._update_status("❌ **Local File Error**\n\nThe extracted file was not found.")
+                return False
+
         target_message = self.file_message
         if self.mode == "pro":
             try:
@@ -895,8 +921,10 @@ class TaskProcessor:
             usage_text = ""
             try:
                 # Get the original file size from the message to release the reservation
-                media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
-                original_size = getattr(media, "file_size", 0) if media else 0
+                original_size = 0
+                if self.file_message:
+                    media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
+                    original_size = getattr(media, "file_size", 0) if media else 0
 
                 # Update usage stats using the actual output size, and release the original reservation
                 processed_size = os.path.getsize(self.output_path)
@@ -1112,11 +1140,23 @@ class TaskProcessor:
             except Exception:
                 pass
 
+        # Clean up the extraction directory if this file was generated from an archive
+        if self.data.get("extract_dir"):
+            extract_dir = self.data.get("extract_dir")
+            if os.path.exists(extract_dir):
+                try:
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                except Exception as e:
+                    logger.warning(f"Failed to remove extraction directory {extract_dir}: {e}")
+
         # If processing didn't complete successfully, release the reserved quota
         if not getattr(self, "processing_successful", False):
             try:
-                media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
-                original_size = getattr(media, "file_size", 0) if media else 0
+                original_size = 0
+                if self.file_message:
+                    media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
+                    original_size = getattr(media, "file_size", 0) if media else 0
+
                 if original_size > 0:
                     await db.release_quota(self.user_id, original_size)
             except Exception as e:

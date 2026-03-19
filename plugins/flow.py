@@ -926,6 +926,9 @@ from database import db
 from utils.queue_manager import queue_manager
 import uuid
 from utils.gate import send_force_sub_gate, check_and_send_welcome
+from utils.archive import is_archive, check_password_protected, extract_archive
+from utils.progress import progress_for_pyrogram
+import time
 
 
 @Client.on_message(
@@ -1246,6 +1249,10 @@ async def handle_file_upload(client, message):
     if not file_name:
         file_name = "unknown.mkv"
 
+    if await is_archive(file_name):
+        await handle_archive_upload(client, message, user_id, file_name, state)
+        return
+
     quality = "720p"
     if re.search(r"1080p", file_name, re.IGNORECASE):
         quality = "1080p"
@@ -1288,7 +1295,7 @@ async def handle_file_upload(client, message):
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
 
-    quality_priority = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3}
+    quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
 
     sort_key = (
         (0, season, episode)
@@ -1332,6 +1339,222 @@ async def handle_file_upload(client, message):
     batch_tasks[user_id] = asyncio.create_task(wait_and_process())
 
 
+async def handle_archive_upload(client, message, user_id, file_name, state):
+    msg = await message.reply_text("📦 **Archive detected!**\n\nDownloading to inspect contents...")
+
+    download_dir = Config.DOWNLOAD_DIR
+    os.makedirs(download_dir, exist_ok=True)
+
+    archive_path = os.path.join(download_dir, f"{user_id}_{message.id}_{file_name}")
+    start_time = time.time()
+
+    try:
+        downloaded_path = await client.download_media(
+            message,
+            file_name=archive_path,
+            progress=progress_for_pyrogram,
+            progress_args=(
+                "📥 **Downloading Archive...**",
+                msg,
+                start_time,
+                "core"
+            )
+        )
+
+        if not downloaded_path or not os.path.exists(downloaded_path):
+            await msg.edit_text("❌ Failed to download archive.")
+            return
+
+        is_protected = await check_password_protected(downloaded_path)
+
+        if is_protected:
+            update_data(user_id, "archive_path", downloaded_path)
+            update_data(user_id, "archive_msg_id", msg.id)
+            update_data(user_id, "archive_state", state)
+            set_state(user_id, "awaiting_archive_password")
+            await msg.edit_text(
+                "🔐 **Password Protected Archive**\n\n"
+                "This archive requires a password. Please send me the password to extract it.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+                )
+            )
+            return
+
+        await process_extracted_archive(client, user_id, downloaded_path, msg, state)
+
+    except Exception as e:
+        logger.error(f"Archive processing error: {e}")
+        try:
+            await msg.edit_text(f"❌ Error processing archive: {e}")
+        except:
+            pass
+
+@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=1)
+async def handle_password_input(client, message):
+    user_id = message.from_user.id
+    state = get_state(user_id)
+
+    if state == "awaiting_archive_password":
+        password = message.text.strip()
+        data = get_data(user_id)
+        archive_path = data.get("archive_path")
+        msg_id = data.get("archive_msg_id")
+        orig_state = data.get("archive_state")
+
+        try:
+            msg = await client.get_messages(user_id, msg_id)
+            await msg.edit_text("⏳ **Attempting to extract with password...**")
+            await process_extracted_archive(client, user_id, archive_path, msg, orig_state, password)
+        except Exception as e:
+            logger.error(f"Error handling password: {e}")
+            await message.reply_text(f"Error: {e}")
+
+        # Clear the password state
+        update_data(user_id, "archive_path", None)
+        update_data(user_id, "archive_msg_id", None)
+        set_state(user_id, orig_state)
+        # Stop propagation so group=2 doesn't catch it
+        from pyrogram.exceptions import StopPropagation
+        raise StopPropagation
+
+async def process_extracted_archive(client, user_id, archive_path, msg, state, password=None):
+    await msg.edit_text("📦 **Extracting Archive...**\n\nPlease wait.")
+
+    extract_dir = f"{archive_path}_extracted"
+    success = await extract_archive(archive_path, extract_dir, password)
+
+    if not success:
+        await msg.edit_text("❌ **Extraction Failed!**\n\nThe archive might be corrupted or the password was incorrect.")
+        if os.path.exists(archive_path):
+            os.remove(archive_path)
+        return
+
+    valid_exts = [".mkv", ".mp4", ".avi", ".mov", ".webm", ".jpg", ".jpeg", ".png", ".webp", ".srt", ".ass", ".vtt", ".mp3", ".flac", ".m4a", ".wav"]
+    extracted_files = []
+
+    for root, dirs, files in os.walk(extract_dir):
+        for file in files:
+            ext = os.path.splitext(file)[1].lower()
+            if ext in valid_exts:
+                extracted_files.append(os.path.join(root, file))
+
+    if not extracted_files:
+        await msg.edit_text("⚠️ **No media files found in archive.**\n\nSupported formats: MKV, MP4, AVI, PNG, JPG, etc.")
+        if os.path.exists(archive_path):
+            os.remove(archive_path)
+        import shutil
+        shutil.rmtree(extract_dir, ignore_errors=True)
+        return
+
+    await msg.edit_text(f"✅ **Extraction Complete!**\n\nFound {len(extracted_files)} media file(s). Processing...")
+
+    import shutil
+    import uuid
+    from utils.queue_manager import queue_manager
+    from plugins.process import process_file
+
+    for file_path in extracted_files:
+        file_name = os.path.basename(file_path)
+        file_size = os.path.getsize(file_path)
+
+        metadata = analyze_filename(file_name)
+        tmdb_data = await auto_match_tmdb(metadata)
+
+        if not tmdb_data:
+            await client.send_message(user_id, f"⚠️ **Detection Failed for `{file_name}`**\nSkipping.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Dismiss", callback_data="cancel_rename")]]))
+            continue
+
+        quality = metadata["quality"]
+        episode = metadata.get("episode", 1) or 1
+        season = metadata.get("season", 1) or 1
+        lang = metadata.get("language", "en")
+        is_subtitle = metadata["is_subtitle"]
+
+        default_dumb_channel = await db.get_default_dumb_channel(user_id)
+
+        if user_id not in batch_sessions:
+            batch_id = queue_manager.create_batch()
+            batch_sessions[user_id] = {"batch_id": batch_id, "items": []}
+            bmsg = await client.send_message(user_id, "⏳ **Sorting Files...**\nPlease wait a moment.")
+            batch_status_msgs[user_id] = bmsg
+
+        if user_id in batch_tasks:
+            batch_tasks[user_id].cancel()
+
+        batch_id = batch_sessions[user_id]["batch_id"]
+        item_id = str(uuid.uuid4())
+
+        quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
+        sort_key = ((0, season, episode) if tmdb_data["type"] == "series" else (1, quality_priority.get(quality, 4), 0))
+        display_name = f"S{season:02d}E{episode:02d}" if tmdb_data["type"] == "series" else f"{quality}"
+
+        # Create a completely separate dummy message to avoid MessageIdInvalid and quota races
+        # Deep copy msg logic using Message properties manually to keep it detached
+        from pyrogram.types import Message
+        class DummyMessage:
+            def __init__(self, original_msg):
+                self.id = original_msg.id + random.randint(1000, 999999)
+                self.chat = original_msg.chat
+                self.from_user = original_msg.from_user
+                self.document = None
+                self.video = None
+                self.audio = None
+                self.photo = None
+
+            async def reply_text(self, *args, **kwargs):
+                return await client.send_message(self.chat.id, *args, **kwargs)
+
+            async def delete(self):
+                pass
+
+        dummy_msg = DummyMessage(msg)
+
+        queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, dummy_msg.id)
+
+        data = {
+            "file_message": dummy_msg,
+            "local_file_path": file_path,
+            "original_name": file_name,
+            "quality": quality,
+            "episode": episode,
+            "season": season,
+            "language": lang,
+            "tmdb_id": tmdb_data["tmdb_id"],
+            "title": tmdb_data["title"],
+            "year": tmdb_data["year"],
+            "poster": tmdb_data["poster"],
+            "type": tmdb_data["type"],
+            "is_subtitle": is_subtitle,
+            "is_auto": True,
+            "dumb_channel": default_dumb_channel,
+            "batch_id": batch_id,
+            "item_id": item_id,
+            "extract_dir": extract_dir  # Tell process to cleanup this dir later
+        }
+
+        batch_sessions[user_id]["items"].append({"message": dummy_msg, "data": data})
+
+    if os.path.exists(archive_path):
+        os.remove(archive_path)
+
+    async def wait_and_process():
+        try:
+            await asyncio.sleep(3.0)
+            if batch_tasks.get(user_id) == asyncio.current_task():
+                del batch_tasks[user_id]
+            await process_batch(client, user_id)
+        except asyncio.CancelledError:
+            pass
+
+    if user_id in batch_sessions and batch_sessions[user_id]["items"]:
+        batch_tasks[user_id] = asyncio.create_task(wait_and_process())
+    else:
+        # If no items were added, cleanup immediately
+        import shutil
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+
 async def handle_auto_detection(client, message):
     if message.photo:
         file_name = f"image_{message.id}.jpg"
@@ -1342,6 +1565,10 @@ async def handle_auto_detection(client, message):
 
     if not file_name:
         file_name = "unknown_file.bin"
+
+    if await is_archive(file_name):
+        await handle_archive_upload(client, message, message.from_user.id, file_name, None)
+        return
 
     metadata = analyze_filename(file_name)
     tmdb_data = await auto_match_tmdb(metadata)
@@ -1381,7 +1608,7 @@ async def handle_auto_detection(client, message):
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
 
-    quality_priority = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3}
+    quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
 
     sort_key = (
         (0, season, episode)
