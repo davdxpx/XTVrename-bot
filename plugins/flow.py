@@ -1516,6 +1516,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
                 self.photo = None
 
             async def reply_text(self, *args, **kwargs):
+                kwargs.pop("quote", None)
                 return await client.send_message(self.chat.id, *args, **kwargs)
 
             async def delete(self):
