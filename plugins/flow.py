@@ -1288,7 +1288,7 @@ async def handle_file_upload(client, message):
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
 
-    quality_priority = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3}
+    quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
 
     sort_key = (
         (0, season, episode)
@@ -1381,7 +1381,7 @@ async def handle_auto_detection(client, message):
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
 
-    quality_priority = {"2160p": 0, "1080p": 1, "720p": 2, "480p": 3}
+    quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
 
     sort_key = (
         (0, season, episode)
