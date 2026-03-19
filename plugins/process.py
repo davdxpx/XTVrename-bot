@@ -98,17 +98,25 @@ class TaskProcessor:
             logger.warning(f"Error determining mode: {e}")
 
     async def run(self):
+        batch_id = self.data.get("batch_id")
+        item_id = self.data.get("item_id")
         try:
             if not await self._initialize():
+                if batch_id and item_id:
+                    queue_manager.update_status(batch_id, item_id, "failed", "Initialization failed")
                 return
 
             async with get_semaphore(self.user_id, "download"):
                 if not await self._download_media():
+                    if batch_id and item_id:
+                        queue_manager.update_status(batch_id, item_id, "failed", "Download failed")
                     return
 
             async with get_semaphore(self.user_id, "process"):
                 await self._prepare_resources()
                 if not await self._process_media():
+                    if batch_id and item_id:
+                        queue_manager.update_status(batch_id, item_id, "failed", "Processing failed")
                     return
 
             async with get_semaphore(self.user_id, "upload"):
@@ -117,8 +125,54 @@ class TaskProcessor:
         except Exception as e:
             logger.exception(f"Critical error in task for user {self.user_id}: {e}")
             await self._update_status(f"❌ **Critical System Error**\n\n`{str(e)}`")
+            if batch_id and item_id:
+                queue_manager.update_status(batch_id, item_id, "failed", str(e))
         finally:
             await self._cleanup()
+            if batch_id and queue_manager.is_batch_complete(batch_id):
+                try:
+                    usage = await db.get_user_usage(self.user_id)
+                    config = await db.get_public_config()
+                    daily_egress_mb_limit = config.get("daily_egress_mb", 0)
+                    daily_file_count_limit = config.get("daily_file_count", 0)
+                    global_limit_mb = await db.get_global_daily_egress_limit()
+
+                    user_files = usage.get("file_count", 0)
+                    user_egress_mb = usage.get("egress_mb", 0.0)
+
+                    if self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS:
+                        if global_limit_mb > 0:
+                            limit_str = f"{global_limit_mb} MB"
+                            if global_limit_mb >= 1024:
+                                limit_str = f"{global_limit_mb / 1024:.2f} GB"
+                            used_str = f"{user_egress_mb:.2f} MB"
+                            if user_egress_mb >= 1024:
+                                used_str = f"{user_egress_mb / 1024:.2f} GB"
+                            usage_text = f"Today: {user_files} files · {used_str} used of {limit_str} (Global Limit)"
+                        else:
+                            usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (Unlimited)"
+                    else:
+                        if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0 and global_limit_mb <= 0:
+                            usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (No limits set)"
+                        else:
+                            limit_to_show = daily_egress_mb_limit
+                            if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
+                                limit_to_show = global_limit_mb
+                            if limit_to_show > 0:
+                                limit_str = f"{limit_to_show} MB"
+                                if limit_to_show >= 1024:
+                                    limit_str = f"{limit_to_show / 1024:.2f} GB"
+                            else:
+                                limit_str = "Unlimited"
+                            used_str = f"{user_egress_mb:.2f} MB"
+                            if user_egress_mb >= 1024:
+                                used_str = f"{user_egress_mb / 1024:.2f} GB"
+                            usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}"
+
+                    summary_msg = queue_manager.get_batch_summary(batch_id, usage_text)
+                    await self.client.send_message(self.user_id, summary_msg)
+                except Exception as e:
+                    logger.warning(f"Failed to send early batch completion msg: {e}")
 
     async def _initialize(self) -> bool:
         if not shutil.which("ffmpeg"):
@@ -260,43 +314,64 @@ class TaskProcessor:
                 await self._update_status(f"❌ **Tunnel Bridge Error**\n\n`{e}`")
                 return False
 
-        try:
-            downloaded_path = await self.active_client.download_media(
-                target_message,
-                file_name=self.input_path,
-                progress=progress_for_pyrogram,
-                progress_args=(
-                    "📥 **Downloading Media Content...**",
-                    self.status_msg,
-                    download_start,
-                    self.mode,
-                ),
-            )
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                downloaded_path = await self.active_client.download_media(
+                    target_message,
+                    file_name=self.input_path,
+                    progress=progress_for_pyrogram,
+                    progress_args=(
+                        f"📥 **Downloading Media Content...**\n(Attempt {attempt}/{max_retries})",
+                        self.status_msg,
+                        download_start,
+                        self.mode,
+                    ),
+                )
 
-            if downloaded_path and os.path.exists(downloaded_path):
-                self.input_path = downloaded_path
-                file_size = os.path.getsize(self.input_path)
-                logger.info(f"Download success: {self.input_path} ({file_size} bytes)")
+                if downloaded_path and os.path.exists(downloaded_path):
+                    self.input_path = downloaded_path
+                    file_size = os.path.getsize(self.input_path)
+                    logger.info(f"Download attempt {attempt} success: {self.input_path} ({file_size} bytes)")
 
-                if file_size == 0:
-                    await self._update_status(
-                        "❌ **Download Integrity Error**\n\nFile size is 0 bytes."
-                    )
+                    if file_size == 0:
+                        logger.warning(f"Download attempt {attempt} failed: File size is 0 bytes.")
+                        os.remove(self.input_path)
+                        if attempt < max_retries:
+                            await asyncio.sleep(3)
+                            continue
+                        else:
+                            await self._update_status(
+                                "❌ **Download Integrity Error**\n\nFile size is 0 bytes after retries."
+                            )
+                            return False
+                    return True
+                else:
+                    logger.error(f"Download attempt {attempt} returned path but file missing: {self.input_path}")
+                    if attempt < max_retries:
+                        await asyncio.sleep(3)
+                        continue
+                    else:
+                        await self._update_status(
+                            "❌ **Download Verification Failed**\n\nFile not found on disk."
+                        )
+                        return False
+
+            except Exception as e:
+                logger.error(f"Download attempt {attempt} failed: {e}")
+                if os.path.exists(self.input_path):
+                    try:
+                        os.remove(self.input_path)
+                    except:
+                        pass
+                if attempt < max_retries:
+                    await asyncio.sleep(5)
+                    continue
+                else:
+                    await self._update_status(f"❌ **Network Error during Download**\n\n`{e}`")
                     return False
-                return True
-            else:
-                logger.error(
-                    f"Download returned path but file missing: {self.input_path}"
-                )
-                await self._update_status(
-                    "❌ **Download Verification Failed**\n\nFile not found on disk."
-                )
-                return False
 
-        except Exception as e:
-            logger.error(f"Download failed: {e}")
-            await self._update_status(f"❌ **Network Error during Download**\n\n`{e}`")
-            return False
+        return False
 
     async def _prepare_resources(self):
         await self._update_status(
