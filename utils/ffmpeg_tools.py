@@ -157,8 +157,18 @@ async def execute_ffmpeg(cmd):
     process = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
-    stdout, stderr = await process.communicate()
-    return process.returncode == 0, stderr
+    try:
+        stdout, stderr = await process.communicate()
+        return process.returncode == 0, stderr
+    except asyncio.CancelledError:
+        logging.getLogger("ffmpeg_tools").warning("FFmpeg process cancelled, terminating...")
+        if process.returncode is None:
+            try:
+                process.terminate()
+                await asyncio.wait_for(process.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                process.kill()
+        raise
 
 
 # --------------------------------------------------------------------------

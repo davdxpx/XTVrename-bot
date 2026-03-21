@@ -105,7 +105,7 @@ async def info_command(client, message):
     text += f"Your ultimate media processing tool. Easily rename, format, and organize your files with professional metadata injection and custom thumbnails.\n\n"
 
     text += f"**📊 System Details**\n"
-    text += f"• **Version:** `v2.0.0 (Public Edition)`\n"
+    text += f"• **Version:** `{Config.VERSION} (Public Edition)`\n"
     text += f"• **Status:** `Online & Operational`\n"
     text += f"• **Community:** `{community_name}`\n\n"
 
@@ -960,12 +960,12 @@ async def _send_usage(client, target, user_id, is_callback=False):
 
     import datetime
 
-    current_utc = datetime.datetime.utcnow()
+    current_utc = datetime.datetime.now(datetime.timezone.utc)
     current_utc_date = current_utc.strftime("%Y-%m-%d")
     current_date_display = current_utc.strftime("%d %b %Y")
 
     tomorrow = current_utc + datetime.timedelta(days=1)
-    midnight = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day)
+    midnight = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=datetime.timezone.utc)
     time_to_midnight = midnight - current_utc
     hours, remainder = divmod(int(time_to_midnight.total_seconds()), 3600)
     minutes, _ = divmod(remainder, 60)

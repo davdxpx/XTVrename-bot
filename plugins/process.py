@@ -100,27 +100,62 @@ class TaskProcessor:
     async def run(self):
         batch_id = self.data.get("batch_id")
         item_id = self.data.get("item_id")
+
+        file_size = 0
+        if self.file_message:
+            media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
+            if media:
+                file_size = getattr(media, "file_size", 0)
+
+        # Base timeout config: (1h base + roughly 5m per GB)
+        timeout_base = 3600
+        timeout_multiplier = (file_size / (1024 * 1024 * 1024)) * 300 if file_size else 0
+        phase_timeout = timeout_base + timeout_multiplier
+
         try:
             if not await self._initialize():
                 if batch_id and item_id:
                     queue_manager.update_status(batch_id, item_id, "failed")
                 return
 
-            async with get_semaphore(self.user_id, "download"):
-                if not await self._download_media():
-                    if batch_id and item_id:
-                        queue_manager.update_status(batch_id, item_id, "failed")
-                    return
+            try:
+                async with get_semaphore(self.user_id, "download"):
+                    dl_success = await asyncio.wait_for(self._download_media(), timeout=phase_timeout)
+                    if not dl_success:
+                        if batch_id and item_id:
+                            queue_manager.update_status(batch_id, item_id, "failed")
+                        return
+            except asyncio.TimeoutError:
+                logger.error(f"Download phase timed out for {self.message_id}")
+                await self._update_status("❌ **Download Timeout**\n\nTask exceeded maximum execution time.")
+                if batch_id and item_id:
+                    queue_manager.update_status(batch_id, item_id, "failed", "Timeout")
+                return
 
-            async with get_semaphore(self.user_id, "process"):
-                await self._prepare_resources()
-                if not await self._process_media():
-                    if batch_id and item_id:
-                        queue_manager.update_status(batch_id, item_id, "failed")
-                    return
+            try:
+                async with get_semaphore(self.user_id, "process"):
+                    await asyncio.wait_for(self._prepare_resources(), timeout=1800)
+                    proc_success = await asyncio.wait_for(self._process_media(), timeout=phase_timeout)
+                    if not proc_success:
+                        if batch_id and item_id:
+                            queue_manager.update_status(batch_id, item_id, "failed")
+                        return
+            except asyncio.TimeoutError:
+                logger.error(f"Process phase timed out for {self.message_id}")
+                await self._update_status("❌ **Process Timeout**\n\nTask exceeded maximum execution time (FFmpeg stall).")
+                if batch_id and item_id:
+                    queue_manager.update_status(batch_id, item_id, "failed", "Timeout")
+                return
 
-            async with get_semaphore(self.user_id, "upload"):
-                await self._upload_media()
+            try:
+                async with get_semaphore(self.user_id, "upload"):
+                    await asyncio.wait_for(self._upload_media(), timeout=phase_timeout)
+            except asyncio.TimeoutError:
+                logger.error(f"Upload phase timed out for {self.message_id}")
+                await self._update_status("❌ **Upload Timeout**\n\nTask exceeded maximum execution time.")
+                if batch_id and item_id:
+                    queue_manager.update_status(batch_id, item_id, "failed", "Timeout")
+                return
 
         except Exception as e:
             logger.exception(f"Critical error in task for user {self.user_id}: {e}")
@@ -447,15 +482,20 @@ class TaskProcessor:
             )
 
             if thumb_binary:
-                with open(self.thumb_path, "wb") as f:
-                    f.write(thumb_binary)
+                def write_thumb():
+                    with open(self.thumb_path, "wb") as f:
+                        f.write(thumb_binary)
+                await asyncio.to_thread(write_thumb)
             elif self.poster_url:
                 try:
                     async with aiohttp.ClientSession() as session:
                         async with session.get(self.poster_url) as resp:
                             if resp.status == 200:
-                                with open(self.thumb_path, "wb") as f:
-                                    f.write(await resp.read())
+                                data = await resp.read()
+                                def write_poster():
+                                    with open(self.thumb_path, "wb") as f:
+                                        f.write(data)
+                                await asyncio.to_thread(write_poster)
                 except Exception as e:
                     logger.warning(f"Failed to download poster: {e}")
 
