@@ -45,6 +45,13 @@ if __name__ == "__main__":
 
     try:
         from database import db
+        logger.info("Running DB migrations...")
+        app.loop.run_until_complete(db.migrate_old_db_to_new())
+    except Exception as e:
+        logger.warning(f"Error during DB migration: {e}")
+
+    try:
+        from database import db
         import asyncio
 
         async def cache_channels():

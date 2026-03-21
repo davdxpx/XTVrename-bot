@@ -17,6 +17,11 @@ def get_admin_main_menu(pro_session, public_mode):
 
     keyboard = []
 
+    # Insert User Management universally
+    keyboard.append(
+        [InlineKeyboardButton("👤 User Management", callback_data="admin_users_menu")]
+    )
+
     if public_mode:
         keyboard.append(
             [
@@ -138,6 +143,13 @@ def get_admin_access_limits_menu():
                 )
             ]
         )
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "💎 Premium User Settings", callback_data="admin_premium_settings"
+                )
+            ]
+        )
 
     buttons.append(
         [
@@ -221,7 +233,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|dumb_(?!user_))"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|dumb_(?!user_))"
     )
 )
 async def admin_callback(client, callback_query):
@@ -274,6 +286,67 @@ async def admin_callback(client, callback_query):
                             ],
                         ]
                     ),
+                )
+            except MessageNotModified:
+                pass
+            return
+
+        elif data == "admin_premium_settings":
+            config = await db.get_public_config()
+            enabled = config.get("premium_system_enabled", False)
+            egress = config.get("premium_daily_egress_mb", 0)
+            files = config.get("premium_daily_file_count", 0)
+            status_emoji = "✅ ON" if enabled else "❌ OFF"
+
+            text = (
+                f"💎 **Premium User Settings**\n\n"
+                f"Status: {status_emoji}\n"
+                f"Daily Egress: `{egress}` MB\n"
+                f"Daily Files: `{files}` files\n\n"
+                "*(0 means unlimited)*\n"
+                "Select a setting to edit:"
+            )
+
+            try:
+                await callback_query.message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(f"Toggle System: {status_emoji}", callback_data="admin_premium_toggle")],
+                        [InlineKeyboardButton("📦 Edit Premium Daily Egress", callback_data="prompt_premium_egress")],
+                        [InlineKeyboardButton("📄 Edit Premium Daily Files", callback_data="prompt_premium_files")],
+                        [InlineKeyboardButton("← Back", callback_data="admin_access_limits")]
+                    ])
+                )
+            except MessageNotModified:
+                pass
+            return
+
+        elif data == "admin_premium_toggle":
+            config = await db.get_public_config()
+            enabled = config.get("premium_system_enabled", False)
+            await db.update_public_config("premium_system_enabled", not enabled)
+            await callback_query.answer("Toggled Premium System", show_alert=True)
+            callback_query.data = "admin_premium_settings"
+            await admin_callback(client, callback_query)
+            return
+
+        elif data == "prompt_premium_egress":
+            admin_sessions[user_id] = "awaiting_premium_egress"
+            try:
+                await callback_query.message.edit_text(
+                    "📦 **Send the new PREMIUM daily egress limit in MB (e.g., 2048).**\nSend `0` to disable.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
+                )
+            except MessageNotModified:
+                pass
+            return
+
+        elif data == "prompt_premium_files":
+            admin_sessions[user_id] = "awaiting_premium_files"
+            try:
+                await callback_query.message.edit_text(
+                    "📄 **Send the new PREMIUM daily file limit.**\nSend `0` to disable.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
                 )
             except MessageNotModified:
                 pass
@@ -441,6 +514,8 @@ async def admin_callback(client, callback_query):
         or data.startswith("admin_daily_")
         or data.startswith("admin_force_sub_")
         or data.startswith("admin_fs_")
+        or data.startswith("admin_premium_")
+        or data.startswith("prompt_premium_")
     ):
         if data == "admin_public_view":
             config = await db.get_public_config()
@@ -1500,6 +1575,44 @@ async def handle_admin_text(client, message):
         admin_sessions.pop(user_id, None)
         return
 
+    if state == "wait_search_query":
+        query = message.text.strip()
+        results = await db.search_users(query)
+
+        if not results:
+            await message.reply("❌ No users found.", reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Try Again", callback_data="admin_user_search_start")],
+                [InlineKeyboardButton("❌ Cancel", callback_data="admin_users_menu")]
+            ]))
+            admin_sessions.pop(user_id, None)
+            return
+
+        text = f"**🔍 Search Results: '{query}'**\n\n"
+        markup = []
+        for u in results[:10]:
+            uid = u.get("user_id")
+            name = u.get("first_name", "Unknown")[:15]
+            uname = f"(@{u.get('username')})" if u.get("username") else ""
+            markup.append([InlineKeyboardButton(f"{name} {uname} ({uid})", callback_data=f"view_user|{uid}")])
+
+        markup.append([InlineKeyboardButton("🔙 Back", callback_data="admin_users_menu")])
+        await message.reply(text, reply_markup=InlineKeyboardMarkup(markup))
+        admin_sessions.pop(user_id, None)
+        return
+
+    if isinstance(state, dict) and state.get("state") == "wait_add_prem_days":
+        try:
+            days = float(message.text.strip())
+            uid = state["target_id"]
+            await db.add_premium_user(uid, days)
+            await db.add_log("add_premium", user_id, f"Added {days} days premium to {uid}")
+
+            await message.reply(f"✅ **Success!**\nUser `{uid}` has received {days} days of Premium.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Profile", callback_data=f"view_user|{uid}")]]))
+            admin_sessions.pop(user_id, None)
+        except ValueError:
+            await message.reply("❌ Invalid number. Enter days (e.g. 30).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{state['target_id']}")]]))
+        return
+
     if state == "awaiting_user_lookup":
         val = message.text.strip()
         from utils.state import clear_session
@@ -1769,6 +1882,38 @@ async def handle_admin_text(client, message):
                 ),
             )
 
+        admin_sessions.pop(user_id, None)
+        return
+
+    if state == "awaiting_premium_egress":
+        val = message.text.strip() if message.text else ""
+        if not val.isdigit():
+            await message.reply_text(
+                "❌ Invalid number. Try again.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
+            )
+            return
+        await db.update_public_config("premium_daily_egress_mb", int(val))
+        await message.reply_text(
+            f"✅ Premium daily egress limit updated to `{val}` MB.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_premium_settings")]])
+        )
+        admin_sessions.pop(user_id, None)
+        return
+
+    if state == "awaiting_premium_files":
+        val = message.text.strip() if message.text else ""
+        if not val.isdigit():
+            await message.reply_text(
+                "❌ Invalid number. Try again.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
+            )
+            return
+        await db.update_public_config("premium_daily_file_count", int(val))
+        await message.reply_text(
+            f"✅ Premium daily file limit updated to `{val}` files.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_premium_settings")]])
+        )
         admin_sessions.pop(user_id, None)
         return
 

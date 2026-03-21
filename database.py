@@ -14,6 +14,7 @@ class Database:
             self.client = None
             self.db = None
             self.settings = None
+            self.users = None
         else:
             try:
                 self.client = AsyncIOMotorClient(
@@ -28,13 +29,71 @@ class Database:
                 )
 
             self.db = self.client[Config.DB_NAME]
-            self.settings = self.db[Config.SETTINGS_COLLECTION]
+            self.settings = self.db["user_settings"] # Renamed from rename_bot_settings
+            self.users = self.db["users"]
             self.daily_stats = self.db["daily_stats"]
 
     def _get_doc_id(self, user_id=None):
         if Config.PUBLIC_MODE and user_id is not None:
             return f"user_{user_id}"
         return "global_settings"
+
+    async def migrate_old_db_to_new(self):
+        if self.db is None: return
+
+        # Check if migration was already completed
+        global_doc = await self.settings.find_one({"_id": "global_settings"})
+        if global_doc and global_doc.get("migration_to_users_done"):
+            return
+
+        old_settings = self.db["rename_bot_settings"]
+        count = await old_settings.count_documents({})
+        if count == 0:
+            await self.settings.update_one({"_id": "global_settings"}, {"$set": {"migration_to_users_done": True}}, upsert=True)
+            return
+
+        logger.info("Migrating old rename_bot_settings to user_settings and users collections...")
+
+        async for doc in old_settings.find({}):
+            doc_id = doc.get("_id")
+
+            # Global or config docs
+            if doc_id in ["global_settings", "xtv_pro_settings", "public_mode_config"]:
+                await self.settings.update_one({"_id": doc_id}, {"$set": doc}, upsert=True)
+                continue
+
+            # User docs
+            if isinstance(doc_id, str) and doc_id.startswith("user_"):
+                try:
+                    user_id = int(doc_id.replace("user_", ""))
+                except ValueError:
+                    continue
+
+                # Move to user_settings
+                await self.settings.update_one({"_id": doc_id}, {"$set": doc}, upsert=True)
+
+                # Create/Update users doc
+                user_doc = await self.users.find_one({"user_id": user_id})
+                import time
+                now = time.time()
+                if not user_doc:
+                    new_user = {
+                        "user_id": user_id,
+                        "updated_at": now,
+                        "first_name": "Unknown",
+                        "username": None,
+                        "banned": False,
+                        "is_premium": False,
+                        "premium_expiry": None,
+                        "joined_at": now,
+                        "history": [],
+                        "referral_count": 0,
+                    }
+                    await self.users.insert_one(new_user)
+
+        # Mark migration as done
+        await self.settings.update_one({"_id": "global_settings"}, {"$set": {"migration_to_users_done": True}}, upsert=True)
+        logger.info("Migration completed.")
 
     async def get_settings(self, user_id=None):
         if self.settings is None:
@@ -412,6 +471,22 @@ class Database:
         daily_egress_mb_limit = config.get("daily_egress_mb", 0)
         daily_file_count_limit = config.get("daily_file_count", 0)
 
+        import time
+        now = time.time()
+
+        user_doc = await self.get_user(user_id)
+        is_premium = False
+        if user_doc:
+            exp = user_doc.get("premium_expiry")
+            if user_doc.get("is_premium") and (exp is None or exp > now):
+                is_premium = True
+
+        premium_system_enabled = config.get("premium_system_enabled", False)
+
+        if is_premium and premium_system_enabled:
+            daily_egress_mb_limit = config.get("premium_daily_egress_mb", 0)
+            daily_file_count_limit = config.get("premium_daily_file_count", 0)
+
         # No personal limits configured
         if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0:
             return True, "", {}
@@ -759,6 +834,126 @@ class Database:
         except Exception as e:
             logger.error(f"Error fetching all users: {e}")
         return users
+
+    # --- New User Management Methods ---
+
+    async def ensure_user(self, user_id: int, first_name: str, username: str = None, last_name: str = None, language_code: str = None, is_bot: bool = False):
+        if self.users is None:
+            return
+        import time
+        now = time.time()
+
+        user_doc = await self.users.find_one({"user_id": user_id})
+
+        if not user_doc:
+            new_user = {
+                "user_id": user_id,
+                "first_name": first_name,
+                "last_name": last_name,
+                "username": username,
+                "language_code": language_code,
+                "is_bot": is_bot,
+                "banned": False,
+                "is_premium": False,
+                "premium_expiry": None,
+                "joined_at": now,
+                "updated_at": now,
+                "last_active": now,
+                "history": [],
+                "referral_count": 0,
+            }
+            await self.users.insert_one(new_user)
+        else:
+            await self.users.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "username": username,
+                    "language_code": language_code,
+                    "is_bot": is_bot,
+                    "updated_at": now,
+                    "last_active": now
+                }}
+            )
+
+    async def get_user(self, user_id: int):
+        if self.users is None:
+            return None
+        return await self.users.find_one({"user_id": user_id})
+
+    async def get_users_paginated(self, filter_dict: dict, skip: int, limit: int, sort_by: str = "joined_at"):
+        if self.users is None:
+            return []
+        sort_order = -1 if sort_by in ["joined_at", "updated_at"] else 1
+        cursor = self.users.find(filter_dict).sort(sort_by, sort_order).skip(skip).limit(limit)
+        return await cursor.to_list(length=limit)
+
+    async def count_users(self, filter_dict: dict):
+        if self.users is None:
+            return 0
+        return await self.users.count_documents(filter_dict)
+
+    async def search_users(self, query: str, limit: int = 10):
+        if self.users is None:
+            return []
+        filter_dict = {}
+        if query.isdigit():
+            filter_dict = {"user_id": int(query)}
+        else:
+            filter_dict = {
+                "$or": [
+                    {"username": {"$regex": query, "$options": "i"}},
+                    {"first_name": {"$regex": query, "$options": "i"}},
+                ]
+            }
+        cursor = self.users.find(filter_dict).limit(limit)
+        return await cursor.to_list(length=limit)
+
+    async def add_premium_user(self, user_id: int, days: float):
+        if self.users is None:
+            return
+        import time
+        now = time.time()
+
+        user_doc = await self.get_user(user_id)
+        if not user_doc:
+            return
+
+        current_exp = user_doc.get("premium_expiry", 0)
+        if current_exp and current_exp > now:
+            new_exp = current_exp + (days * 86400)
+        else:
+            new_exp = now + (days * 86400)
+
+        await self.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "is_premium": True,
+                "premium_expiry": new_exp
+            }}
+        )
+
+    async def reset_user_premium(self, user_id: int):
+        if self.users is None:
+            return
+        await self.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "is_premium": False,
+                "premium_expiry": None
+            }}
+        )
+
+    async def delete_user_data(self, user_id: int):
+        if self.users is None or self.settings is None:
+            return
+        await self.users.delete_one({"user_id": user_id})
+        await self.settings.delete_one({"_id": f"user_{user_id}"})
+
+    async def add_log(self, action: str, admin_id: int, description: str):
+        # We can add this to an admin_logs collection or just use standard logger.
+        logger.info(f"ADMIN_LOG [{action}] by {admin_id}: {description}")
 
 
 db = Database()

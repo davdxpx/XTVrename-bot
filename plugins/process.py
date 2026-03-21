@@ -173,18 +173,33 @@ class TaskProcessor:
                         daily_file_count_limit = config.get("daily_file_count", 0)
                         global_limit_mb = await db.get_global_daily_egress_limit()
 
+                        import time
+                        now = time.time()
+                        user_doc = await db.get_user(self.user_id)
+                        is_premium = False
+                        if user_doc:
+                            exp = user_doc.get("premium_expiry")
+                            if user_doc.get("is_premium") and (exp is None or exp > now):
+                                is_premium = True
+
+                        premium_system_enabled = config.get("premium_system_enabled", False)
+
+                        if is_premium and premium_system_enabled:
+                            daily_egress_mb_limit = config.get("premium_daily_egress_mb", 0)
+
                         user_files = usage.get("file_count", 0)
                         user_egress_mb = usage.get("egress_mb", 0.0)
+                        global_usage_mb = await db.get_global_usage_today()
 
                         if self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS:
                             if global_limit_mb > 0:
                                 limit_str = f"{global_limit_mb} MB"
                                 if global_limit_mb >= 1024:
                                     limit_str = f"{global_limit_mb / 1024:.2f} GB"
-                                used_str = f"{user_egress_mb:.2f} MB"
-                                if user_egress_mb >= 1024:
-                                    used_str = f"{user_egress_mb / 1024:.2f} GB"
-                                usage_text = f"Today: {user_files} files · {used_str} used of {limit_str} (Global Limit)"
+                                used_str = f"{global_usage_mb:.2f} MB"
+                                if global_usage_mb >= 1024:
+                                    used_str = f"{global_usage_mb / 1024:.2f} GB"
+                                usage_text = f"Today: {user_files} files processed · {used_str} used of {limit_str} (Global Limit)"
                             else:
                                 usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (Unlimited)"
                         else:
@@ -192,18 +207,29 @@ class TaskProcessor:
                                 usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (No limits set)"
                             else:
                                 limit_to_show = daily_egress_mb_limit
+                                show_global = False
                                 if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
                                     limit_to_show = global_limit_mb
+                                    show_global = True
+
                                 if limit_to_show > 0:
                                     limit_str = f"{limit_to_show} MB"
                                     if limit_to_show >= 1024:
                                         limit_str = f"{limit_to_show / 1024:.2f} GB"
                                 else:
                                     limit_str = "Unlimited"
-                                used_str = f"{user_egress_mb:.2f} MB"
-                                if user_egress_mb >= 1024:
-                                    used_str = f"{user_egress_mb / 1024:.2f} GB"
-                                usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}"
+
+                                if show_global:
+                                    used_str = f"{global_usage_mb:.2f} MB"
+                                    if global_usage_mb >= 1024:
+                                        used_str = f"{global_usage_mb / 1024:.2f} GB"
+                                else:
+                                    used_str = f"{user_egress_mb:.2f} MB"
+                                    if user_egress_mb >= 1024:
+                                        used_str = f"{user_egress_mb / 1024:.2f} GB"
+
+                                limit_type = " (Global Limit)" if show_global else ""
+                                usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}{limit_type}"
 
                         summary_msg = queue_manager.get_batch_summary(batch_id, usage_text)
                         await self.client.send_message(self.user_id, summary_msg)
@@ -1036,15 +1062,31 @@ class TaskProcessor:
                 user_files = usage.get("file_count", 0)
                 user_egress_mb = usage.get("egress_mb", 0.0)
 
+                import time
+                now = time.time()
+                user_doc = await db.get_user(self.user_id)
+                is_premium = False
+                if user_doc:
+                    exp = user_doc.get("premium_expiry")
+                    if user_doc.get("is_premium") and (exp is None or exp > now):
+                        is_premium = True
+
+                premium_system_enabled = config.get("premium_system_enabled", False)
+
+                if is_premium and premium_system_enabled:
+                    daily_egress_mb_limit = config.get("premium_daily_egress_mb", 0)
+
+                global_usage_mb = await db.get_global_usage_today()
+
                 if self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS:
                     if global_limit_mb > 0:
                         limit_str = f"{global_limit_mb} MB"
                         if global_limit_mb >= 1024:
                             limit_str = f"{global_limit_mb / 1024:.2f} GB"
 
-                        used_str = f"{user_egress_mb:.2f} MB"
-                        if user_egress_mb >= 1024:
-                            used_str = f"{user_egress_mb / 1024:.2f} GB"
+                        used_str = f"{global_usage_mb:.2f} MB"
+                        if global_usage_mb >= 1024:
+                            used_str = f"{global_usage_mb / 1024:.2f} GB"
 
                         usage_text = f"Today: {user_files} files · {used_str} used of {limit_str} (Global Limit)"
                     else:
@@ -1054,8 +1096,10 @@ class TaskProcessor:
                         usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (No limits set)"
                     else:
                         limit_to_show = daily_egress_mb_limit
+                        show_global = False
                         if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
                             limit_to_show = global_limit_mb
+                            show_global = True
 
                         if limit_to_show > 0:
                             limit_str = f"{limit_to_show} MB"
@@ -1064,11 +1108,17 @@ class TaskProcessor:
                         else:
                             limit_str = "Unlimited"
 
-                        used_str = f"{user_egress_mb:.2f} MB"
-                        if user_egress_mb >= 1024:
-                            used_str = f"{user_egress_mb / 1024:.2f} GB"
+                        if show_global:
+                            used_str = f"{global_usage_mb:.2f} MB"
+                            if global_usage_mb >= 1024:
+                                used_str = f"{global_usage_mb / 1024:.2f} GB"
+                        else:
+                            used_str = f"{user_egress_mb:.2f} MB"
+                            if user_egress_mb >= 1024:
+                                used_str = f"{user_egress_mb / 1024:.2f} GB"
 
-                        usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}"
+                        limit_type = " (Global Limit)" if show_global else ""
+                        usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}{limit_type}"
 
             except Exception as usage_e:
                 logger.error(
@@ -1272,6 +1322,15 @@ class TaskProcessor:
 
 
 async def process_file(client, message, data):
+    # Update user in DB when they process a file
+    await db.ensure_user(
+        user_id=message.from_user.id if message.from_user else message.chat.id,
+        first_name=message.from_user.first_name if message.from_user else message.chat.title,
+        username=message.from_user.username if message.from_user else None,
+        last_name=message.from_user.last_name if message.from_user else None,
+        language_code=message.from_user.language_code if message.from_user else None,
+        is_bot=message.from_user.is_bot if message.from_user else False
+    )
     # Quota check and reservation is now done upstream in handle_file_upload
     processor = TaskProcessor(client, message, data)
     await processor.run()
