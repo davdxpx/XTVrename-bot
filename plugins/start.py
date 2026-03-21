@@ -41,6 +41,15 @@ async def handle_start_command_unique(client, message):
     if not user_usage:
         is_new_user = True
 
+    await db.ensure_user(
+        user_id=message.from_user.id,
+        first_name=message.from_user.first_name,
+        username=message.from_user.username,
+        last_name=message.from_user.last_name,
+        language_code=message.from_user.language_code,
+        is_bot=message.from_user.is_bot
+    )
+
     await message.reply_text(
         f"{bot_name}\n\n"
         f"Welcome to the {community_name} file renaming tool.\n"
