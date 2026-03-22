@@ -62,7 +62,7 @@ The **𝕏TV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot
 
 ## 🛠 Deployment Guide
 
-We have created comprehensive, beginner-friendly, step-by-step guides for deploying the 𝕏TV Rename Bot across multiple platforms. This includes a full walkthrough for taking advantage of **Oracle Cloud's 10TB Free Egress Bandwidth** using their Always Free ARM A1 instance.
+We have created comprehensive, beginner-friendly, step-by-step guides for deploying the 𝕏TV Rename Bot across multiple platforms. 
 
 ### 👉 [Click Here for the Full Deployment Guide](DEPLOYMENT.md) 👈
 
