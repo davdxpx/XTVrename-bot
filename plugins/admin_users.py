@@ -166,7 +166,9 @@ async def view_user_profile(client, callback):
     prem_exp = user.get("premium_expiry", 0)
     prem_status = "❌ Free"
     if is_prem:
-        if prem_exp and prem_exp > time.time():
+        if not prem_exp:
+            prem_status = "💎 Premium (Lifetime)"
+        elif prem_exp > time.time():
             dt = datetime.fromtimestamp(prem_exp).strftime('%Y-%m-%d')
             prem_status = f"💎 Premium (Exp: {dt})"
         else:
