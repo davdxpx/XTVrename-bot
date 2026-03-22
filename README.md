@@ -57,7 +57,7 @@ The **𝕏TV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot
 *   **Force Subtitles**: Intelligent logic to set default subtitle tracks.
 *   **Album Support**: Handles multiple file uploads (albums) concurrently without issues.
 *   **Session State**: Robust user state management allows for cancelling and restarting flows easily.
-*   **Broadcast & Logs**: (Planned) Features for mass notifications and logging processed files.
+*   **Broadcast & Logs**: Features for mass notifications and logging processed files.
 
 ## 🛠 Deployment Guide
 
