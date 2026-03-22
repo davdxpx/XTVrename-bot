@@ -85,6 +85,7 @@ class Database:
                         "banned": False,
                         "is_premium": False,
                         "premium_expiry": None,
+                        "trial_claimed": False,
                         "joined_at": now,
                         "history": [],
                         "referral_count": 0,
@@ -856,6 +857,7 @@ class Database:
                 "banned": False,
                 "is_premium": False,
                 "premium_expiry": None,
+                "trial_claimed": False,
                 "joined_at": now,
                 "updated_at": now,
                 "last_active": now,
@@ -864,17 +866,35 @@ class Database:
             }
             await self.users.insert_one(new_user)
         else:
+            update_fields = {
+                "first_name": first_name,
+                "last_name": last_name,
+                "username": username,
+                "language_code": language_code,
+                "is_bot": is_bot,
+                "updated_at": now,
+                "last_active": now
+            }
+
+            # Backfill missing standard schema fields
+            if "banned" not in user_doc:
+                update_fields["banned"] = False
+            if "is_premium" not in user_doc:
+                update_fields["is_premium"] = False
+            if "premium_expiry" not in user_doc:
+                update_fields["premium_expiry"] = None
+            if "trial_claimed" not in user_doc:
+                update_fields["trial_claimed"] = False
+            if "joined_at" not in user_doc:
+                update_fields["joined_at"] = now
+            if "history" not in user_doc:
+                update_fields["history"] = []
+            if "referral_count" not in user_doc:
+                update_fields["referral_count"] = 0
+
             await self.users.update_one(
                 {"user_id": user_id},
-                {"$set": {
-                    "first_name": first_name,
-                    "last_name": last_name,
-                    "username": username,
-                    "language_code": language_code,
-                    "is_bot": is_bot,
-                    "updated_at": now,
-                    "last_active": now
-                }}
+                {"$set": update_fields}
             )
 
     async def get_user(self, user_id: int):

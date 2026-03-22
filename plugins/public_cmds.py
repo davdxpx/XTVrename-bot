@@ -120,6 +120,105 @@ async def info_command(client, message):
     await message.reply_text(text, disable_web_page_preview=True)
 
 
+@Client.on_message(filters.command("premium") & filters.private)
+async def handle_premium_command(client, message):
+    if not is_public_mode():
+        return
+
+    import time
+    from datetime import datetime
+    user_id = message.from_user.id
+    user = await db.get_user(user_id)
+    config = await db.get_public_config()
+
+    premium_system_enabled = config.get("premium_system_enabled", False)
+
+    if not premium_system_enabled:
+        await message.reply_text("❌ **Premium System is currently disabled.**")
+        return
+
+    is_prem = False
+    if user:
+        exp = user.get("premium_expiry")
+        if user.get("is_premium") and (exp is None or exp > time.time()):
+            is_prem = True
+
+    if is_prem:
+        exp_text = "Lifetime"
+        if user.get("premium_expiry"):
+            exp_text = datetime.fromtimestamp(user.get("premium_expiry")).strftime('%Y-%m-%d %H:%M')
+
+        await message.reply_text(
+            f"💎 **Premium Status: ACTIVE**\n\n"
+            f"**Expiry Date:** {exp_text}\n\n"
+            "You currently enjoy enhanced limits and bypass standard quotas!"
+        )
+        return
+
+    trial_enabled = config.get("premium_trial_enabled", False)
+    trial_days = config.get("premium_trial_days", 0)
+    trial_claimed = user.get("trial_claimed", False) if user else False
+
+    text = "💎 **Premium Status: INACTIVE**\n\nYou are currently on the free plan."
+    buttons = []
+
+    if trial_enabled and trial_days > 0 and not trial_claimed:
+        text += f"\n\n🎁 **Special Offer:** You are eligible for a **{trial_days}-Day Premium Trial**!"
+        buttons.append([InlineKeyboardButton("🎁 Claim Premium Trial", callback_data="claim_trial")])
+
+    support_contact = config.get("support_contact", "Not set")
+    if support_contact != "Not set":
+        text += f"\n\nTo purchase premium, contact: {support_contact}"
+
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="user_cancel")])
+
+    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+@Client.on_callback_query(filters.regex("^claim_trial$"))
+async def handle_claim_trial(client, callback_query):
+    if not is_public_mode():
+        return
+
+    import time
+    from datetime import datetime
+    user_id = callback_query.from_user.id
+    config = await db.get_public_config()
+
+    premium_system_enabled = config.get("premium_system_enabled", False)
+    trial_enabled = config.get("premium_trial_enabled", False)
+    trial_days = config.get("premium_trial_days", 0)
+
+    if not premium_system_enabled or not trial_enabled or trial_days <= 0:
+        await callback_query.answer("❌ Trial offer is no longer available.", show_alert=True)
+        await callback_query.message.delete()
+        return
+
+    user = await db.get_user(user_id)
+    if not user:
+        await callback_query.answer("❌ User profile not found. Please send /start first.", show_alert=True)
+        return
+
+    if user.get("trial_claimed", False):
+        await callback_query.answer("❌ You have already claimed your trial.", show_alert=True)
+        await callback_query.message.delete()
+        return
+
+    # Grant trial
+    await db.add_premium_user(user_id, trial_days)
+    await db.users.update_one({"user_id": user_id}, {"$set": {"trial_claimed": True}})
+
+    await callback_query.answer("✅ Premium Trial Activated!", show_alert=True)
+
+    exp_text = datetime.fromtimestamp(time.time() + (trial_days * 86400)).strftime('%Y-%m-%d %H:%M')
+
+    await callback_query.message.edit_text(
+        f"💎 **Premium Status: ACTIVE**\n\n"
+        f"**Expiry Date:** {exp_text}\n\n"
+        "You currently enjoy enhanced limits and bypass standard quotas!"
+    )
+
+
 @Client.on_message(filters.command("settings") & filters.private)
 async def settings_panel(client, message):
     if not is_public_mode():

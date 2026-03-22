@@ -233,7 +233,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|dumb_(?!user_))"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_))"
     )
 )
 async def admin_callback(client, callback_query):
@@ -296,14 +296,20 @@ async def admin_callback(client, callback_query):
             enabled = config.get("premium_system_enabled", False)
             egress = config.get("premium_daily_egress_mb", 0)
             files = config.get("premium_daily_file_count", 0)
+            trial_enabled = config.get("premium_trial_enabled", False)
+            trial_days = config.get("premium_trial_days", 0)
             status_emoji = "✅ ON" if enabled else "❌ OFF"
+            trial_status_emoji = "✅ ON" if trial_enabled else "❌ OFF"
 
             text = (
                 f"💎 **Premium User Settings**\n\n"
                 f"Status: {status_emoji}\n"
                 f"Daily Egress: `{egress}` MB\n"
-                f"Daily Files: `{files}` files\n\n"
-                "*(0 means unlimited)*\n"
+                f"Daily Files: `{files}` files\n"
+                f"*(0 means unlimited)*\n\n"
+                f"⏳ **Trial System**\n"
+                f"Status: {trial_status_emoji}\n"
+                f"Duration: `{trial_days}` days\n\n"
                 "Select a setting to edit:"
             )
 
@@ -314,6 +320,8 @@ async def admin_callback(client, callback_query):
                         [InlineKeyboardButton(f"Toggle System: {status_emoji}", callback_data="admin_premium_toggle")],
                         [InlineKeyboardButton("📦 Edit Premium Daily Egress", callback_data="prompt_premium_egress")],
                         [InlineKeyboardButton("📄 Edit Premium Daily Files", callback_data="prompt_premium_files")],
+                        [InlineKeyboardButton(f"Toggle Trial System: {trial_status_emoji}", callback_data="admin_trial_toggle")],
+                        [InlineKeyboardButton("⏱ Edit Trial Duration", callback_data="prompt_trial_days")],
                         [InlineKeyboardButton("← Back", callback_data="admin_access_limits")]
                     ])
                 )
@@ -330,11 +338,31 @@ async def admin_callback(client, callback_query):
             await admin_callback(client, callback_query)
             return
 
+        elif data == "admin_trial_toggle":
+            config = await db.get_public_config()
+            enabled = config.get("premium_trial_enabled", False)
+            await db.update_public_config("premium_trial_enabled", not enabled)
+            await callback_query.answer("Toggled Premium Trial System", show_alert=True)
+            callback_query.data = "admin_premium_settings"
+            await admin_callback(client, callback_query)
+            return
+
         elif data == "prompt_premium_egress":
             admin_sessions[user_id] = "awaiting_premium_egress"
             try:
                 await callback_query.message.edit_text(
                     "📦 **Send the new PREMIUM daily egress limit in MB (e.g., 2048).**\nSend `0` to disable.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
+                )
+            except MessageNotModified:
+                pass
+            return
+
+        elif data == "prompt_trial_days":
+            admin_sessions[user_id] = "awaiting_trial_days"
+            try:
+                await callback_query.message.edit_text(
+                    "⏱ **Send the new PREMIUM TRIAL duration in days (e.g., 7).**\nSend `0` to disable.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
                 )
             except MessageNotModified:
@@ -1912,6 +1940,22 @@ async def handle_admin_text(client, message):
         await db.update_public_config("premium_daily_file_count", int(val))
         await message.reply_text(
             f"✅ Premium daily file limit updated to `{val}` files.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_premium_settings")]])
+        )
+        admin_sessions.pop(user_id, None)
+        return
+
+    if state == "awaiting_trial_days":
+        val = message.text.strip() if message.text else ""
+        if not val.isdigit():
+            await message.reply_text(
+                "❌ Invalid number. Try again.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
+            )
+            return
+        await db.update_public_config("premium_trial_days", int(val))
+        await message.reply_text(
+            f"✅ Premium trial duration updated to `{val}` days.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_premium_settings")]])
         )
         admin_sessions.pop(user_id, None)
