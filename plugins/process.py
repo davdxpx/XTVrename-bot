@@ -173,7 +173,6 @@ class TaskProcessor:
                         daily_file_count_limit = config.get("daily_file_count", 0)
                         global_limit_mb = await db.get_global_daily_egress_limit()
 
-                        import time
                         now = time.time()
                         user_doc = await db.get_user(self.user_id)
                         is_premium = False
@@ -1097,7 +1096,6 @@ class TaskProcessor:
                 user_files = usage.get("file_count", 0)
                 user_egress_mb = usage.get("egress_mb", 0.0)
 
-                import time
                 now = time.time()
                 user_doc = await db.get_user(self.user_id)
                 is_premium = False

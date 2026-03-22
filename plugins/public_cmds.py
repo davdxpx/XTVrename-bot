@@ -239,7 +239,7 @@ debug("✅ Loaded handler: user_settings_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(user_|edit_user_template_|edit_user_fn_template_|prompt_user_.*|dumb_user_)"
+        r"^(user_|edit_user_template_|edit_user_fn_template_|prompt_user_.*|dumb_user_|set_lang_)"
     )
 )
 async def user_settings_callback(client, callback_query):
@@ -857,16 +857,52 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "prompt_user_language":
-        user_sessions[user_id] = "awaiting_user_language"
         try:
             await callback_query.message.edit_text(
-                "🌍 **Send the new Language code to use (e.g., `en-US`, `de-DE`, `es-ES`, etc.):**",
+                "🌍 **Select your preferred language for TMDb Metadata:**\n\n"
+                "*(Default is English)*",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="user_cancel_language")]]
+                    [
+                        [
+                            InlineKeyboardButton("🇺🇸 English", callback_data="set_lang_en-US"),
+                            InlineKeyboardButton("🇩🇪 German", callback_data="set_lang_de-DE"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇪🇸 Spanish", callback_data="set_lang_es-ES"),
+                            InlineKeyboardButton("🇫🇷 French", callback_data="set_lang_fr-FR"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇮🇳 Hindi", callback_data="set_lang_hi-IN"),
+                            InlineKeyboardButton("🇮🇳 Tamil", callback_data="set_lang_ta-IN"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇮🇳 Telugu", callback_data="set_lang_te-IN"),
+                            InlineKeyboardButton("🇮🇳 Malayalam", callback_data="set_lang_ml-IN"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇯🇵 Japanese", callback_data="set_lang_ja-JP"),
+                            InlineKeyboardButton("🇰🇷 Korean", callback_data="set_lang_ko-KR"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇨🇳 Chinese", callback_data="set_lang_zh-CN"),
+                            InlineKeyboardButton("🇷🇺 Russian", callback_data="set_lang_ru-RU"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇮🇹 Italian", callback_data="set_lang_it-IT"),
+                            InlineKeyboardButton("🇧🇷 Portuguese", callback_data="set_lang_pt-BR"),
+                        ],
+                        [InlineKeyboardButton("← Back", callback_data="user_general_settings_menu")],
+                    ]
                 ),
             )
         except MessageNotModified:
             pass
+    elif data.startswith("set_lang_"):
+        new_language = data.replace("set_lang_", "")
+        await db.update_preferred_language(new_language, user_id)
+        callback_query.data = "user_general_language"
+        await user_settings_callback(client, callback_query)
+        return
     elif data == "user_cancel_language":
         user_sessions.pop(user_id, None)
         callback_query.data = "user_general_settings_menu"
@@ -1099,19 +1135,6 @@ async def handle_user_text(client, message):
         )
         await message.reply_text(
             f"✅ Your channel variable updated to:\n`{new_channel}`",
-            reply_markup=reply_markup,
-        )
-        user_sessions.pop(user_id, None)
-
-    elif state == "awaiting_user_language":
-        new_language = message.text
-        await db.update_preferred_language(new_language, user_id)
-
-        reply_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("← Back", callback_data="user_general_settings_menu")]]
-        )
-        await message.reply_text(
-            f"✅ Your preferred language updated to:\n`{new_language}`",
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)

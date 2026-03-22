@@ -23,7 +23,7 @@ The **𝕏TV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot
 
 ### 🔹 Intelligent Recognition
 *   **Auto-Detection Matrix**: Automatically scans filenames to detect Movie/Series titles, Years, Qualities, and Episode numbers with high accuracy.
-*   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork.
+*   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork. Now supports **Multilingual Metadata** (e.g. `de-DE`, `es-ES`), customizable per user in `/settings`!
 *   **Automatic Archive Unpacking**: Automatically detects and downloads `.zip`, `.rar`, and `.7z` archives. It smartly identifies password-protected archives, prompts the user for the password, extracts the contents, and automatically feeds all valid media files directly into the batch processing queue!
 
 ### 🔹 Media Management & Workflows
@@ -32,7 +32,8 @@ The **𝕏TV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot
 *   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit (configurable by the CEO).
 *   **Spam-Proof Forwarding**: Utilizing Pyrogram's `copy()` method, the bot cleanly removes 'Forwarded from' tags when sending to Dumb Channels, preventing Telegram's spam detection from flagging bulk media (which can result in 0KB files and stripped thumbnails).
 *   **Personal Media & Unlisted Content**: Direct menu options to bypass metadata databases (e.g., TMDb) for personal files, camera footage, photos, and unlisted regional content. Smartly preserves original file extensions (like `.jpeg`) and lets you choose your preferred output format.
-*   **Multipurpose File Utilities**: Built-in direct editing tools accessible via shortcuts for general renaming (`/g`), audio metadata & cover art editing (`/a`), media format conversion (`/c`), and automated image watermarking (`/w`).
+*   **Multipurpose File Utilities**: Built-in direct editing tools accessible via the **✨ Other Features** menu or shortcuts for general renaming (`/g`), audio metadata & cover art editing (`/a`), advanced media format conversion (including **x264/x265** and **Audio Normalization**) (`/c`), automated image watermarking (`/w`), and a standalone **Subtitle Extractor**!
+*   **Auto-Delete (Clean Chat)**: Automatically deletes the original unoptimized uploaded file after successful processing and delivery, keeping your Telegram chat clean and organized.
 *   **Series & Movies**: Specialized handling for different media types.
     *   *Series*: Season/Episode numbering (S01E01) format.
     *   *Movies*: Clean Title.Year.Quality format.

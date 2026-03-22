@@ -69,7 +69,7 @@ def get_admin_main_menu(pro_session, public_mode):
                 InlineKeyboardButton(
                     "📺 Dumb Channels", callback_data="admin_dumb_channels"
                 ),
-                InlineKeyboardButton("⚙️ Settings", callback_data="admin_settings"),
+                InlineKeyboardButton("⚙️ General Settings", callback_data="admin_general_settings_menu"),
             ]
         )
         keyboard.append(
@@ -233,7 +233,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_))"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -1396,11 +1396,34 @@ async def admin_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-    elif data == "admin_settings":
-        current_channel = await db.get_channel()
+    elif data == "admin_general_settings_menu":
         try:
             await callback_query.message.edit_text(
-                f"⚙️ **General Settings**\n\n"
+                f"⚙️ **Global General Settings**\n\n"
+                "Select a setting to configure:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "📢 Channel Username", callback_data="admin_general_channel"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🌍 Preferred Language", callback_data="admin_general_language"
+                            )
+                        ],
+                        [InlineKeyboardButton("← Back", callback_data="admin_main")],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
+    elif data == "admin_general_channel":
+        current_channel = await db.get_channel(None) # Use None for global settings
+        try:
+            await callback_query.message.edit_text(
+                f"📢 **Global Channel Username Settings**\n\n"
                 f"Current Channel Variable: `{current_channel}`\n\n"
                 "Click below to change it.",
                 reply_markup=InlineKeyboardMarkup(
@@ -1410,33 +1433,91 @@ async def admin_callback(client, callback_query):
                                 "✏️ Change", callback_data="prompt_admin_channel"
                             )
                         ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Admin Panel", callback_data="admin_main"
-                            )
-                        ],
+                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
                     ]
                 ),
             )
         except MessageNotModified:
             pass
     elif data == "prompt_admin_channel":
-        admin_sessions[user_id] = "awaiting_channel"
+        admin_sessions[user_id] = "awaiting_admin_channel"
         try:
             await callback_query.message.edit_text(
-                "⚙️ **Send the new Channel name (e.g. `@XTVglobal`):**",
+                "⚙️ **Send the new Global Channel name variable to use in templates (e.g. `@MyChannel`):**",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_general_channel")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
+    elif data == "admin_general_language":
+        current_language = await db.get_preferred_language(None)
+        try:
+            await callback_query.message.edit_text(
+                f"🌍 **Global Preferred Language Settings**\n\n"
+                f"Current Preferred Language: `{current_language}`\n\n"
+                "This language code is used when fetching data from TMDb (e.g., `en-US`, `de-DE`, `es-ES`).\n\n"
+                "Click below to change it.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
                             InlineKeyboardButton(
-                                "❌ Cancel", callback_data="admin_public_settings"
+                                "✏️ Change", callback_data="prompt_admin_language"
                             )
-                        ]
+                        ],
+                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
                     ]
                 ),
             )
         except MessageNotModified:
             pass
+    elif data == "prompt_admin_language":
+        try:
+            await callback_query.message.edit_text(
+                "🌍 **Select global preferred language for TMDb Metadata:**\n\n"
+                "*(Default is English)*",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton("🇺🇸 English", callback_data="admin_set_lang_en-US"),
+                            InlineKeyboardButton("🇩🇪 German", callback_data="admin_set_lang_de-DE"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇪🇸 Spanish", callback_data="admin_set_lang_es-ES"),
+                            InlineKeyboardButton("🇫🇷 French", callback_data="admin_set_lang_fr-FR"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇮🇳 Hindi", callback_data="admin_set_lang_hi-IN"),
+                            InlineKeyboardButton("🇮🇳 Tamil", callback_data="admin_set_lang_ta-IN"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇮🇳 Telugu", callback_data="admin_set_lang_te-IN"),
+                            InlineKeyboardButton("🇮🇳 Malayalam", callback_data="admin_set_lang_ml-IN"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇯🇵 Japanese", callback_data="admin_set_lang_ja-JP"),
+                            InlineKeyboardButton("🇰🇷 Korean", callback_data="admin_set_lang_ko-KR"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇨🇳 Chinese", callback_data="admin_set_lang_zh-CN"),
+                            InlineKeyboardButton("🇷🇺 Russian", callback_data="admin_set_lang_ru-RU"),
+                        ],
+                        [
+                            InlineKeyboardButton("🇮🇹 Italian", callback_data="admin_set_lang_it-IT"),
+                            InlineKeyboardButton("🇧🇷 Portuguese", callback_data="admin_set_lang_pt-BR"),
+                        ],
+                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
+    elif data.startswith("admin_set_lang_"):
+        new_language = data.replace("admin_set_lang_", "")
+        await db.update_preferred_language(new_language, None)
+        callback_query.data = "admin_general_language"
+        await admin_callback(client, callback_query)
+        return
     elif data == "admin_cancel":
         admin_sessions.pop(user_id, None)
         await callback_query.message.delete()
@@ -2045,14 +2126,15 @@ async def handle_admin_text(client, message):
             reply_markup=reply_markup,
         )
         admin_sessions.pop(user_id, None)
-    elif state == "awaiting_channel":
+    elif state == "awaiting_admin_channel":
         new_channel = message.text
-        await db.update_channel(new_channel)
+        await db.update_channel(new_channel, None)
+
         reply_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("← Back", callback_data="admin_templates_menu")]]
+            [[InlineKeyboardButton("← Back", callback_data="admin_general_channel")]]
         )
         await message.reply_text(
-            f"✅ Channel variable updated to:\n`{new_channel}`",
+            f"✅ Global channel variable updated to:\n`{new_channel}`",
             reply_markup=reply_markup,
         )
         admin_sessions.pop(user_id, None)
