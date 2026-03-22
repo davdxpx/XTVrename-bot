@@ -291,7 +291,34 @@ async def admin_callback(client, callback_query):
                 pass
             return
 
-        elif data == "admin_premium_settings":
+    if data == "admin_global_daily_egress":
+        current_val = await db.get_global_daily_egress_limit()
+        try:
+            await callback_query.message.edit_text(
+                f"🌍 **Edit Global Daily Egress Limit**\n\nCurrent: `{current_val}` MB\n\nClick below to change it.",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "✏️ Change", callback_data="prompt_global_daily_egress"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "← Back", callback_data="admin_access_limits"
+                            )
+                        ],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
+        return
+
+    if Config.PUBLIC_MODE and (
+        data.startswith("admin_premium_") or data.startswith("prompt_premium_") or data.startswith("prompt_trial_")
+    ):
+        if data == "admin_premium_settings":
             config = await db.get_public_config()
             enabled = config.get("premium_system_enabled", False)
             egress = config.get("premium_daily_egress_mb", 0)
@@ -379,30 +406,6 @@ async def admin_callback(client, callback_query):
             except MessageNotModified:
                 pass
             return
-
-    if data == "admin_global_daily_egress":
-        current_val = await db.get_global_daily_egress_limit()
-        try:
-            await callback_query.message.edit_text(
-                f"🌍 **Edit Global Daily Egress Limit**\n\nCurrent: `{current_val}` MB\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_global_daily_egress"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back", callback_data="admin_access_limits"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-        return
 
     if data == "prompt_global_daily_egress":
         admin_sessions[user_id] = "awaiting_global_daily_egress"
