@@ -146,7 +146,7 @@ def get_admin_access_limits_menu():
         buttons.append(
             [
                 InlineKeyboardButton(
-                    "💎 Premium User Settings", callback_data="admin_premium_settings"
+                    "💎 Premium Settings", callback_data="admin_premium_settings"
                 )
             ]
         )
@@ -316,7 +316,7 @@ async def admin_callback(client, callback_query):
         return
 
     if Config.PUBLIC_MODE and (
-        data.startswith("admin_premium_") or data.startswith("prompt_premium_") or data.startswith("prompt_trial_")
+        data.startswith("admin_premium_") or data.startswith("prompt_premium_") or data.startswith("prompt_trial_") or data.startswith("admin_trial_")
     ):
         if data == "admin_premium_settings":
             config = await db.get_public_config()
@@ -329,7 +329,7 @@ async def admin_callback(client, callback_query):
             trial_status_emoji = "✅ ON" if trial_enabled else "❌ OFF"
 
             text = (
-                f"💎 **Premium User Settings**\n\n"
+                f"💎 **Premium Settings**\n\n"
                 f"Status: {status_emoji}\n"
                 f"Daily Egress: `{egress}` MB\n"
                 f"Daily Files: `{files}` files\n"
