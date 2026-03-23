@@ -163,17 +163,37 @@ async def execute_ffmpeg(cmd, progress_callback=None):
     stderr_lines = []
 
     async def read_stderr():
-        # FFmpeg reports progress on stderr
+        # FFmpeg uses carriage returns (\r) for progress updates, not newlines (\n)
+        buffer = ""
         while True:
-            line = await process.stderr.readline()
-            if not line:
+            chunk = await process.stderr.read(1024)
+            if not chunk:
                 break
-            line_str = line.decode('utf-8', errors='replace')
-            stderr_lines.append(line_str)
 
+            chunk_str = chunk.decode('utf-8', errors='replace')
+            buffer += chunk_str
+
+            # Split by \r or \n
+            lines = re.split(r'[\r\n]+', buffer)
+
+            # Keep the last incomplete part in the buffer
+            buffer = lines.pop()
+
+            for line_str in lines:
+                if line_str.strip():
+                    stderr_lines.append(line_str + "\n")
+
+                    if progress_callback:
+                        # Extract time from string like: frame=  116 fps= 30 q=29.0 size=     256kB time=00:00:04.60 bitrate= 454.4kbits/s speed=1.18x
+                        time_match = re.search(r"time=(\d{2}:\d{2}:\d{2}[\.\d]*)", line_str)
+                        if time_match:
+                            await progress_callback(time_match.group(1))
+
+        # Process any remaining buffer content
+        if buffer.strip():
+            stderr_lines.append(buffer + "\n")
             if progress_callback:
-                # Extract time from string like: frame=  116 fps= 30 q=29.0 size=     256kB time=00:00:04.60 bitrate= 454.4kbits/s speed=1.18x
-                time_match = re.search(r"time=(\d{2}:\d{2}:\d{2}\.\d{2})", line_str)
+                time_match = re.search(r"time=(\d{2}:\d{2}:\d{2}[\.\d]*)", buffer)
                 if time_match:
                     await progress_callback(time_match.group(1))
 

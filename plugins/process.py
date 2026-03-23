@@ -705,12 +705,27 @@ class TaskProcessor:
         )
 
     async def _process_media(self) -> bool:
-        await self._update_status(
-            "⚙️ **Executing Transcoding Matrix**\n\n"
-            "Injecting metadata and optimizing container...\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature(mode=self.mode)}"
-        )
+        if self.media_type == "convert":
+            await self._update_status(
+                "🔀 **Converting Media Format**\n\n"
+                "Initializing video stream processor...\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature(mode=self.mode)}"
+            )
+        elif self.media_type == "extract_subtitles":
+            await self._update_status(
+                "📝 **Extracting Subtitles**\n\n"
+                "Scanning video streams for text tracks...\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature(mode=self.mode)}"
+            )
+        else:
+            await self._update_status(
+                "⚙️ **Executing Transcoding Matrix**\n\n"
+                "Injecting metadata and optimizing container...\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature(mode=self.mode)}"
+            )
 
         if self.media_type == "watermark":
             wtype = self.data.get("watermark_type")
@@ -851,7 +866,7 @@ class TaskProcessor:
             except Exception as e:
                 logger.warning(f"Could not get duration for progress: {e}")
 
-        last_update_time = time.time()
+        last_update_time = 0
 
         async def ffmpeg_progress(time_str):
             nonlocal last_update_time, total_duration
