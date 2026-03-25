@@ -1416,10 +1416,14 @@ async def admin_callback(client, callback_query):
         templates = await db.get_filename_templates()
         current_val = templates.get(field, "")
         try:
+            vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
+            if field.lower() in ["series", "subtitles_series"]:
+                vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
+
             await callback_query.message.edit_text(
                 f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
                 f"Current: `{current_val}`\n\n"
-                f"Variables: `{{Title}}`, `{{Year}}`, `{{Quality}}`, `{{Season}}`, `{{Episode}}`, `{{Season_Episode}}`, `{{Language}}`, `{{Channel}}`\n"
+                f"Variables: {vars_text}\n"
                 f"Note: File extension will be added automatically.",
                 reply_markup=InlineKeyboardMarkup(
                     [
@@ -1442,8 +1446,14 @@ async def admin_callback(client, callback_query):
         field = data.replace("prompt_fn_template_", "")
         admin_sessions[user_id] = f"awaiting_fn_template_{field}"
         try:
+            vars_text = ""
+            if field.lower() in ["series", "subtitles_series"]:
+                vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
+            else:
+                vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
+
             await callback_query.message.edit_text(
-                f"✏️ **Send the new filename template for {field.capitalize()}:**",
+                f"✏️ **Send the new filename template for {field.capitalize()}:**{vars_text}",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
