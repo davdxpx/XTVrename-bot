@@ -542,24 +542,107 @@ class TaskProcessor:
         season_episode = f"{season_str}{episode_str}"
         year_str = str(self.year) if self.year else ""
 
+        # Extract extra metadata from original filename
+        pref_sep = await db.get_preferred_separator(self.user_id) if hasattr(self, 'user_id') else "."
+
+        extracted_specials = []
+        extracted_codec = []
+        extracted_audio = []
+
+        if self.original_name:
+            orig_name_upper = self.original_name.upper()
+
+            # Extract Specials
+            specials_keywords = ["BLURAY", "BLUERAY", "BDRIP", "WEB-DL", "WEBRIP", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT"]
+            for kw in specials_keywords:
+                if kw in orig_name_upper:
+                    # Maintain the exact casing if possible, or just use a nice capitalized version
+                    if kw == "WEB-DL": extracted_specials.append("WEB-DL")
+                    elif kw == "WEBRIP": extracted_specials.append("WEBRip")
+                    elif kw == "HDR": extracted_specials.append("HDR")
+                    elif kw == "REMUX": extracted_specials.append("REMUX")
+                    elif kw == "PROPER": extracted_specials.append("PROPER")
+                    elif kw == "REPACK": extracted_specials.append("REPACK")
+                    elif kw == "UNCUT": extracted_specials.append("UNCUT")
+                    elif kw == "BDRIP": extracted_specials.append("BDRip")
+                    else: extracted_specials.append("BluRay") # Covers BluRay/BlueRay
+
+            # Deduplicate while preserving order
+            extracted_specials = list(dict.fromkeys(extracted_specials))
+
+            # Extract Codec
+            codec_keywords = ["X264", "X265", "HEVC"]
+            for kw in codec_keywords:
+                if kw in orig_name_upper:
+                    if kw == "X264": extracted_codec.append("x264")
+                    elif kw == "X265": extracted_codec.append("x265")
+                    elif kw == "HEVC": extracted_codec.append("HEVC")
+
+            # Extract Audio
+            audio_keywords = ["DUAL", "DL", "DUBBED", "MULTI", "MICDUB", "LINEDUB", "DTS", "AC3", "ATMOS"]
+            for kw in audio_keywords:
+                # Use regex to ensure word boundaries for short/ambiguous terms like DL, DTS, AC3
+                # For "DL", ensure it's not preceded by "WEB-"
+                if kw == "DL":
+                    if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
+                        extracted_audio.append("DL")
+                else:
+                    if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
+                        if kw == "DUAL": extracted_audio.append("DUAL")
+                        elif kw == "DUBBED": extracted_audio.append("Dubbed")
+                        elif kw == "MULTI": extracted_audio.append("Multi")
+                        elif kw == "MICDUB": extracted_audio.append("MicDub")
+                        elif kw == "LINEDUB": extracted_audio.append("LineDub")
+                        elif kw == "DTS": extracted_audio.append("DTS")
+                        elif kw == "AC3": extracted_audio.append("AC3")
+                        elif kw == "ATMOS": extracted_audio.append("Atmos")
+
+        specials_str = pref_sep.join(extracted_specials)
+        codec_str = pref_sep.join(extracted_codec)
+        audio_str = pref_sep.join(extracted_audio)
+
         fmt_dict = {
             "Title": safe_title,
-            "Year": f"({year_str})" if year_str else "",
+            "Year": year_str,
             "Quality": self.quality,
             "Season": season_str,
             "Episode": episode_str,
             "Season_Episode": season_episode,
             "Language": self.language,
             "Channel": self.channel,
+            "Specials": specials_str,
+            "Codec": codec_str,
+            "Audio": audio_str,
             "filename": (
                 os.path.splitext(self.original_name)[0] if self.original_name else ""
             ),
         }
 
+        def clean_filename(name, orig_template=""):
+            # Clean empty brackets
+            name = re.sub(r'\[\s*\]', '', name)
+            name = re.sub(r'\(\s*\)', '', name)
+            name = re.sub(r'\{\s*\}', '', name)
+
+            # Collapse multiple consecutive separators of the same type or mixed type
+            name = re.sub(r'[\._\s]{2,}', pref_sep, name)
+
+            # Restore single-space replacement logic based on the user's template
+            # If the user specifically excluded spaces in the template but used dots/underscores,
+            # we should replace any single spaces (e.g. from Title) with the preferred separator.
+            if orig_template and " " not in orig_template:
+                if "." in orig_template or "_" in orig_template:
+                    name = name.replace(" ", pref_sep)
+
+            # Final trim
+            name = name.strip('._ ')
+            return name
+
         if self.media_type == "general":
             template = self.data.get("general_name", "{filename}")
             try:
                 base_name = template.format(**fmt_dict)
+                base_name = clean_filename(base_name, template)
             except KeyError as e:
                 logger.warning(
                     f"KeyError {e} in general template '{template}', using fallback."
@@ -604,21 +687,22 @@ class TaskProcessor:
 
             try:
                 base_name = template.format(**fmt_dict)
+                base_name = clean_filename(base_name, template)
             except KeyError as e:
                 logger.warning(
                     f"KeyError {e} in template '{template}', using fallback."
+                )
+                fallback_template = (
+                    "{Title}.{Season_Episode}.{Quality}_[{Channel}]"
+                    if not self.is_subtitle
+                    else "{Title}.{Season_Episode}.{Language}"
                 )
                 base_name = (
                     f"{safe_title}.{season_episode}.{self.quality}_[{self.channel}]"
                     if not self.is_subtitle
                     else f"{safe_title}.{season_episode}.{self.language}"
                 )
-
-            if " " not in template and "." in template:
-                base_name = base_name.replace(" ", ".")
-                if "_" not in template:
-                    base_name = base_name.replace("_", ".")
-            base_name = base_name.replace("..", ".").replace(" .", ".").replace(". ", ".")
+                base_name = clean_filename(base_name, fallback_template)
 
             final_filename = f"{base_name}{ext}"
             meta_title = self.templates.get("title", "").format(
@@ -643,28 +727,22 @@ class TaskProcessor:
 
             try:
                 base_name = template.format(**fmt_dict)
-                if " " not in template and "." in template:
-                    base_name = base_name.replace(" ", ".")
-                    if "_" not in template:
-                        base_name = base_name.replace("_", ".")
-                base_name = re.sub(r"\s+", " ", base_name).strip()
-                base_name = (
-                    base_name.replace("..", ".").replace(" .", ".").replace(". ", ".")
-                )
+                base_name = clean_filename(base_name, template)
             except KeyError as e:
                 logger.warning(
                     f"KeyError {e} in template '{template}', using fallback."
+                )
+                fallback_template = (
+                    "{Title}.{Year}.{Quality}_[{Channel}]"
+                    if not self.is_subtitle
+                    else "{Title}.{Year}.{Language}"
                 )
                 base_name = (
                     f"{safe_title}.{year_str}.{self.quality}_[{self.channel}]"
                     if not self.is_subtitle
                     else f"{safe_title}.{year_str}.{self.language}"
                 )
-                if " " not in template and "." in template:
-                    base_name = base_name.replace(" ", ".")
-                    if "_" not in template:
-                        base_name = base_name.replace("_", ".")
-                base_name = base_name.replace("..", ".").replace(" .", ".").replace(". ", ".")
+                base_name = clean_filename(base_name, fallback_template)
 
             final_filename = f"{base_name}{ext}"
             meta_title = (

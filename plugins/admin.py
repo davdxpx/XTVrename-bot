@@ -114,6 +114,11 @@ def get_admin_templates_menu():
                     "📝 Edit Metadata Templates", callback_data="admin_templates"
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    "🔤 Preferred Separator", callback_data="admin_pref_separator"
+                )
+            ],
             [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
         ]
     )
@@ -1125,6 +1130,61 @@ async def admin_callback(client, callback_query):
             await callback_query.message.edit_text(
                 "🌐 **Public Mode Settings**\n\n" "Select a setting to edit:",
                 reply_markup=get_admin_public_settings_menu(),
+            )
+        except MessageNotModified:
+            pass
+    elif data == "admin_pref_separator":
+        try:
+            current_sep = await db.get_preferred_separator(user_id)
+            sep_display = "Space" if current_sep == " " else current_sep
+            await callback_query.message.edit_text(
+                f"🔤 **Preferred Separator**\n\n"
+                f"Choose the separator used when cleaning up filename templates.\n"
+                f"Current: **{sep_display}**\n\n"
+                f"Select your preferred separator below:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton("Dot (.)", callback_data="admin_set_sep_."),
+                            InlineKeyboardButton("Underscore (_)", callback_data="admin_set_sep__"),
+                        ],
+                        [
+                            InlineKeyboardButton("Space ( )", callback_data="admin_set_sep_space"),
+                        ],
+                        [InlineKeyboardButton("← Back", callback_data="admin_templates_menu")],
+                    ]
+                )
+            )
+        except MessageNotModified:
+            pass
+    elif data.startswith("admin_set_sep_"):
+        try:
+            new_sep = data.split("_set_sep_")[1]
+            if new_sep == "space":
+                new_sep = " "
+
+            await db.update_preferred_separator(new_sep, user_id)
+            sep_display = "Space" if new_sep == " " else new_sep
+
+            await callback_query.answer(f"Separator set to: {sep_display}", show_alert=True)
+
+            await callback_query.message.edit_text(
+                f"🔤 **Preferred Separator**\n\n"
+                f"Choose the separator used when cleaning up filename templates.\n"
+                f"Current: **{sep_display}**\n\n"
+                f"Select your preferred separator below:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton("Dot (.)", callback_data="admin_set_sep_."),
+                            InlineKeyboardButton("Underscore (_)", callback_data="admin_set_sep__"),
+                        ],
+                        [
+                            InlineKeyboardButton("Space ( )", callback_data="admin_set_sep_space"),
+                        ],
+                        [InlineKeyboardButton("← Back", callback_data="admin_templates_menu")],
+                    ]
+                )
             )
         except MessageNotModified:
             pass
