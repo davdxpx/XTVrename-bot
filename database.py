@@ -112,6 +112,7 @@ class Database:
                     "filename_templates": Config.DEFAULT_FILENAME_TEMPLATES,
                     "channel": Config.DEFAULT_CHANNEL,
                     "preferred_language": "en-US",
+                    "preferred_separator": ".",
                 }
                 await self.settings.insert_one(default_settings)
                 return default_settings
@@ -219,6 +220,24 @@ class Database:
             )
         except Exception as e:
             logger.error(f"Error updating preferred language for {doc_id}: {e}")
+
+
+    async def get_preferred_separator(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("preferred_separator", ".")
+        return "."
+
+    async def update_preferred_separator(self, value, user_id=None):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id}, {"$set": {"preferred_separator": value}}, upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error updating preferred separator for {doc_id}: {e}")
 
     async def get_dumb_channels(self, user_id=None):
         settings = await self.get_settings(user_id)
