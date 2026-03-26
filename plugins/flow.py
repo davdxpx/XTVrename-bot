@@ -1,5 +1,6 @@
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
+from pyrogram.exceptions import StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from utils.tmdb import tmdb
 from utils.auth import auth_filter
@@ -1413,7 +1414,6 @@ async def handle_subtitle_extractor_upload(client, message):
         from plugins.process import process_file
 
         # We need to stop propagation so `handle_file_upload` in `group=2` does not process this.
-        from pyrogram.exceptions import StopPropagation
         import asyncio
         asyncio.create_task(process_file(client, reply_msg, data))
         clear_session(user_id)
@@ -1442,10 +1442,12 @@ async def handle_password_input(client, message):
         # Clear the password state
         update_data(user_id, "archive_path", None)
         update_data(user_id, "archive_msg_id", None)
+        update_data(user_id, "archive_state", None)
         set_state(user_id, orig_state)
-        # Stop propagation so group=2 doesn't catch it
-        from pyrogram.exceptions import StopPropagation
+
         raise StopPropagation
+
+    raise ContinuePropagation
 
 async def process_extracted_archive(client, user_id, archive_path, msg, state, password=None):
     await msg.edit_text("📦 **Extracting Archive...**\n\nPlease wait.")
@@ -1707,6 +1709,25 @@ async def update_auto_detected_message(client, msg_id, user_id):
         f"**File:** `{fs['original_name']}`\n"
     )
 
+    # Check template for dynamic variables
+    templates = await db.get_filename_templates(user_id)
+    template_key = fs["type"] if not fs["is_subtitle"] else f"subtitles_{fs['type']}"
+    template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
+
+    has_specials = "{Specials}" in template
+    has_codec = "{Codec}" in template
+    has_audio = "{Audio}" in template
+
+    if has_specials and fs.get('specials'):
+        specials_str = " | ".join(fs['specials'])
+        text += f"**Detected Specials:** `{specials_str}`\n"
+
+    if has_codec and fs.get('codec'):
+        text += f"**Detected Codec:** `{fs['codec']}`\n"
+
+    if has_audio and fs.get('audio'):
+        text += f"**Detected Audio:** `{fs['audio']}`\n"
+
     if fs["is_subtitle"]:
         text += f"**Language:** `{fs['language']}`\n"
     else:
@@ -1716,37 +1737,39 @@ async def update_auto_detected_message(client, msg_id, user_id):
         text += f"**Season:** `{fs['season']}` | **Episode:** `E{fs['episode']:02d}`\n"
 
     buttons = []
+    buttons.append([InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")])
 
-    buttons.append(
-        [InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")]
-    )
+    # Collect all dynamic/standard buttons
+    dynamic_buttons = []
+    dynamic_buttons.append(InlineKeyboardButton("Change Type", callback_data=f"change_type_{msg_id}"))
 
-    row2 = []
-    row2.append(
-        InlineKeyboardButton("Change Type", callback_data=f"change_type_{msg_id}")
-    )
     if fs["type"] == "series":
-        row2.append(
-            InlineKeyboardButton("Change Show", callback_data=f"change_tmdb_{msg_id}")
-        )
+        dynamic_buttons.append(InlineKeyboardButton("Change Show", callback_data=f"change_tmdb_{msg_id}"))
+        dynamic_buttons.append(InlineKeyboardButton("S/E", callback_data=f"change_se_{msg_id}"))
     else:
-        row2.append(
-            InlineKeyboardButton("Change Movie", callback_data=f"change_tmdb_{msg_id}")
-        )
-    buttons.append(row2)
+        dynamic_buttons.append(InlineKeyboardButton("Change Movie", callback_data=f"change_tmdb_{msg_id}"))
 
-    row3 = []
-    if fs["type"] == "series":
-        row3.append(InlineKeyboardButton("S/E", callback_data=f"change_se_{msg_id}"))
     if not fs["is_subtitle"]:
-        row3.append(
-            InlineKeyboardButton("Quality", callback_data=f"qual_menu_{msg_id}")
-        )
-    buttons.append(row3)
+        dynamic_buttons.append(InlineKeyboardButton("Quality", callback_data=f"qual_menu_{msg_id}"))
 
-    buttons.append(
-        [InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")]
-    )
+    if has_codec:
+        dynamic_buttons.append(InlineKeyboardButton("📼 Change Codec", callback_data=f"ch_codec_{msg_id}"))
+    if has_specials:
+        dynamic_buttons.append(InlineKeyboardButton("🎬 Change Specials", callback_data=f"ch_specials_{msg_id}"))
+    if has_audio:
+        dynamic_buttons.append(InlineKeyboardButton("🔊 Change Audio", callback_data=f"ch_audio_{msg_id}"))
+
+    # Group dynamically into rows of exactly two buttons
+    current_row = []
+    for btn in dynamic_buttons:
+        current_row.append(btn)
+        if len(current_row) == 2:
+            buttons.append(current_row)
+            current_row = []
+    if current_row:
+        buttons.append(current_row)
+
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")])
 
     try:
         await client.edit_message_text(

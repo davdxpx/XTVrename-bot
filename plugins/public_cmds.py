@@ -1,5 +1,6 @@
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
+from pyrogram.exceptions import StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import Config
 from database import db
@@ -1041,7 +1042,6 @@ async def user_settings_callback(client, callback_query):
             pass
 
 
-from pyrogram import ContinuePropagation
 
 
 @Client.on_message(filters.photo & filters.private, group=1)
@@ -1174,6 +1174,7 @@ async def handle_user_text(client, message):
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)
+        raise StopPropagation
 
     elif state.startswith("awaiting_user_fn_template_"):
         field = state.replace("awaiting_user_fn_template_", "")
@@ -1195,6 +1196,7 @@ async def handle_user_text(client, message):
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)
+        raise StopPropagation
 
     elif state == "awaiting_user_channel":
         new_channel = message.text
