@@ -1299,6 +1299,7 @@ async def handle_file_upload(client, message):
 
     queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, message.id)
 
+    metadata = analyze_filename(file_name)
     data = {
         "file_message": message,
         "file_chat_id": message.chat.id,
@@ -1313,6 +1314,9 @@ async def handle_file_upload(client, message):
         "dumb_channel": session_data.get("dumb_channel"),
         "batch_id": batch_id,
         "item_id": item_id,
+        "specials": metadata.get("specials", []),
+        "codec": metadata.get("codec", ""),
+        "audio": metadata.get("audio", ""),
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})
 
@@ -1767,13 +1771,36 @@ async def update_confirmation_message(client, msg_id, user_id):
 
     sd = get_data(user_id)
     is_sub = sd.get("is_subtitle")
+    media_type = sd.get("type")
 
     text = f"📄 **File:** `{fs['original_name']}`\n\n"
+
+    # Check template for dynamic variables
+    templates = await db.get_filename_templates(user_id)
+    template_key = media_type if not is_sub else f"subtitles_{media_type}"
+    template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
+
+    has_specials = "{Specials}" in template
+    has_codec = "{Codec}" in template
+    has_audio = "{Audio}" in template
+
+    if has_specials and fs.get('specials'):
+        specials_str = " | ".join(fs['specials'])
+        text += f"**Detected Specials:** `{specials_str}`\n"
+
+    if has_codec and fs.get('codec'):
+        text += f"**Detected Codec:** `{fs['codec']}`\n"
+
+    if has_audio and fs.get('audio'):
+        text += f"**Detected Audio:** `{fs['audio']}`\n"
 
     if is_sub:
         text += f"**Language:** `{fs.get('language')}`\n"
     else:
         text += f"**Detected Quality:** `{fs['quality']}`\n"
+
+    if media_type == "series":
+        text += f"**Season:** `{fs['season']}` | **Episode:** `E{fs['episode']:02d}`\n"
 
     buttons = []
     row1 = [InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")]
@@ -1784,8 +1811,7 @@ async def update_confirmation_message(client, msg_id, user_id):
             InlineKeyboardButton("Change Quality", callback_data=f"qual_menu_{msg_id}")
         )
 
-    if sd.get("type") == "series":
-        text += f"**Season:** `{fs['season']}` | **Episode:** `E{fs['episode']:02d}`\n"
+    if media_type == "series":
         row2.append(
             InlineKeyboardButton("Change Episode", callback_data=f"ep_change_{msg_id}")
         )
@@ -1795,9 +1821,20 @@ async def update_confirmation_message(client, msg_id, user_id):
             )
         )
 
+    row3 = []
+    if has_codec:
+        row3.append(InlineKeyboardButton("📼 Change Codec", callback_data=f"ch_codec_{msg_id}"))
+    if has_specials:
+        row3.append(InlineKeyboardButton("🎬 Change Specials", callback_data=f"ch_specials_{msg_id}"))
+    if has_audio:
+        row3.append(InlineKeyboardButton("🔊 Change Audio", callback_data=f"ch_audio_{msg_id}"))
+
     buttons.append(row1)
     if row2:
         buttons.append(row2)
+    if row3:
+        buttons.append(row3)
+
     buttons.append(
         [InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")]
     )
@@ -2425,3 +2462,203 @@ async def handle_correct_tmdb_selection(client, callback_query):
 # Backup Channel @XTVhome
 # Contact on Telegram @davdxpx
 # --------------------------------------------------------------------------
+
+@Client.on_callback_query(filters.regex(r"^ch_codec_") & auth_filter)
+async def handle_change_codec(client, callback_query):
+    msg_id = int(callback_query.data.split("_")[2])
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    fs = file_sessions[msg_id]
+    current = fs.get("codec", "")
+
+    codecs = ["x264", "x265", "HEVC"]
+    buttons = []
+
+    row = []
+    for c in codecs:
+        text = f"✅ {c}" if c == current else c
+        row.append(InlineKeyboardButton(text, callback_data=f"set_codec_{c}_{msg_id}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    # Option to clear codec
+    text = f"✅ None" if not current else "None"
+    buttons.append([InlineKeyboardButton(text, callback_data=f"set_codec_none_{msg_id}")])
+
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"back_confirm_{msg_id}")])
+
+    try:
+        await callback_query.message.edit_text(
+            "📼 **Select Codec:**\nChoose a codec for the template:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except MessageNotModified:
+        pass
+
+@Client.on_callback_query(filters.regex(r"^set_codec_") & auth_filter)
+async def handle_set_codec(client, callback_query):
+    parts = callback_query.data.split("_")
+    codec = parts[2]
+    msg_id = int(parts[3])
+
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    if codec == "none":
+        file_sessions[msg_id]["codec"] = ""
+    else:
+        file_sessions[msg_id]["codec"] = codec
+
+    await update_confirmation_message(client, msg_id, callback_query.from_user.id)
+
+@Client.on_callback_query(filters.regex(r"^ch_audio_") & auth_filter)
+async def handle_change_audio(client, callback_query):
+    msg_id = int(callback_query.data.split("_")[2])
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    fs = file_sessions[msg_id]
+    current = fs.get("audio", "")
+
+    audios = ["DUAL", "DL", "Dubbed", "Multi", "MicDub", "LineDub", "DTS", "AC3", "Atmos"]
+    buttons = []
+
+    row = []
+    for a in audios:
+        text = f"✅ {a}" if a == current else a
+        row.append(InlineKeyboardButton(text, callback_data=f"set_audio_{a}_{msg_id}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    text = f"✅ None" if not current else "None"
+    buttons.append([InlineKeyboardButton(text, callback_data=f"set_audio_none_{msg_id}")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"back_confirm_{msg_id}")])
+
+    try:
+        await callback_query.message.edit_text(
+            "🔊 **Select Audio:**\nChoose an audio tag for the template:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except MessageNotModified:
+        pass
+
+@Client.on_callback_query(filters.regex(r"^set_audio_") & auth_filter)
+async def handle_set_audio(client, callback_query):
+    parts = callback_query.data.split("_")
+    audio = parts[2]
+    msg_id = int(parts[3])
+
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    if audio == "none":
+        file_sessions[msg_id]["audio"] = ""
+    else:
+        file_sessions[msg_id]["audio"] = audio
+
+    await update_confirmation_message(client, msg_id, callback_query.from_user.id)
+
+@Client.on_callback_query(filters.regex(r"^ch_specials_") & auth_filter)
+async def handle_change_specials(client, callback_query):
+    msg_id = int(callback_query.data.split("_")[2])
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    fs = file_sessions[msg_id]
+    current = fs.get("specials", [])
+
+    specials_options = ["BluRay", "WEB-DL", "WEBRip", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT", "BDRip"]
+    buttons = []
+
+    row = []
+    for s in specials_options:
+        text = f"✅ {s}" if s in current else s
+        row.append(InlineKeyboardButton(text, callback_data=f"toggle_spc_{s}_{msg_id}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    buttons.append([
+        InlineKeyboardButton("❌ Clear All", callback_data=f"clear_spc_{msg_id}"),
+        InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")
+    ])
+
+    try:
+        await callback_query.message.edit_text(
+            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed):",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except MessageNotModified:
+        pass
+
+@Client.on_callback_query(filters.regex(r"^toggle_spc_") & auth_filter)
+async def handle_toggle_specials(client, callback_query):
+    parts = callback_query.data.split("_")
+    special = parts[2]
+    msg_id = int(parts[3])
+
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    fs = file_sessions[msg_id]
+    current = fs.get("specials", [])
+
+    if special in current:
+        current.remove(special)
+    else:
+        current.append(special)
+
+    fs["specials"] = current
+
+    # Refresh the same menu
+    specials_options = ["BluRay", "WEB-DL", "WEBRip", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT", "BDRip"]
+    buttons = []
+    row = []
+    for s in specials_options:
+        text = f"✅ {s}" if s in current else s
+        row.append(InlineKeyboardButton(text, callback_data=f"toggle_spc_{s}_{msg_id}"))
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    buttons.append([
+        InlineKeyboardButton("❌ Clear All", callback_data=f"clear_spc_{msg_id}"),
+        InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")
+    ])
+
+    try:
+        await callback_query.message.edit_text(
+            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed):",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except MessageNotModified:
+        pass
+
+@Client.on_callback_query(filters.regex(r"^clear_spc_") & auth_filter)
+async def handle_clear_specials(client, callback_query):
+    msg_id = int(callback_query.data.split("_")[2])
+
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    file_sessions[msg_id]["specials"] = []
+
+    await update_confirmation_message(client, msg_id, callback_query.from_user.id)
