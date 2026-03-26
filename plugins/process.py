@@ -542,60 +542,64 @@ class TaskProcessor:
         season_episode = f"{season_str}{episode_str}"
         year_str = str(self.year) if self.year else ""
 
-        # Extract extra metadata from original filename
         pref_sep = await db.get_preferred_separator(self.user_id) if hasattr(self, 'user_id') else "."
 
-        extracted_specials = []
-        extracted_codec = []
-        extracted_audio = []
+        # Use provided metadata from data dict (from flow.py user selections/detection) if present
+        # otherwise fallback to extracting it here (for direct api/batch runs that might bypass flow)
+        if "specials" in self.data:
+            extracted_specials = self.data["specials"]
+        else:
+            extracted_specials = []
+            if self.original_name:
+                orig_name_upper = self.original_name.upper()
+                specials_keywords = ["BLURAY", "BLUERAY", "BDRIP", "WEB-DL", "WEBRIP", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT"]
+                for kw in specials_keywords:
+                    if kw in orig_name_upper:
+                        if kw == "WEB-DL": extracted_specials.append("WEB-DL")
+                        elif kw == "WEBRIP": extracted_specials.append("WEBRip")
+                        elif kw == "HDR": extracted_specials.append("HDR")
+                        elif kw == "REMUX": extracted_specials.append("REMUX")
+                        elif kw == "PROPER": extracted_specials.append("PROPER")
+                        elif kw == "REPACK": extracted_specials.append("REPACK")
+                        elif kw == "UNCUT": extracted_specials.append("UNCUT")
+                        elif kw == "BDRIP": extracted_specials.append("BDRip")
+                        else: extracted_specials.append("BluRay")
+                extracted_specials = list(dict.fromkeys(extracted_specials))
 
-        if self.original_name:
-            orig_name_upper = self.original_name.upper()
+        if "codec" in self.data:
+            extracted_codec = [self.data["codec"]] if self.data["codec"] else []
+        else:
+            extracted_codec = []
+            if self.original_name:
+                orig_name_upper = self.original_name.upper()
+                codec_keywords = ["X264", "X265", "HEVC"]
+                for kw in codec_keywords:
+                    if kw in orig_name_upper:
+                        if kw == "X264": extracted_codec.append("x264")
+                        elif kw == "X265": extracted_codec.append("x265")
+                        elif kw == "HEVC": extracted_codec.append("HEVC")
 
-            # Extract Specials
-            specials_keywords = ["BLURAY", "BLUERAY", "BDRIP", "WEB-DL", "WEBRIP", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT"]
-            for kw in specials_keywords:
-                if kw in orig_name_upper:
-                    # Maintain the exact casing if possible, or just use a nice capitalized version
-                    if kw == "WEB-DL": extracted_specials.append("WEB-DL")
-                    elif kw == "WEBRIP": extracted_specials.append("WEBRip")
-                    elif kw == "HDR": extracted_specials.append("HDR")
-                    elif kw == "REMUX": extracted_specials.append("REMUX")
-                    elif kw == "PROPER": extracted_specials.append("PROPER")
-                    elif kw == "REPACK": extracted_specials.append("REPACK")
-                    elif kw == "UNCUT": extracted_specials.append("UNCUT")
-                    elif kw == "BDRIP": extracted_specials.append("BDRip")
-                    else: extracted_specials.append("BluRay") # Covers BluRay/BlueRay
-
-            # Deduplicate while preserving order
-            extracted_specials = list(dict.fromkeys(extracted_specials))
-
-            # Extract Codec
-            codec_keywords = ["X264", "X265", "HEVC"]
-            for kw in codec_keywords:
-                if kw in orig_name_upper:
-                    if kw == "X264": extracted_codec.append("x264")
-                    elif kw == "X265": extracted_codec.append("x265")
-                    elif kw == "HEVC": extracted_codec.append("HEVC")
-
-            # Extract Audio
-            audio_keywords = ["DUAL", "DL", "DUBBED", "MULTI", "MICDUB", "LINEDUB", "DTS", "AC3", "ATMOS"]
-            for kw in audio_keywords:
-                # Use regex to ensure word boundaries for short/ambiguous terms like DL, DTS, AC3
-                # For "DL", ensure it's not preceded by "WEB-"
-                if kw == "DL":
-                    if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
-                        extracted_audio.append("DL")
-                else:
-                    if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
-                        if kw == "DUAL": extracted_audio.append("DUAL")
-                        elif kw == "DUBBED": extracted_audio.append("Dubbed")
-                        elif kw == "MULTI": extracted_audio.append("Multi")
-                        elif kw == "MICDUB": extracted_audio.append("MicDub")
-                        elif kw == "LINEDUB": extracted_audio.append("LineDub")
-                        elif kw == "DTS": extracted_audio.append("DTS")
-                        elif kw == "AC3": extracted_audio.append("AC3")
-                        elif kw == "ATMOS": extracted_audio.append("Atmos")
+        if "audio" in self.data:
+            extracted_audio = [self.data["audio"]] if self.data["audio"] else []
+        else:
+            extracted_audio = []
+            if self.original_name:
+                orig_name_upper = self.original_name.upper()
+                audio_keywords = ["DUAL", "DL", "DUBBED", "MULTI", "MICDUB", "LINEDUB", "DTS", "AC3", "ATMOS"]
+                for kw in audio_keywords:
+                    if kw == "DL":
+                        if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
+                            extracted_audio.append("DL")
+                    else:
+                        if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
+                            if kw == "DUAL": extracted_audio.append("DUAL")
+                            elif kw == "DUBBED": extracted_audio.append("Dubbed")
+                            elif kw == "MULTI": extracted_audio.append("Multi")
+                            elif kw == "MICDUB": extracted_audio.append("MicDub")
+                            elif kw == "LINEDUB": extracted_audio.append("LineDub")
+                            elif kw == "DTS": extracted_audio.append("DTS")
+                            elif kw == "AC3": extracted_audio.append("AC3")
+                            elif kw == "ATMOS": extracted_audio.append("Atmos")
 
         specials_str = pref_sep.join(extracted_specials)
         codec_str = pref_sep.join(extracted_codec)

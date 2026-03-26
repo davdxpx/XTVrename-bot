@@ -1,3 +1,4 @@
+import re
 from guessit import guessit
 from utils.tmdb import tmdb
 from utils.log import get_logger
@@ -31,6 +32,7 @@ def analyze_filename(filename):
             else:
                 quality = "720p"
 
+
         language = "en"
         if guess.get("language"):
             try:
@@ -43,6 +45,51 @@ def analyze_filename(filename):
             except:
                 pass
 
+        # Extract extra metadata from filename (Specials, Codec, Audio)
+        extracted_specials = []
+        extracted_codec = []
+        extracted_audio = []
+
+        orig_name_upper = filename.upper()
+
+        specials_keywords = ["BLURAY", "BLUERAY", "BDRIP", "WEB-DL", "WEBRIP", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT"]
+        for kw in specials_keywords:
+            if kw in orig_name_upper:
+                if kw == "WEB-DL": extracted_specials.append("WEB-DL")
+                elif kw == "WEBRIP": extracted_specials.append("WEBRip")
+                elif kw == "HDR": extracted_specials.append("HDR")
+                elif kw == "REMUX": extracted_specials.append("REMUX")
+                elif kw == "PROPER": extracted_specials.append("PROPER")
+                elif kw == "REPACK": extracted_specials.append("REPACK")
+                elif kw == "UNCUT": extracted_specials.append("UNCUT")
+                elif kw == "BDRIP": extracted_specials.append("BDRip")
+                else: extracted_specials.append("BluRay")
+
+        extracted_specials = list(dict.fromkeys(extracted_specials))
+
+        codec_keywords = ["X264", "X265", "HEVC"]
+        for kw in codec_keywords:
+            if kw in orig_name_upper:
+                if kw == "X264": extracted_codec.append("x264")
+                elif kw == "X265": extracted_codec.append("x265")
+                elif kw == "HEVC": extracted_codec.append("HEVC")
+
+        audio_keywords = ["DUAL", "DL", "DUBBED", "MULTI", "MICDUB", "LINEDUB", "DTS", "AC3", "ATMOS"]
+        for kw in audio_keywords:
+            if kw == "DL":
+                if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
+                    extracted_audio.append("DL")
+            else:
+                if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
+                    if kw == "DUAL": extracted_audio.append("DUAL")
+                    elif kw == "DUBBED": extracted_audio.append("Dubbed")
+                    elif kw == "MULTI": extracted_audio.append("Multi")
+                    elif kw == "MICDUB": extracted_audio.append("MicDub")
+                    elif kw == "LINEDUB": extracted_audio.append("LineDub")
+                    elif kw == "DTS": extracted_audio.append("DTS")
+                    elif kw == "AC3": extracted_audio.append("AC3")
+                    elif kw == "ATMOS": extracted_audio.append("Atmos")
+
         return {
             "title": guess.get("title"),
             "year": guess.get("year"),
@@ -53,7 +100,11 @@ def analyze_filename(filename):
             "is_subtitle": is_subtitle,
             "container": container,
             "language": language,
+            "specials": extracted_specials,
+            "codec": extracted_codec[0] if extracted_codec else "",
+            "audio": extracted_audio[0] if extracted_audio else "",
         }
+
     except Exception as e:
         logger.error(f"Error analyzing filename '{filename}': {e}")
         return {
