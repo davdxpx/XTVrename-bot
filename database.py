@@ -239,6 +239,41 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating preferred separator for {doc_id}: {e}")
 
+
+    async def get_workflow_mode(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("workflow_mode", "smart_media_mode")
+        return "smart_media_mode"
+
+    async def update_workflow_mode(self, mode: str, user_id=None):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id}, {"$set": {"workflow_mode": mode}}, upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error updating workflow mode for {doc_id}: {e}")
+
+    async def has_completed_setup(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("setup_completed", False)
+        return False
+
+    async def mark_setup_completed(self, user_id=None, completed: bool = True):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id}, {"$set": {"setup_completed": completed}}, upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error updating setup_completed for {doc_id}: {e}")
+
     async def get_dumb_channels(self, user_id=None):
         settings = await self.get_settings(user_id)
         if settings:

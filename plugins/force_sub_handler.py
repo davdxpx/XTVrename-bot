@@ -114,3 +114,116 @@ async def handle_bot_added_to_channel(client, update):
 # Backup Channel @XTVhome
 # Contact on Telegram @davdxpx
 # --------------------------------------------------------------------------
+
+@Client.on_chat_member_updated(filters.channel, group=1)
+async def on_user_join_channel(client, update):
+    # Ignore bot updates for this specific logic
+    if update.new_chat_member and update.new_chat_member.user.is_bot:
+        return
+
+    # We only care if user joined
+    joined = False
+    valid_statuses = [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
+
+    if not update.old_chat_member:
+        if update.new_chat_member and update.new_chat_member.status in valid_statuses:
+            joined = True
+    else:
+        if update.old_chat_member.status not in valid_statuses and update.new_chat_member.status in valid_statuses:
+            joined = True
+
+    if not joined:
+        return
+
+    user = update.new_chat_member.user
+
+    if not Config.PUBLIC_MODE:
+        return
+
+    # Verify if they joined one of the force sub channels
+    config = await db.get_public_config()
+    force_sub_channels = config.get("force_sub_channels", [])
+    legacy_channel = config.get("force_sub_channel")
+
+    channels_to_check = []
+    if force_sub_channels:
+        for ch in force_sub_channels:
+            if ch.get("id"):
+                channels_to_check.append(str(ch["id"]))
+    elif legacy_channel:
+        channels_to_check.append(str(legacy_channel))
+
+    chat_id_str = str(update.chat.id)
+    chat_username = f"@{update.chat.username}" if update.chat.username else None
+
+    is_force_sub_channel = False
+    if chat_id_str in channels_to_check:
+        is_force_sub_channel = True
+    elif chat_username and chat_username in channels_to_check:
+        is_force_sub_channel = True
+
+    if not is_force_sub_channel:
+        return
+
+    logger.debug(f"User {user.id} joined force sub channel {update.chat.id}")
+
+    # They joined a force sub channel. Now, check if they have completed the setup.
+    has_setup = await db.has_completed_setup(user.id)
+    if has_setup:
+        return
+
+    # Send the starter setup message
+    await send_starter_setup_message(client, user.id, user.first_name)
+
+
+async def send_starter_setup_message(client, user_id, first_name=""):
+    bot_name = "**𝕏TV Rename Bot**"
+    if Config.PUBLIC_MODE:
+        config = await db.get_public_config()
+        bot_name = f"**{config.get('bot_name', 'XTV Rename Bot')}**"
+
+    text = (
+        f"👋 **Welcome to {bot_name}, {first_name}!**\\n\\n"
+        "You are now ready to use the bot. To give you the best experience, "
+        "please select what you primarily want to use this bot for:\\n\\n"
+        "**🧠 Smart Media Mode:** Best for TV Shows and Movies. I will automatically detect seasons, episodes, and download TMDb posters/metadata!\\n\\n"
+        "**⚡ Quick Rename Mode:** Best for Personal Videos, Anime, or general files. I will skip auto-detection and just let you rename the file immediately."
+    )
+
+    markup = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🧠 Smart Media Mode", callback_data="setup_mode_smart")],
+            [InlineKeyboardButton("⚡ Quick Rename Mode", callback_data="setup_mode_quick")]
+        ]
+    )
+
+    try:
+        await client.send_message(chat_id=user_id, text=text, reply_markup=markup)
+    except Exception as e:
+        logger.error(f"Failed to send starter setup message to {user_id}: {e}")
+
+
+@Client.on_callback_query(filters.regex(r"^setup_mode_"))
+async def handle_setup_mode_callback(client, callback_query):
+    user_id = callback_query.from_user.id
+    data = callback_query.data
+
+    if data == "setup_mode_smart":
+        mode = "smart_media_mode"
+        mode_str = "🧠 Smart Media Mode"
+    else:
+        mode = "quick_rename_mode"
+        mode_str = "⚡ Quick Rename Mode"
+
+    await db.update_workflow_mode(mode, user_id)
+    await db.mark_setup_completed(user_id, True)
+
+    text = (
+        f"✅ **Setup Complete!**\\n\\n"
+        f"You have selected **{mode_str}**.\\n"
+        "*(You can change this anytime via /settings)*\\n\\n"
+        "**💡 Tip:** Simply send or forward any file to me right now to begin!"
+    )
+
+    await callback_query.message.edit_text(text)
+    await callback_query.answer("Preferences saved!", show_alert=False)

@@ -11,6 +11,7 @@ logger.info("Loading plugins.start...")
 from database import db
 from utils.auth import check_force_sub
 from utils.gate import send_force_sub_gate, check_and_send_welcome
+from plugins.force_sub_handler import send_starter_setup_message
 
 
 @Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)
@@ -40,6 +41,15 @@ async def handle_start_command_unique(client, message):
     user_usage = await db.get_user_usage(user_id)
     if not user_usage:
         is_new_user = True
+
+    # NEW FEATURE: Starter Setup Message
+    # Only in PUBLIC mode (if user hasn't completed setup yet)
+    if Config.PUBLIC_MODE:
+        has_setup = await db.has_completed_setup(user_id)
+        if not has_setup:
+            await db.ensure_user(user_id=message.from_user.id, first_name=message.from_user.first_name, username=message.from_user.username, last_name=message.from_user.last_name, language_code=message.from_user.language_code, is_bot=message.from_user.is_bot)
+            await send_starter_setup_message(client, user_id, message.from_user.first_name)
+            return
 
     await db.ensure_user(
         user_id=message.from_user.id,

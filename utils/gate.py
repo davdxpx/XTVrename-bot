@@ -75,6 +75,11 @@ async def check_and_send_welcome(client, message, config):
     if user_id not in welcomed_users:
         welcomed_users.add(user_id)
 
+        # If they haven't completed setup, don't spam the welcome message because the setup menu will pop up
+        has_setup = await db.has_completed_setup(user_id)
+        if not has_setup:
+            return
+
         # Then send the message
         welcome_text = config.get("force_sub_welcome_text") or "✅ Welcome aboard! You're all set. Send your file and let's go."
 

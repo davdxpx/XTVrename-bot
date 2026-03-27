@@ -770,24 +770,52 @@ async def handle_gen_send_as(client, callback_query):
         pass
 
 
+from pyrogram.types import ForceReply
+
 @Client.on_callback_query(filters.regex(r"^gen_prompt_rename$"))
 async def handle_gen_prompt_rename(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
     set_state(user_id, "awaiting_general_name")
 
+    session_data = get_data(user_id)
+    file_msg_id = session_data.get("file_message_id")
+    file_chat_id = session_data.get("file_chat_id")
+
     try:
-        await callback_query.message.edit_text(
-            "✏️ **Enter the new name for the file:**\n\n"
-            "You can use variables like `{filename}`, `{Season_Episode}`, `{Quality}`, `{Year}`, `{Title}`.\n"
-            "*(The extension is added automatically)*\n\n"
-            "Example: `My File - {filename}`",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-            ),
-        )
-    except MessageNotModified:
+        await callback_query.message.delete()
+    except Exception:
         pass
+
+    text = (
+        "✏️ **Enter the new name for this file:**\n\n"
+        "You can use variables like `{filename}`, `{Season_Episode}`, `{Quality}`, `{Year}`, `{Title}`.\n"
+        "*(The extension is added automatically)*\n\n"
+        "Example: `My File - {filename}`"
+    )
+
+    if file_msg_id and file_chat_id:
+        try:
+            # Send as a reply to the original file message using ForceReply
+            await client.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_to_message_id=file_msg_id,
+                reply_markup=ForceReply(selective=True, placeholder="Type new name here...")
+            )
+        except Exception:
+            # Fallback if the message was deleted
+            await client.send_message(
+                chat_id=user_id,
+                text=text,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+            )
+    else:
+        await client.send_message(
+            chat_id=user_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+        )
 
 
 @Client.on_callback_query(filters.regex(r"^subtitle_extractor_menu$"))
@@ -1214,10 +1242,23 @@ async def handle_file_upload(client, message):
 
     if state != "awaiting_file_upload":
         if state is None:
-            await handle_auto_detection(client, message)
+            user_mode = await db.get_workflow_mode(user_id if Config.PUBLIC_MODE else None)
+            if user_mode == "quick_rename_mode":
+                # Act like they pressed "General" from the start menu
+                # But we already have the file! So we bypass the menu.
+                # Actually, handle_auto_detection does exactly this but with TMDb.
+                # To do Quick Rename (General), we need to set state to general
+                # and pretend we just uploaded a file for general mode.
+                set_state(user_id, "awaiting_file_upload")
+                update_data(user_id, "type", "general")
+                # Now the code below will run normally (as if state was awaiting_file_upload)
+            else:
+                await handle_auto_detection(client, message)
+                return
         elif state == "awaiting_convert_file":
             pass
-        return
+        else:
+            return
 
     if message.photo:
         file_name = f"image_{message.id}.jpg"

@@ -1483,12 +1483,60 @@ async def admin_callback(client, callback_query):
                                 "🌍 Preferred Language", callback_data="admin_general_language"
                             )
                         ],
+                        [
+                            InlineKeyboardButton(
+                                "⚙️ Workflow Mode", callback_data="admin_general_workflow"
+                            )
+                        ],
                         [InlineKeyboardButton("← Back", callback_data="admin_main")],
                     ]
                 ),
             )
         except MessageNotModified:
             pass
+    elif data == "admin_general_workflow":
+        current_mode = await db.get_workflow_mode(None)
+        mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Rename Mode"
+        try:
+            await callback_query.message.edit_text(
+                f"⚙️ **Global Workflow Mode Settings**\n\n"
+                f"Current Mode: `{mode_str}`\n\n"
+                "**🧠 Smart Media Mode:** Auto-detects Series/Movies and fetches TMDb metadata.\n"
+                "**⚡ Quick Rename Mode:** Bypasses auto-detection and goes straight to general rename (great for personal/general files).\n\n"
+                "Select the default mode for all users:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "✅ Smart Media Mode" if current_mode == "smart_media_mode" else "🧠 Smart Media Mode",
+                                callback_data="set_admin_workflow_smart"
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "✅ Quick Rename Mode" if current_mode == "quick_rename_mode" else "⚡ Quick Rename Mode",
+                                callback_data="set_admin_workflow_quick"
+                            )
+                        ],
+                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
+                    ]
+                ),
+            )
+        except MessageNotModified:
+            pass
+    elif data.startswith("set_admin_workflow_"):
+        new_mode = "smart_media_mode" if data.endswith("smart") else "quick_rename_mode"
+        await db.update_workflow_mode(new_mode, None)
+        await callback_query.answer("Global Workflow Mode updated!", show_alert=True)
+        # Re-trigger the menu
+        from plugins.admin import handle_admin_callbacks
+        class MockQuery:
+            def __init__(self, msg, usr):
+                self.message = msg
+                self.from_user = usr
+                self.data = "admin_general_workflow"
+            async def answer(self, *args, **kwargs): pass
+        await handle_admin_callbacks(client, MockQuery(callback_query.message, callback_query.from_user))
     elif data == "admin_general_channel":
         current_channel = await db.get_channel(None) # Use None for global settings
         try:
