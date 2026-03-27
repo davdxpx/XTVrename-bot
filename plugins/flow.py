@@ -339,10 +339,14 @@ async def handle_text_input(client, message):
         user_id = message.from_user.id
         session_data = get_data(user_id)
         file_msg_id = session_data.get("file_message_id")
+        prompt_msg_id = session_data.get("rename_prompt_msg_id")
 
-        # Security check: MUST be a reply to the file message or prompt message
-        if file_msg_id and (not message.reply_to_message or message.reply_to_message.id != file_msg_id):
-            await message.reply_text("⚠️ **Please reply directly to the file message** when sending the new name, so I know which file you are renaming.", quote=True)
+        # Security check: MUST be a reply to the bot's prompt message (which has ForceReply)
+        # We allow replying directly to the file message too just in case.
+        valid_reply_ids = [file_msg_id, prompt_msg_id]
+
+        if file_msg_id and (not message.reply_to_message or message.reply_to_message.id not in valid_reply_ids):
+            await message.reply_text("⚠️ **Please reply directly to my prompt message** when sending the new name, so I know which file you are renaming.", quote=True)
             return
 
         new_name = message.text.strip()
@@ -829,10 +833,11 @@ async def handle_gen_prompt_rename(client, callback_query):
         "Example: `My File - {filename}`"
     )
 
+    prompt_msg = None
     if file_msg_id and file_chat_id:
         try:
             # Send as a reply to the original file message using ForceReply
-            await client.send_message(
+            prompt_msg = await client.send_message(
                 chat_id=user_id,
                 text=text,
                 reply_to_message_id=file_msg_id,
@@ -840,17 +845,20 @@ async def handle_gen_prompt_rename(client, callback_query):
             )
         except Exception:
             # Fallback if the message was deleted
-            await client.send_message(
+            prompt_msg = await client.send_message(
                 chat_id=user_id,
                 text=text,
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
             )
     else:
-        await client.send_message(
+        prompt_msg = await client.send_message(
             chat_id=user_id,
             text=text,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
         )
+
+    if prompt_msg:
+        update_data(user_id, "rename_prompt_msg_id", prompt_msg.id)
 
 
 @Client.on_callback_query(filters.regex(r"^subtitle_extractor_menu$"))
