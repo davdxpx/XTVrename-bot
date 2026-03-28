@@ -1673,7 +1673,10 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             "dumb_channel": default_dumb_channel,
             "batch_id": batch_id,
             "item_id": item_id,
-            "extract_dir": extract_dir
+            "extract_dir": extract_dir,
+            "specials": metadata.get("specials", []),
+            "codec": metadata.get("codec", ""),
+            "audio": metadata.get("audio", ""),
         }
 
         batch_sessions[user_id]["items"].append({"message": dummy_msg, "data": data})
@@ -1784,6 +1787,9 @@ async def handle_auto_detection(client, message):
         "dumb_channel": default_dumb_channel,
         "batch_id": batch_id,
         "item_id": item_id,
+        "specials": metadata.get("specials", []),
+        "codec": metadata.get("codec", ""),
+        "audio": metadata.get("audio", ""),
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})
 

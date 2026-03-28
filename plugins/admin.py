@@ -1522,14 +1522,14 @@ async def admin_callback(client, callback_query):
         await db.update_workflow_mode(new_mode, None)
         await callback_query.answer("Global Workflow Mode updated!", show_alert=True)
 
-        from plugins.admin import handle_admin_callbacks
+        from plugins.admin import admin_callback
         class MockQuery:
             def __init__(self, msg, usr):
                 self.message = msg
                 self.from_user = usr
                 self.data = "admin_general_workflow"
             async def answer(self, *args, **kwargs): pass
-        await handle_admin_callbacks(client, MockQuery(callback_query.message, callback_query.from_user))
+        await admin_callback(client, MockQuery(callback_query.message, callback_query.from_user))
     elif data == "admin_general_channel":
         current_channel = await db.get_channel(None)
         try:
