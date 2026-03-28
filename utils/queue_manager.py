@@ -1,9 +1,10 @@
+# --- Imports ---
 import asyncio
 import uuid
 import time
 from typing import Dict, List, Any, Optional
 
-
+# === Classes ===
 class QueueItem:
     def __init__(
         self, item_id: str, sort_key: tuple, display_name: str, message_id: int
@@ -14,7 +15,6 @@ class QueueItem:
         self.message_id = message_id
         self.status = "processing"
         self.error = None
-
 
 class BatchQueue:
     def __init__(self, batch_id: str):
@@ -43,7 +43,6 @@ class BatchQueue:
 
     def is_batch_complete(self) -> bool:
         return all(item.status in ["done", "done_dumb", "done_user", "failed"] for item in self.items.values())
-
 
 class QueueManager:
     def __init__(self):
@@ -110,7 +109,7 @@ class QueueManager:
         text += f"**Processed:** `{success_count}/{total}` files successfully.\n"
 
         if success_items:
-            # Show a brief list if it's not too long, or just a range/summary
+
             if len(success_items) <= 5:
                 items_str = ", ".join(success_items)
                 text += f"**Included:** `{items_str}`\n"
@@ -122,7 +121,6 @@ class QueueManager:
 
         text += f"\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
         return text
-
 
 queue_manager = QueueManager()
 

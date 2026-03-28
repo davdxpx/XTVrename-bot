@@ -1,3 +1,4 @@
+# --- Imports ---
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -13,8 +14,9 @@ from utils.auth import check_force_sub
 from utils.gate import send_force_sub_gate, check_and_send_welcome
 from plugins.force_sub_handler import send_starter_setup_message
 
-
 @Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)
+
+# --- Handlers ---
 async def handle_start_command_unique(client, message):
     user_id = message.from_user.id
     logger.debug(f"CMD received: {message.text} from {user_id}")
@@ -36,14 +38,11 @@ async def handle_start_command_unique(client, message):
         bot_name = f"**{config.get('bot_name', 'XTV Rename Bot')}**"
         community_name = config.get("community_name", "Our Community")
 
-    # Check if user is completely new (no usage track yet)
     is_new_user = False
     user_usage = await db.get_user_usage(user_id)
     if not user_usage:
         is_new_user = True
 
-    # NEW FEATURE: Starter Setup Message
-    # Only in PUBLIC mode (if user hasn't completed setup yet)
     if Config.PUBLIC_MODE:
         has_setup = await db.has_completed_setup(user_id)
         if not has_setup:
@@ -83,7 +82,6 @@ async def handle_start_command_unique(client, message):
         ),
     )
 
-
 @Client.on_message(filters.command(["r", "rename"]) & filters.private, group=0)
 async def handle_rename_command(client, message):
     user_id = message.from_user.id
@@ -106,7 +104,6 @@ async def handle_rename_command(client, message):
     msg = await message.reply_text("Loading menu...")
     mock_cb.message = msg
     await handle_start_renaming(client, mock_cb)
-
 
 @Client.on_message(filters.command(["g", "general"]) & filters.private, group=0)
 async def handle_general_command(client, message):
@@ -131,7 +128,6 @@ async def handle_general_command(client, message):
     mock_cb.message = msg
     await handle_type_general(client, mock_cb)
 
-
 @Client.on_message(filters.command(["a", "audio"]) & filters.private, group=0)
 async def handle_audio_command(client, message):
     user_id = message.from_user.id
@@ -154,7 +150,6 @@ async def handle_audio_command(client, message):
     msg = await message.reply_text("Loading audio editor...")
     mock_cb.message = msg
     await handle_audio_editor_menu(client, mock_cb)
-
 
 @Client.on_message(filters.command(["p", "personal"]) & filters.private, group=0)
 async def handle_personal_command(client, message):
@@ -179,7 +174,6 @@ async def handle_personal_command(client, message):
     mock_cb.message = msg
     await handle_type_personal(client, mock_cb)
 
-
 @Client.on_message(filters.command(["c", "convert"]) & filters.private, group=0)
 async def handle_convert_command(client, message):
     user_id = message.from_user.id
@@ -203,7 +197,6 @@ async def handle_convert_command(client, message):
     mock_cb.message = msg
     await handle_file_converter_menu(client, mock_cb)
 
-
 @Client.on_message(filters.command(["w", "watermark"]) & filters.private, group=0)
 async def handle_watermark_command(client, message):
     user_id = message.from_user.id
@@ -226,7 +219,6 @@ async def handle_watermark_command(client, message):
     msg = await message.reply_text("Loading watermarker...")
     mock_cb.message = msg
     await handle_watermarker_menu(client, mock_cb)
-
 
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
@@ -262,7 +254,6 @@ async def handle_help_command_unique(client, message):
         ),
     )
 
-
 @Client.on_message(filters.command("end") & filters.private, group=0)
 async def handle_end_command_unique(client, message):
     user_id = message.from_user.id
@@ -289,11 +280,9 @@ async def handle_end_command_unique(client, message):
         ),
     )
 
-
 from utils.logger import debug
 
 debug("✅ Loaded handler: help_callback")
-
 
 @Client.on_callback_query(filters.regex(r"^other_features_menu$"))
 async def handle_other_features_menu(client, callback_query):
@@ -330,7 +319,6 @@ async def handle_other_features_menu(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^help_"))
 async def handle_help_callbacks(client, callback_query):
@@ -473,7 +461,6 @@ async def handle_help_callbacks(client, callback_query):
             pass
     elif data == "help_close":
         await callback_query.message.delete()
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

@@ -1,3 +1,4 @@
+# --- Imports ---
 from pyrogram import Client, filters
 from pyrogram.enums import ChatMemberStatus
 from database import db
@@ -9,8 +10,9 @@ from utils.state import get_data, update_data
 
 logger = get_logger("plugins.force_sub_handler")
 
-
 @Client.on_chat_member_updated(filters.channel)
+
+# === Helper Functions ===
 async def handle_bot_added_to_channel(client, update):
     if not Config.PUBLIC_MODE:
         return
@@ -39,7 +41,7 @@ async def handle_bot_added_to_channel(client, update):
             username = chat_info.username
 
             if state == "awaiting_public_force_sub":
-                # Legacy single-channel
+
                 await db.update_public_config("force_sub_channel", chat_id)
                 await db.update_public_config("force_sub_link", invite_link)
                 await db.update_public_config("force_sub_username", username)
@@ -59,7 +61,7 @@ async def handle_bot_added_to_channel(client, update):
                 )
                 admin_sessions.pop(user_id, None)
             else:
-                # Multi-channel setup
+
                 config = await db.get_public_config()
                 channels = config.get("force_sub_channels", [])
 
@@ -74,7 +76,6 @@ async def handle_bot_added_to_channel(client, update):
                 channels.append(new_channel)
                 await db.update_public_config("force_sub_channels", channels)
 
-                # Keep legacy field populated for backward compat if it's the first channel
                 if len(channels) == 1:
                     await db.update_public_config("force_sub_channel", chat_id)
                     await db.update_public_config("force_sub_link", invite_link)
@@ -95,7 +96,6 @@ async def handle_bot_added_to_channel(client, update):
                 )
                 admin_sessions.pop(user_id, None)
 
-
         except Exception as e:
             logger.error(f"Force sub setup error during chat_member_updated: {e}")
             await client.send_message(
@@ -106,23 +106,12 @@ async def handle_bot_added_to_channel(client, update):
                 ),
             )
 
-
-# --------------------------------------------------------------------------
-# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
-# Don't Remove Credit
-# Telegram Channel @XTVbots
-# Developed for the 𝕏TV Network @XTVglobal
-# Backup Channel @XTVhome
-# Contact on Telegram @davdxpx
-# --------------------------------------------------------------------------
-
 @Client.on_chat_member_updated(filters.channel, group=1)
 async def on_user_join_channel(client, update):
-    # Ignore bot updates for this specific logic
+
     if update.new_chat_member and update.new_chat_member.user.is_bot:
         return
 
-    # We only care if user joined
     joined = False
     valid_statuses = [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
 
@@ -141,7 +130,6 @@ async def on_user_join_channel(client, update):
     if not Config.PUBLIC_MODE:
         return
 
-    # Verify if they joined one of the force sub channels
     config = await db.get_public_config()
     force_sub_channels = config.get("force_sub_channels", [])
     legacy_channel = config.get("force_sub_channel")
@@ -168,12 +156,10 @@ async def on_user_join_channel(client, update):
 
     logger.debug(f"User {user.id} joined force sub channel {update.chat.id}")
 
-    # They joined a force sub channel. Now, check if they have completed the setup.
     has_setup = await db.has_completed_setup(user.id)
     if has_setup:
         return
 
-    # If there is a Force-Sub gate message, delete it
     session_data = get_data(user.id)
     if session_data:
         fs_msg_id = session_data.get("force_sub_msg_id")
@@ -184,9 +170,7 @@ async def on_user_join_channel(client, update):
             except Exception as e:
                 logger.debug(f"Could not delete force sub msg {fs_msg_id} for {user.id}: {e}")
 
-    # Send the starter setup message
     await send_starter_setup_message(client, user.id, user.first_name)
-
 
 async def send_starter_setup_message(client, user_id, first_name=""):
     bot_name = "**𝕏TV Rename Bot**"
@@ -221,8 +205,9 @@ async def send_starter_setup_message(client, user_id, first_name=""):
     except Exception as e:
         logger.error(f"Failed to send starter setup message to {user_id}: {e}")
 
-
 @Client.on_callback_query(filters.regex(r"^setup_mode_"))
+
+# --- Handlers ---
 async def handle_setup_mode_callback(client, callback_query):
     user_id = callback_query.from_user.id
     data = callback_query.data
@@ -246,3 +231,12 @@ async def handle_setup_mode_callback(client, callback_query):
 
     await callback_query.message.edit_text(text)
     await callback_query.answer("Preferences saved!", show_alert=False)
+
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------

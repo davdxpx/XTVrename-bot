@@ -1,3 +1,4 @@
+# --- Imports ---
 import asyncio
 import json
 import os
@@ -21,7 +22,7 @@ LANGUAGE_MAP = {
     "und": "Unknown",
 }
 
-
+# === Helper Functions ===
 async def probe_file(filepath):
     cmd = [
         "ffprobe",
@@ -45,10 +46,8 @@ async def probe_file(filepath):
     except json.JSONDecodeError as e:
         return None, f"JSON Decode Error: {e}"
 
-
 def get_language_name(code):
     return LANGUAGE_MAP.get(code, code)
-
 
 async def generate_ffmpeg_command(
     input_path, output_path, metadata, thumbnail_path=None
@@ -152,7 +151,6 @@ async def generate_ffmpeg_command(
 
     return cmd, None
 
-
 import re
 
 async def execute_ffmpeg(cmd, progress_callback=None):
@@ -163,7 +161,7 @@ async def execute_ffmpeg(cmd, progress_callback=None):
     stderr_lines = []
 
     async def read_stderr():
-        # FFmpeg uses carriage returns (\r) for progress updates, not newlines (\n)
+
         buffer = ""
         while True:
             chunk = await process.stderr.read(1024)
@@ -173,10 +171,8 @@ async def execute_ffmpeg(cmd, progress_callback=None):
             chunk_str = chunk.decode('utf-8', errors='replace')
             buffer += chunk_str
 
-            # Split by \r or \n
             lines = re.split(r'[\r\n]+', buffer)
 
-            # Keep the last incomplete part in the buffer
             buffer = lines.pop()
 
             for line_str in lines:
@@ -184,12 +180,11 @@ async def execute_ffmpeg(cmd, progress_callback=None):
                     stderr_lines.append(line_str + "\n")
 
                     if progress_callback:
-                        # Extract time from string like: frame=  116 fps= 30 q=29.0 size=     256kB time=00:00:04.60 bitrate= 454.4kbits/s speed=1.18x
+
                         time_match = re.search(r"time=(\d{2}:\d{2}:\d{2}[\.\d]*)", line_str)
                         if time_match:
                             await progress_callback(time_match.group(1))
 
-        # Process any remaining buffer content
         if buffer.strip():
             stderr_lines.append(buffer + "\n")
             if progress_callback:
@@ -213,7 +208,6 @@ async def execute_ffmpeg(cmd, progress_callback=None):
             except asyncio.TimeoutError:
                 process.kill()
         raise
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

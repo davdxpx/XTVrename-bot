@@ -1,8 +1,10 @@
+# --- Imports ---
 import asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database import db
 from utils.state import update_data
 
+# === Helper Functions ===
 async def send_force_sub_gate(client, message, config):
     user_id = message.from_user.id
 
@@ -20,7 +22,7 @@ async def send_force_sub_gate(client, message, config):
     legacy_user = config.get("force_sub_username", "")
 
     if not channels and legacy_ch:
-        # Fallback to single channel
+
         channels = [{"id": legacy_ch, "link": legacy_link, "username": legacy_user, "title": "our channel"}]
 
     if not msg_text:
@@ -32,19 +34,16 @@ async def send_force_sub_gate(client, message, config):
     first_ch = channels[0] if channels else {}
     channel_name = first_ch.get("username", first_ch.get("title", "our channel"))
     if channel_name and not str(channel_name).startswith("@") and not str(channel_name).isdigit():
-         # Keep it as is or add @ if it's a username, but we'll assume username is already @ formatted or it's a title
+
          pass
 
     formatted_text = msg_text.replace("{channel}", str(channel_name)).replace("{bot_name}", bot_name).replace("{community}", community_name)
 
     buttons = []
 
-    # Send the "You're In!" message later if they are returning
-    # If the CEO set a custom label globally, use it, otherwise use the per-channel label
     for ch in channels:
         if ch.get("link"):
-            # Default per-channel label was "📢 Join [Channel Title]"
-            # If the admin edited the global button label, we override it
+
             if config.get("force_sub_button_label"):
                 final_btn_text = f"{btn_emoji} {btn_label}"
             else:
@@ -67,7 +66,6 @@ async def send_force_sub_gate(client, message, config):
             reply_markup=InlineKeyboardMarkup(buttons)
         )
 
-    # Store the force sub message ID so we can delete it later when they join
     if msg:
         update_data(user_id, "force_sub_msg_id", msg.id)
 
@@ -76,21 +74,17 @@ welcomed_users = set()
 async def check_and_send_welcome(client, message, config):
     user_id = message.from_user.id
 
-    # Simple check: if user hasn't been welcomed yet in this session
     if user_id not in welcomed_users:
         welcomed_users.add(user_id)
 
-        # If they haven't completed setup, don't spam the welcome message because the setup menu will pop up
         has_setup = await db.has_completed_setup(user_id)
         if not has_setup:
             return
 
-        # Then send the message
         welcome_text = config.get("force_sub_welcome_text") or "✅ Welcome aboard! You're all set. Send your file and let's go."
 
         msg = await client.send_message(user_id, welcome_text)
 
-        # Auto-delete after 5s
         async def delete_later():
             await asyncio.sleep(5)
             try:
@@ -99,3 +93,12 @@ async def check_and_send_welcome(client, message, config):
                 pass
 
         asyncio.create_task(delete_later())
+
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------

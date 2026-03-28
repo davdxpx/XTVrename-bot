@@ -1,7 +1,8 @@
+# --- Imports ---
 import logging
 import sys
 
-
+# === Classes ===
 class Colors:
     RESET = "\033[0m"
     RED = "\033[31m"
@@ -10,7 +11,6 @@ class Colors:
     BLUE = "\033[34m"
     BOLD = "\033[1m"
     CYAN = "\033[36m"
-
 
 class ConsoleFormatter(logging.Formatter):
 
@@ -43,7 +43,7 @@ class ConsoleFormatter(logging.Formatter):
         formatter = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
         return formatter.format(record)
 
-
+# === Helper Functions ===
 def get_logger(name):
     from config import Config
     logger = logging.getLogger(name)
@@ -59,7 +59,6 @@ def get_logger(name):
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     return logger
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

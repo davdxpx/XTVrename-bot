@@ -1,3 +1,4 @@
+# --- Imports ---
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -10,7 +11,7 @@ logger = get_logger("plugins.public_cmds")
 
 user_sessions = {}
 
-
+# === Helper Functions ===
 def get_user_main_menu():
     return InlineKeyboardMarkup(
         [
@@ -38,7 +39,6 @@ def get_user_main_menu():
             [InlineKeyboardButton("❌ Close", callback_data="user_cancel")],
         ]
     )
-
 
 def get_user_templates_menu():
     return InlineKeyboardMarkup(
@@ -68,12 +68,12 @@ def get_user_templates_menu():
         ]
     )
 
-
 def is_public_mode():
     return Config.PUBLIC_MODE
 
-
 @Client.on_message(filters.command("info") & filters.private)
+
+# --- Handlers ---
 async def info_command(client, message):
     if not is_public_mode():
         return
@@ -123,7 +123,6 @@ async def info_command(client, message):
     text += f"**👨‍💻 Developed by:** [𝕏0L0™](https://t.me/davdxpx)\n"
 
     await message.reply_text(text, disable_web_page_preview=True)
-
 
 @Client.on_message(filters.command("premium") & filters.private)
 async def handle_premium_command(client, message):
@@ -179,7 +178,6 @@ async def handle_premium_command(client, message):
 
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
-
 @Client.on_callback_query(filters.regex("^claim_trial$"))
 async def handle_claim_trial(client, callback_query):
     if not is_public_mode():
@@ -209,7 +207,6 @@ async def handle_claim_trial(client, callback_query):
         await callback_query.message.delete()
         return
 
-    # Grant trial
     await db.add_premium_user(user_id, trial_days)
     await db.users.update_one({"user_id": user_id}, {"$set": {"trial_claimed": True}})
 
@@ -223,7 +220,6 @@ async def handle_claim_trial(client, callback_query):
         "You currently enjoy enhanced limits and bypass standard quotas!"
     )
 
-
 @Client.on_message(filters.command("settings") & filters.private)
 async def settings_panel(client, message):
     if not is_public_mode():
@@ -236,11 +232,9 @@ async def settings_panel(client, message):
         reply_markup=get_user_main_menu(),
     )
 
-
 from utils.logger import debug
 
 debug("✅ Loaded handler: user_settings_callback")
-
 
 @Client.on_callback_query(
     filters.regex(
@@ -913,7 +907,7 @@ async def user_settings_callback(client, callback_query):
         new_mode = "smart_media_mode" if data.endswith("smart") else "quick_rename_mode"
         await db.update_workflow_mode(new_mode, user_id)
         await callback_query.answer("Workflow Mode updated!", show_alert=True)
-        # Re-trigger the menu
+
         from plugins.public_cmds import user_settings_callback
         class MockQuery:
             def __init__(self, msg, usr):
@@ -1088,9 +1082,6 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
 
-
-
-
 @Client.on_message(filters.photo & filters.private, group=1)
 async def handle_user_photo(client, message):
     if not is_public_mode():
@@ -1125,7 +1116,6 @@ async def handle_user_photo(client, message):
             await msg.edit_text(f"❌ Error: {e}")
         except MessageNotModified:
             pass
-
 
 @Client.on_message(
     (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
@@ -1261,7 +1251,6 @@ async def handle_user_text(client, message):
     else:
         raise ContinuePropagation
 
-
 async def _send_usage(client, target, user_id, is_callback=False):
     is_admin_user = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
 
@@ -1382,13 +1371,11 @@ async def _send_usage(client, target, user_id, is_callback=False):
     else:
         await target.reply_text(text, reply_markup=markup)
 
-
 @Client.on_message(filters.command("usage") & filters.private, group=0)
 async def usage_command(client, message):
     if not is_public_mode():
         return
     await _send_usage(client, message, message.from_user.id, False)
-
 
 @Client.on_callback_query(filters.regex("^refresh_usage$"))
 async def refresh_usage_cb(client, callback_query):
@@ -1399,7 +1386,6 @@ async def refresh_usage_cb(client, callback_query):
     if not is_public_mode():
         return
     await _send_usage(client, callback_query.message, callback_query.from_user.id, True)
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

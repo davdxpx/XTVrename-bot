@@ -1,7 +1,8 @@
+# --- Imports ---
 import aiohttp
 from config import Config
 
-
+# === Classes ===
 class TMDb:
     BASE_URL = "https://api.themoviedb.org/3"
     IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
@@ -88,7 +89,6 @@ class TMDb:
     async def get_details(self, media_type, tmdb_id, language="en-US"):
         endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
         return await self._request(endpoint, language=language)
-
 
 tmdb = TMDb()
 

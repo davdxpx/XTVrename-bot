@@ -1,3 +1,4 @@
+# --- Imports ---
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -23,8 +24,9 @@ batch_tasks = {}
 
 batch_status_msgs = {}
 
-
 @Client.on_callback_query(filters.regex(r"^start_renaming$"))
+
+# --- Handlers ---
 async def handle_start_renaming(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
@@ -73,7 +75,6 @@ async def handle_start_renaming(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^type_general$"))
 async def handle_type_general(client, callback_query):
     await callback_query.answer()
@@ -96,7 +97,6 @@ async def handle_type_general(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^type_personal_(video|photo|file)$"))
 async def handle_type_personal(client, callback_query):
@@ -131,7 +131,6 @@ async def handle_type_personal(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^type_(movie|series)$"))
 async def handle_type_selection(client, callback_query):
     await callback_query.answer()
@@ -152,7 +151,6 @@ async def handle_type_selection(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^type_subtitles$"))
 async def handle_type_subtitles(client, callback_query):
@@ -177,7 +175,6 @@ async def handle_type_subtitles(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^type_sub_(movie|series)$"))
 async def handle_subtitle_type_selection(client, callback_query):
     await callback_query.answer()
@@ -200,7 +197,7 @@ async def handle_subtitle_type_selection(client, callback_query):
     except MessageNotModified:
         pass
 
-
+# === Helper Functions ===
 async def manual_title_handler(client, message):
     user_id = message.from_user.id
     text = message.text.strip()
@@ -245,7 +242,6 @@ async def manual_title_handler(client, message):
         )
     else:
         await prompt_dumb_channel(client, user_id, message, is_edit=False)
-
 
 async def search_handler(client, message, media_type):
     user_id = message.from_user.id
@@ -314,7 +310,6 @@ async def search_handler(client, message, media_type):
     except MessageNotModified:
         pass
 
-
 @Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=2)
 async def handle_text_input(client, message):
     user_id = message.from_user.id
@@ -341,14 +336,11 @@ async def handle_text_input(client, message):
         file_msg_id = session_data.get("file_message_id")
         prompt_msg_id = session_data.get("rename_prompt_msg_id")
 
-        # Security check: MUST be a reply to the bot's prompt message (which has ForceReply)
-        # We allow replying directly to the file message too just in case.
         valid_reply_ids = [file_msg_id, prompt_msg_id]
 
         if file_msg_id and (not message.reply_to_message or message.reply_to_message.id not in valid_reply_ids):
             warning_msg = await message.reply_text("⚠️ **Please reply directly to my prompt message** when sending the new name, so I know which file you are renaming.", quote=True)
 
-            # Auto-delete the warning message and the invalid user message after 5 seconds to keep chat clean
             async def delete_warning():
                 import asyncio
                 await asyncio.sleep(5)
@@ -364,7 +356,6 @@ async def handle_text_input(client, message):
         new_name = message.text.strip()
         update_data(user_id, "general_name", new_name)
 
-        # Delay deletion slightly so it feels less jarring
         async def delayed_cleanup():
             import asyncio
             await asyncio.sleep(1)
@@ -528,7 +519,6 @@ async def handle_text_input(client, message):
             except MessageNotModified:
                 pass
 
-
 @Client.on_callback_query(filters.regex(r"^manual_entry$"))
 async def handle_manual_entry(client, callback_query):
     await callback_query.answer()
@@ -553,7 +543,6 @@ async def handle_manual_entry(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^send_as_(photo|document)$"))
 async def handle_send_as_preference(client, callback_query):
     user_id = callback_query.from_user.id
@@ -561,7 +550,6 @@ async def handle_send_as_preference(client, callback_query):
 
     update_data(user_id, "send_as", pref)
     await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
-
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
@@ -606,7 +594,6 @@ async def handle_tmdb_selection(client, callback_query):
             client, user_id, callback_query.message, is_edit=True
         )
 
-
 import asyncio
 
 async def process_ready_file(client, user_id, message_obj, session_data):
@@ -623,7 +610,7 @@ async def process_ready_file(client, user_id, message_obj, session_data):
         }
 
         meta = analyze_filename(session_data.get("original_name"))
-        # DO NOT overwrite the explicitly set type (e.g. 'general') with auto-detected type ('movie'/'series')
+
         if "type" in meta and data.get("type"):
             meta.pop("type")
         data.update(meta)
@@ -655,7 +642,7 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
 
     if not channels:
         if has_file:
-            # We already have the file. Process immediately.
+
             from plugins.flow import process_ready_file
             await process_ready_file(client, user_id, message_obj, session_data)
             return
@@ -704,7 +691,6 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
     else:
         await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
-
 @Client.on_callback_query(filters.regex(r"^sel_dumb_(.*)$"))
 async def handle_dumb_selection(client, callback_query):
 
@@ -728,7 +714,6 @@ async def handle_dumb_selection(client, callback_query):
         if has_file:
             await process_ready_file(client, user_id, callback_query.message, session_data)
             return
-        # If no file yet, just fall through
 
     if has_file:
         await process_ready_file(client, user_id, callback_query.message, session_data)
@@ -744,7 +729,6 @@ async def handle_dumb_selection(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 async def initiate_language_selection(client, user_id, message_obj):
 
@@ -781,7 +765,6 @@ async def initiate_language_selection(client, user_id, message_obj):
     else:
         await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
-
 @Client.on_callback_query(filters.regex(r"^lang_"))
 async def handle_language_callback(client, callback_query):
     await callback_query.answer()
@@ -804,7 +787,6 @@ async def handle_language_callback(client, callback_query):
 
     update_data(user_id, "language", data)
     await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
-
 
 @Client.on_callback_query(filters.regex(r"^gen_send_as_(document|media)$"))
 async def handle_gen_send_as(client, callback_query):
@@ -839,7 +821,6 @@ async def handle_gen_send_as(client, callback_query):
     except MessageNotModified:
         pass
 
-
 from pyrogram.types import ForceReply
 
 @Client.on_callback_query(filters.regex(r"^gen_prompt_rename$"))
@@ -868,7 +849,7 @@ async def handle_gen_prompt_rename(client, callback_query):
     prompt_msg = None
     if file_msg_id and file_chat_id:
         try:
-            # Send as a reply to the original file message using ForceReply
+
             prompt_msg = await client.send_message(
                 chat_id=user_id,
                 text=text,
@@ -876,7 +857,7 @@ async def handle_gen_prompt_rename(client, callback_query):
                 reply_markup=ForceReply(selective=True, placeholder="Type new name here...")
             )
         except Exception:
-            # Fallback if the message was deleted
+
             prompt_msg = await client.send_message(
                 chat_id=user_id,
                 text=text,
@@ -891,7 +872,6 @@ async def handle_gen_prompt_rename(client, callback_query):
 
     if prompt_msg:
         update_data(user_id, "rename_prompt_msg_id", prompt_msg.id)
-
 
 @Client.on_callback_query(filters.regex(r"^subtitle_extractor_menu$"))
 async def handle_subtitle_extractor_menu(client, callback_query):
@@ -911,13 +891,11 @@ async def handle_subtitle_extractor_menu(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^cancel_rename$"))
 async def handle_cancel(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
 
-    # Clean up archive if cancelled during password prompt
     data = get_data(user_id)
     if data and data.get("archive_path"):
         archive_path = data.get("archive_path")
@@ -950,7 +928,6 @@ async def handle_cancel(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 async def process_batch(client, user_id):
     if user_id not in batch_sessions:
@@ -993,7 +970,6 @@ async def process_batch(client, user_id):
         else:
             await update_confirmation_message(client, msg.id, user_id)
 
-
 from utils.auth import check_force_sub
 from database import db
 from utils.queue_manager import queue_manager
@@ -1003,7 +979,6 @@ from utils.archive import is_archive, check_password_protected, extract_archive
 from utils.progress import progress_for_pyrogram
 import time
 import random
-
 
 @Client.on_message(
     (filters.document | filters.video | filters.photo | filters.audio | filters.voice)
@@ -1017,11 +992,11 @@ async def handle_file_upload(client, message):
     if state is None:
         user_mode = await db.get_workflow_mode(user_id if Config.PUBLIC_MODE else None)
         if user_mode == "quick_rename_mode":
-            # Switch to general mode and process the file exactly as if they were in awaiting_general_file
+
             state = "awaiting_general_file"
             set_state(user_id, state)
             update_data(user_id, "type", "general")
-            # We must jump straight to the awaiting_general_file logic and RETURN so we don't hit auto-detect
+
             file_name = "unknown_file.bin"
             if message.document:
                 file_name = message.document.file_name
@@ -1341,7 +1316,6 @@ async def handle_file_upload(client, message):
             )
             return
 
-        # Perform quota pre-flight check and reserve usage
         quota_ok, error_msg, _ = await db.check_daily_quota(user_id, file_size)
         if not quota_ok:
             await message.reply_text(f"🛑 **Quota Exceeded**\n\n{error_msg}")
@@ -1470,7 +1444,6 @@ async def handle_file_upload(client, message):
 
     batch_tasks[user_id] = asyncio.create_task(wait_and_process())
 
-
 async def handle_archive_upload(client, message, user_id, file_name, state):
     msg = await message.reply_text("📦 **Archive detected!**\n\nDownloading to inspect contents...")
 
@@ -1551,7 +1524,6 @@ async def handle_subtitle_extractor_upload(client, message):
         reply_msg = await client.send_message(user_id, "Processing subtitle extraction...")
         from plugins.process import process_file
 
-        # We need to stop propagation so `handle_file_upload` in `group=2` does not process this.
         import asyncio
         asyncio.create_task(process_file(client, reply_msg, data))
         clear_session(user_id)
@@ -1577,7 +1549,6 @@ async def handle_password_input(client, message):
             logger.error(f"Error handling password: {e}")
             await message.reply_text(f"Error: {e}")
 
-        # Clear the password state
         update_data(user_id, "archive_path", None)
         update_data(user_id, "archive_msg_id", None)
         update_data(user_id, "archive_state", None)
@@ -1659,8 +1630,6 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         sort_key = ((0, season, episode) if tmdb_data["type"] == "series" else (1, quality_priority.get(quality, 4), 0))
         display_name = f"S{season:02d}E{episode:02d}" if tmdb_data["type"] == "series" else f"{quality}"
 
-        # Create a completely separate dummy message to avoid MessageIdInvalid and quota races
-        # Deep copy msg logic using Message properties manually to keep it detached
         from pyrogram.types import Message
         import random
         class DummyMessage:
@@ -1704,7 +1673,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             "dumb_channel": default_dumb_channel,
             "batch_id": batch_id,
             "item_id": item_id,
-            "extract_dir": extract_dir  # Tell process to cleanup this dir later
+            "extract_dir": extract_dir
         }
 
         batch_sessions[user_id]["items"].append({"message": dummy_msg, "data": data})
@@ -1724,10 +1693,9 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
     if user_id in batch_sessions and batch_sessions[user_id]["items"]:
         batch_tasks[user_id] = asyncio.create_task(wait_and_process())
     else:
-        # If no items were added, cleanup immediately
+
         import shutil
         shutil.rmtree(extract_dir, ignore_errors=True)
-
 
 async def handle_auto_detection(client, message):
     if message.photo:
@@ -1765,7 +1733,6 @@ async def handle_auto_detection(client, message):
     episode = metadata.get("episode", 1) or 1
     season = metadata.get("season", 1) or 1
     media_lang = metadata.get("language", "en")
-
 
     default_dumb_channel = await db.get_default_dumb_channel(user_id)
 
@@ -1831,7 +1798,6 @@ async def handle_auto_detection(client, message):
 
     batch_tasks[user_id] = asyncio.create_task(wait_and_process())
 
-
 async def update_auto_detected_message(client, msg_id, user_id):
     if msg_id not in file_sessions:
         return
@@ -1847,7 +1813,6 @@ async def update_auto_detected_message(client, msg_id, user_id):
         f"**File:** `{fs['original_name']}`\n"
     )
 
-    # Check template for dynamic variables
     templates = await db.get_filename_templates(user_id)
     template_key = fs["type"] if not fs["is_subtitle"] else f"subtitles_{fs['type']}"
     template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
@@ -1877,7 +1842,6 @@ async def update_auto_detected_message(client, msg_id, user_id):
     buttons = []
     buttons.append([InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")])
 
-    # Collect all dynamic/standard buttons
     dynamic_buttons = []
     dynamic_buttons.append(InlineKeyboardButton("Change Type", callback_data=f"change_type_{msg_id}"))
 
@@ -1897,7 +1861,6 @@ async def update_auto_detected_message(client, msg_id, user_id):
     if has_audio:
         dynamic_buttons.append(InlineKeyboardButton("🔊 Change Audio", callback_data=f"ch_audio_{msg_id}"))
 
-    # Group dynamically into rows of exactly two buttons
     current_row = []
     for btn in dynamic_buttons:
         current_row.append(btn)
@@ -1919,7 +1882,6 @@ async def update_auto_detected_message(client, msg_id, user_id):
     except MessageNotModified:
         pass
 
-
 async def update_confirmation_message(client, msg_id, user_id):
     if msg_id not in file_sessions:
         return
@@ -1936,7 +1898,6 @@ async def update_confirmation_message(client, msg_id, user_id):
 
     text = f"📄 **File:** `{fs['original_name']}`\n\n"
 
-    # Check template for dynamic variables
     templates = await db.get_filename_templates(user_id)
     template_key = media_type if not is_sub else f"subtitles_{media_type}"
     template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
@@ -2010,7 +1971,6 @@ async def update_confirmation_message(client, msg_id, user_id):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^confirm_(\d+)$"))
 async def handle_confirm(client, callback_query):
     msg_id = int(callback_query.data.split("_")[1])
@@ -2030,7 +1990,6 @@ async def handle_confirm(client, callback_query):
         full_data.update(fs)
 
     await process_file(client, callback_query.message, full_data)
-
 
 @Client.on_callback_query(filters.regex(r"^qual_menu_(\d+)$"))
 async def handle_quality_menu(client, callback_query):
@@ -2069,7 +2028,6 @@ async def handle_quality_menu(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^set_qual_(\d+)_(.+)$"))
 async def handle_set_quality(client, callback_query):
     await callback_query.answer()
@@ -2081,13 +2039,11 @@ async def handle_set_quality(client, callback_query):
         file_sessions[msg_id]["quality"] = qual
         await update_confirmation_message(client, msg_id, callback_query.from_user.id)
 
-
 @Client.on_callback_query(filters.regex(r"^back_confirm_(\d+)$"))
 async def handle_back_confirm(client, callback_query):
     await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
-
 
 @Client.on_callback_query(filters.regex(r"^ep_change_(\d+)$"))
 async def handle_ep_change_prompt(client, callback_query):
@@ -2133,7 +2089,6 @@ async def handle_ep_change_prompt(client, callback_query):
     except Exception:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^season_change_(\d+)$"))
 async def handle_season_change_prompt(client, callback_query):
     await callback_query.answer()
@@ -2157,13 +2112,11 @@ async def handle_season_change_prompt(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^cancel_file_(\d+)$"))
 async def handle_file_cancel(client, callback_query):
     await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
 
-    # Check if we have the file_message saved in file_sessions to release quota
     if msg_id in file_sessions:
         fs = file_sessions.pop(msg_id)
         if "file_message" in fs:
@@ -2173,7 +2126,6 @@ async def handle_file_cancel(client, callback_query):
                 await db.release_quota(callback_query.from_user.id, file_size)
 
     await callback_query.message.delete()
-
 
 @Client.on_callback_query(filters.regex(r"^audio_editor_menu$"))
 async def handle_audio_editor_menu(client, callback_query):
@@ -2192,7 +2144,6 @@ async def handle_audio_editor_menu(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(
     filters.regex(r"^audio_edit_(title|artist|album|thumb|process)$")
@@ -2253,14 +2204,12 @@ async def handle_audio_edit_callbacks(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^audio_menu_back$"))
 async def handle_audio_menu_back(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
     set_state(user_id, "awaiting_audio_menu")
     await render_audio_menu(client, callback_query.message, user_id)
-
 
 async def render_audio_menu(client, message, user_id):
     from pyrogram.types import Message
@@ -2312,7 +2261,6 @@ async def render_audio_menu(client, message, user_id):
         except MessageNotModified:
             pass
 
-
 @Client.on_callback_query(filters.regex(r"^file_converter_menu$"))
 async def handle_file_converter_menu(client, callback_query):
     await callback_query.answer()
@@ -2330,7 +2278,6 @@ async def handle_file_converter_menu(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^convert_to_(.+)$"))
 async def handle_convert_to(client, callback_query):
@@ -2369,7 +2316,6 @@ async def handle_convert_to(client, callback_query):
 
     clear_session(user_id)
 
-
 @Client.on_callback_query(filters.regex(r"^watermarker_menu$"))
 async def handle_watermarker_menu(client, callback_query):
     await callback_query.answer()
@@ -2387,7 +2333,6 @@ async def handle_watermarker_menu(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^watermark_type_(text|image)$"))
 async def handle_watermark_type(client, callback_query):
@@ -2415,7 +2360,6 @@ async def handle_watermark_type(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^wm_pos_(.*)$"))
 async def handle_watermark_position(client, callback_query):
@@ -2446,7 +2390,6 @@ async def handle_watermark_position(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^wm_size_(.*)$"))
 async def handle_watermark_size(client, callback_query):
@@ -2488,7 +2431,6 @@ async def handle_watermark_size(client, callback_query):
 
     clear_session(user_id)
 
-
 @Client.on_callback_query(filters.regex(r"^change_type_(\d+)$"))
 async def handle_change_type(client, callback_query):
     await callback_query.answer()
@@ -2516,7 +2458,6 @@ async def handle_change_type(client, callback_query):
 
     await update_auto_detected_message(client, msg_id, callback_query.from_user.id)
 
-
 @Client.on_callback_query(filters.regex(r"^change_tmdb_(\d+)$"))
 async def handle_change_tmdb_init(client, callback_query):
     await callback_query.answer()
@@ -2542,7 +2483,6 @@ async def handle_change_tmdb_init(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^change_se_(\d+)$"))
 async def handle_change_se_menu(client, callback_query):
@@ -2572,7 +2512,6 @@ async def handle_change_se_menu(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_callback_query(filters.regex(r"^correct_tmdb_(\d+)_(\d+)$"))
 async def handle_correct_tmdb_selection(client, callback_query):
@@ -2637,7 +2576,6 @@ async def handle_change_codec(client, callback_query):
     if row:
         buttons.append(row)
 
-    # Option to clear codec
     text = f"✅ None" if not current else "None"
     buttons.append([InlineKeyboardButton(text, callback_data=f"set_codec_none_{msg_id}")])
 
@@ -2776,7 +2714,6 @@ async def handle_toggle_specials(client, callback_query):
 
     fs["specials"] = current
 
-    # Refresh the same menu
     specials_options = ["BluRay", "WEB-DL", "WEBRip", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT", "BDRip"]
     buttons = []
     row = []

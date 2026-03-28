@@ -1,3 +1,4 @@
+# --- Imports ---
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import Config
 from utils.log import get_logger
@@ -6,7 +7,7 @@ import certifi
 
 logger = get_logger("database")
 
-
+# === Classes ===
 class Database:
     def __init__(self):
         if not Config.MAIN_URI:
@@ -29,7 +30,7 @@ class Database:
                 )
 
             self.db = self.client[Config.DB_NAME]
-            self.settings = self.db["user_settings"] # Renamed from rename_bot_settings
+            self.settings = self.db["user_settings"]
             self.users = self.db["users"]
             self.daily_stats = self.db["daily_stats"]
 
@@ -41,7 +42,6 @@ class Database:
     async def migrate_old_db_to_new(self):
         if self.db is None: return
 
-        # Check if migration was already completed
         global_doc = await self.settings.find_one({"_id": "global_settings"})
         if global_doc and global_doc.get("migration_to_users_done"):
             return
@@ -57,22 +57,18 @@ class Database:
         async for doc in old_settings.find({}):
             doc_id = doc.get("_id")
 
-            # Global or config docs
             if doc_id in ["global_settings", "xtv_pro_settings", "public_mode_config"]:
                 await self.settings.update_one({"_id": doc_id}, {"$set": doc}, upsert=True)
                 continue
 
-            # User docs
             if isinstance(doc_id, str) and doc_id.startswith("user_"):
                 try:
                     user_id = int(doc_id.replace("user_", ""))
                 except ValueError:
                     continue
 
-                # Move to user_settings
                 await self.settings.update_one({"_id": doc_id}, {"$set": doc}, upsert=True)
 
-                # Create/Update users doc
                 user_doc = await self.users.find_one({"user_id": user_id})
                 import time
                 now = time.time()
@@ -92,7 +88,6 @@ class Database:
                     }
                     await self.users.insert_one(new_user)
 
-        # Mark migration as done
         await self.settings.update_one({"_id": "global_settings"}, {"$set": {"migration_to_users_done": True}}, upsert=True)
         logger.info("Migration completed.")
 
@@ -221,7 +216,6 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating preferred language for {doc_id}: {e}")
 
-
     async def get_preferred_separator(self, user_id=None):
         settings = await self.get_settings(user_id)
         if settings:
@@ -238,7 +232,6 @@ class Database:
             )
         except Exception as e:
             logger.error(f"Error updating preferred separator for {doc_id}: {e}")
-
 
     async def get_workflow_mode(self, user_id=None):
         settings = await self.get_settings(user_id)
@@ -520,7 +513,6 @@ class Database:
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         incoming_mb = file_size_bytes / (1024 * 1024)
 
-        # Global Limit Check First (applies to ALL users including admins)
         global_limit_mb = await self.get_global_daily_egress_limit()
         if global_limit_mb > 0:
             current_global_usage = await self.get_global_usage_today()
@@ -529,14 +521,11 @@ class Database:
                 if global_limit_mb >= 1024:
                     mb_limit_str = f"{global_limit_mb / 1024:.2f} GB"
 
-                # We do not record quota hit for global limits to user accounts
                 return False, f"Global Bot Usage Limit reached for today ({mb_limit_str}). Please try again tomorrow.", {}
 
-        # If user is admin/CEO, they bypass personal limits
         if user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS:
             return True, "", {}
 
-        # If not public mode, no personal limits apply
         if not Config.PUBLIC_MODE:
             return True, "", {}
 
@@ -560,7 +549,6 @@ class Database:
             daily_egress_mb_limit = config.get("premium_daily_egress_mb", 0)
             daily_file_count_limit = config.get("premium_daily_file_count", 0)
 
-        # No personal limits configured
         if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0:
             return True, "", {}
 
@@ -594,12 +582,10 @@ class Database:
             minutes, _ = divmod(remainder, 60)
             reset_str = f"Resets at midnight UTC — roughly {hours}h {minutes}m from now."
 
-            # Check personal file count limit
             if daily_file_count_limit > 0 and usage.get("file_count", 0) >= daily_file_count_limit:
                 await self.record_quota_hit(user_id)
                 return False, f"You've reached your daily {daily_file_count_limit} file limit. {reset_str}", usage
 
-            # Check personal egress limit (usage + currently reserved)
             current_user_egress = usage.get("egress_mb", 0.0) + usage.get("reserved_egress_mb", 0.0)
             if daily_egress_mb_limit > 0 and (current_user_egress + incoming_mb) > daily_egress_mb_limit:
                 await self.record_quota_hit(user_id)
@@ -623,14 +609,13 @@ class Database:
         incoming_mb = file_size_bytes / (1024 * 1024)
 
         try:
-            # Reserve global quota
+
             await self.daily_stats.update_one(
                 {"date": current_utc_date},
                 {"$inc": {"reserved_egress_mb": incoming_mb}},
                 upsert=True
             )
 
-            # Reserve user quota
             user_doc = await self.settings.find_one({"_id": f"user_{user_id}"})
             usage = user_doc.get("usage", {}) if user_doc else {}
 
@@ -664,16 +649,13 @@ class Database:
         incoming_mb = file_size_bytes / (1024 * 1024)
 
         try:
-            # Release global quota
+
             await self.daily_stats.update_one(
                 {"date": current_utc_date},
                 {"$inc": {"reserved_egress_mb": -incoming_mb}},
                 upsert=True
             )
 
-            # Release user quota
-            # We must make sure it doesn't drop below 0 due to float precision, but $inc doesn't have min bounds
-            # For simplicity, we just decrement. It's temporary anyway.
             await self.settings.update_one(
                 {"_id": f"user_{user_id}"},
                 {"$inc": {"usage.reserved_egress_mb": -incoming_mb}},
@@ -690,14 +672,13 @@ class Database:
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
-            # Increment user quota hit
+
             await self.settings.update_one(
                 {"_id": f"user_{user_id}"},
                 {"$inc": {"usage.quota_hits": 1}},
                 upsert=True
             )
 
-            # Increment global quota hit for the day
             await self.daily_stats.update_one(
                 {"date": current_utc_date},
                 {"$inc": {"quota_hits": 1}},
@@ -716,7 +697,7 @@ class Database:
         reserved_mb = reserved_file_size_bytes / (1024 * 1024)
 
         try:
-            # Ensure the user has the current date set in case they bypassed check_daily_quota (e.g. CEO/Admins)
+
             user_doc = await self.settings.find_one({"_id": f"user_{user_id}"})
             usage = user_doc.get("usage", {}) if user_doc else {}
 
@@ -733,8 +714,6 @@ class Database:
                     upsert=True
                 )
 
-            # Update user
-            # We decrement the reserved_mb that was originally allocated, and increment actual usage
             await self.settings.update_one(
                 {"_id": f"user_{user_id}"},
                 {"$inc": {
@@ -747,7 +726,6 @@ class Database:
                 upsert=True
             )
 
-            # Update global stats
             await self.daily_stats.update_one(
                 {"date": current_utc_date},
                 {"$inc": {
@@ -809,10 +787,9 @@ class Database:
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
-            # Get today's global stats
+
             today_stats = await self.daily_stats.find_one({"date": current_utc_date}) or {}
 
-            # Get all-time totals using aggregation
             all_time_pipeline = [
                 {"$group": {
                     "_id": None,
@@ -823,14 +800,11 @@ class Database:
             all_time_result = await self.daily_stats.aggregate(all_time_pipeline).to_list(1)
             all_time = all_time_result[0] if all_time_result else {"total_egress": 0, "total_files": 0}
 
-            # Count users
             total_users = await self.get_total_users()
 
-            # Get blocked users count
             public_config = await self.get_public_config()
             blocked_users = len(public_config.get("blocked_users", []))
 
-            # Get start date (first entry in daily_stats)
             first_stat = await self.daily_stats.find_one({}, sort=[("date", 1)])
             bot_start_date = first_stat["date"] if first_stat else current_utc_date
 
@@ -908,8 +882,6 @@ class Database:
             logger.error(f"Error fetching all users: {e}")
         return users
 
-    # --- New User Management Methods ---
-
     async def ensure_user(self, user_id: int, first_name: str, username: str = None, last_name: str = None, language_code: str = None, is_bot: bool = False):
         if self.users is None:
             return
@@ -948,7 +920,6 @@ class Database:
                 "last_active": now
             }
 
-            # Backfill missing standard schema fields
             if "banned" not in user_doc:
                 update_fields["banned"] = False
             if "is_premium" not in user_doc:
@@ -1044,9 +1015,8 @@ class Database:
         await self.settings.delete_one({"_id": f"user_{user_id}"})
 
     async def add_log(self, action: str, admin_id: int, description: str):
-        # We can add this to an admin_logs collection or just use standard logger.
-        logger.info(f"ADMIN_LOG [{action}] by {admin_id}: {description}")
 
+        logger.info(f"ADMIN_LOG [{action}] by {admin_id}: {description}")
 
 db = Database()
 

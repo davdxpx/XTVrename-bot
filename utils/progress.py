@@ -1,8 +1,9 @@
+# --- Imports ---
 import time
 import math
 from utils.XTVcore import XTVEngine
 
-
+# === Helper Functions ===
 async def progress_for_pyrogram(
     current, total, ud_type, message, start_time, mode="core"
 ):
@@ -57,13 +58,10 @@ async def progress_for_pyrogram(
     try:
         await message.edit(text=text)
     except FloodWait as e:
-        # Instead of sleeping and blocking the download/upload process,
-        # we just skip this progress update and artificially advance the last_update
-        # so we don't try to edit again until the flood wait is over.
+
         setattr(message, "last_update", now + e.value)
     except Exception as e:
         pass
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

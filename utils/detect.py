@@ -1,3 +1,4 @@
+# --- Imports ---
 import re
 from guessit import guessit
 from utils.tmdb import tmdb
@@ -5,7 +6,7 @@ from utils.log import get_logger
 
 logger = get_logger("utils.detect")
 
-
+# === Helper Functions ===
 def analyze_filename(filename):
     try:
         guess = guessit(filename)
@@ -32,7 +33,6 @@ def analyze_filename(filename):
             else:
                 quality = "720p"
 
-
         language = "en"
         if guess.get("language"):
             try:
@@ -45,7 +45,6 @@ def analyze_filename(filename):
             except:
                 pass
 
-        # Extract extra metadata from filename (Specials, Codec, Audio)
         extracted_specials = []
         extracted_codec = []
         extracted_audio = []
@@ -115,7 +114,6 @@ def analyze_filename(filename):
             "language": "en",
         }
 
-
 async def auto_match_tmdb(metadata, language="en-US"):
     title = metadata.get("title")
     year = metadata.get("year")
@@ -169,7 +167,6 @@ async def auto_match_tmdb(metadata, language="en-US"):
     except Exception as e:
         logger.error(f"Error in auto_match_tmdb: {e}")
         return None
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

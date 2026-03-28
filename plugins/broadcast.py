@@ -1,3 +1,4 @@
+# --- Imports ---
 import asyncio
 import time
 from pyrogram.errors import MessageNotModified
@@ -11,12 +12,13 @@ from utils.logger import debug
 
 debug("✅ Loaded handler: broadcast_callback")
 
-
 @Client.on_callback_query(
     filters.regex(
         r"^(admin_broadcast|broadcast_add_btn|broadcast_preview|broadcast_send|broadcast_cancel)$"
     )
 )
+
+# --- Handlers ---
 async def broadcast_callback(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
@@ -122,7 +124,7 @@ async def broadcast_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-        # Pass necessary data directly to the task before clearing session
+
         ud = get_data(user_id)
         msg_id = ud.get("broadcast_message_id")
         buttons = ud.get("broadcast_buttons", [])
@@ -137,7 +139,6 @@ async def broadcast_callback(client, callback_query):
             await callback_query.message.edit_text("❌ **Broadcast cancelled.**")
         except MessageNotModified:
             pass
-
 
 @Client.on_message(filters.private, group=1)
 async def broadcast_message_handler(client, message):
@@ -219,7 +220,7 @@ async def broadcast_message_handler(client, message):
 
     raise ContinuePropagation
 
-
+# === Helper Functions ===
 async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
     users = await db.get_all_users()
     reply_markup = None
@@ -261,7 +262,7 @@ async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
             except Exception:
                 pass
 
-        await asyncio.sleep(0.1)  # Rate limiting
+        await asyncio.sleep(0.1)
 
     end_time = time.time()
     duration = round(end_time - start_time, 2)
@@ -277,7 +278,6 @@ async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
         )
     except MessageNotModified:
         pass
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

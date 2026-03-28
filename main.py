@@ -17,6 +17,7 @@
 ╚══════════════════════════════════════════════════════════════════════════╝
 """
 
+# --- Imports ---
 from pyrogram import Client, idle
 from config import Config
 from utils.log import get_logger
@@ -127,7 +128,6 @@ if __name__ == "__main__":
         logger.error(f"Failed to initialize Userbot from DB: {e}")
         app.user_bot = None
 
-    # Print stylish startup banner at the end so it's the last thing seen
     admins_count = len(Config.ADMIN_IDS)
     tmdb_status = "✅ Configured" if Config.TMDB_API_KEY else "❌ Missing"
     db_status = "✅ Configured" if Config.MAIN_URI else "❌ Missing"

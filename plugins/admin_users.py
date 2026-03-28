@@ -1,3 +1,4 @@
+# --- Imports ---
 import json
 import io
 import time
@@ -11,10 +12,9 @@ from plugins.admin import admin_sessions
 
 logger = get_logger("plugins.admin_users")
 
+# === Helper Functions ===
 def is_admin(user_id):
     return user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS
-
-# --- Main User Management Menu ---
 
 async def show_users_menu(client, update):
     text = (
@@ -31,7 +31,6 @@ async def show_users_menu(client, update):
         ]
     ]
 
-    # Premium features only in PUBLIC_MODE
     if Config.PUBLIC_MODE:
         buttons[1].append(InlineKeyboardButton("💎 Premium", callback_data="list_users|premium|0"))
 
@@ -43,25 +42,25 @@ async def show_users_menu(client, update):
     if isinstance(update, Message):
         await update.reply(text, reply_markup=markup)
     else:
-        # CallbackQuery
+
         try:
             await update.edit_message_text(text, reply_markup=markup)
         except Exception:
-            # If message was deleted (e.g. export flow), send new
+
             await client.send_message(update.from_user.id, text, reply_markup=markup)
 
 @Client.on_callback_query(filters.regex(r"^admin_users_menu$"))
+
+# --- Handlers ---
 async def admin_users_menu(client, callback):
     if not is_admin(callback.from_user.id):
         return
 
     await show_users_menu(client, callback)
 
-# --- List Users (Paginated) ---
-
 @Client.on_callback_query(filters.regex(r"^list_users\|"))
 async def list_users(client, callback):
-    # Data: list_users|filter_mode|page
+
     if not is_admin(callback.from_user.id): return
 
     try:
@@ -74,9 +73,8 @@ async def list_users(client, callback):
     limit = 10
     skip = page * limit
 
-    # Build Filter
     filter_dict = {}
-    sort_by = "joined_at" # Default
+    sort_by = "joined_at"
 
     if mode == "premium":
         filter_dict = {"is_premium": True}
@@ -85,7 +83,6 @@ async def list_users(client, callback):
     elif mode == "recent":
         sort_by = "updated_at"
 
-    # Fetch
     users = await db.get_users_paginated(filter_dict, skip, limit, sort_by)
     total = await db.count_users(filter_dict)
 
@@ -104,7 +101,6 @@ async def list_users(client, callback):
             label = f"{status} {name} {uname}"
             markup.append([InlineKeyboardButton(label, callback_data=f"view_user|{uid}")])
 
-    # Pagination
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"list_users|{mode}|{page-1}"))
@@ -116,8 +112,6 @@ async def list_users(client, callback):
     markup.append([InlineKeyboardButton("🔙 Back", callback_data="admin_users_menu")])
 
     await callback.edit_message_text(text, reply_markup=InlineKeyboardMarkup(markup))
-
-# --- Search User ---
 
 @Client.on_callback_query(filters.regex(r"^admin_user_search_start$"))
 async def start_user_search(client, callback):
@@ -132,12 +126,6 @@ async def start_user_search(client, callback):
         )
     except Exception:
         pass
-
-
-# Text input handlers for user management are integrated into plugins.admin.handle_admin_text
-# to prevent Pyrogram group=1 handler conflicts.
-
-# --- User Profile ---
 
 @Client.on_callback_query(filters.regex(r"^view_user\|"))
 async def view_user_profile(client, callback):
@@ -154,7 +142,6 @@ async def view_user_profile(client, callback):
         await callback.answer("User not found in DB.", show_alert=True)
         return
 
-    # Gather Data
     username = f"@{user.get('username')}" if user.get("username") else "N/A"
     joined_ts = user.get("joined_at", 0)
     joined_date = datetime.fromtimestamp(joined_ts).strftime('%Y-%m-%d') if joined_ts else "Unknown"
@@ -177,7 +164,6 @@ async def view_user_profile(client, callback):
     banned = user.get("banned", False)
     status_emoji = "🔴 BANNED" if banned else "🟢 Active"
 
-    # Get Usage stats
     usage = await db.get_user_usage(target_id) or {}
     import datetime as dt_module
     current_utc_date = dt_module.datetime.utcnow().strftime('%Y-%m-%d')
@@ -197,16 +183,13 @@ async def view_user_profile(client, callback):
         f"• Files All-Time: `{files_alltime}`\n"
     )
 
-    # Actions
     markup = []
 
-    # Row 1: Ban/Unban
     if banned:
         markup.append([InlineKeyboardButton("🟢 Unban User", callback_data=f"act_unban|{target_id}")])
     else:
         markup.append([InlineKeyboardButton("🔴 Ban User", callback_data=f"act_ban|{target_id}")])
 
-    # Row 2: Add/Reset Premium (Only in PUBLIC_MODE)
     if Config.PUBLIC_MODE:
         prem_btn_text = "🔄 Extend Premium" if is_prem else "➕ Add Premium"
         markup.append([
@@ -215,25 +198,21 @@ async def view_user_profile(client, callback):
         if is_prem:
             markup[-1].append(InlineKeyboardButton("❌ Remove Premium", callback_data=f"act_reset_prem|{target_id}"))
 
-    # Row 3: Delete Data / Export
     markup.append([
         InlineKeyboardButton("🗑 Delete Data", callback_data=f"act_del_data_ask|{target_id}"),
         InlineKeyboardButton("📄 Export JSON", callback_data=f"act_export_json|{target_id}")
     ])
 
-    # Row 4: Back
     markup.append([
         InlineKeyboardButton("🔙 Back to Users", callback_data="admin_users_menu")
     ])
 
     await callback.edit_message_text(text, reply_markup=InlineKeyboardMarkup(markup))
 
-# --- Actions ---
-
 @Client.on_callback_query(filters.regex(r"^act_ban\|"))
 async def action_ban_user(client, callback):
     uid = int(callback.data.split("|")[1])
-    # Protect CEO/Admins
+
     if uid == Config.CEO_ID or uid in Config.ADMIN_IDS:
         await callback.answer("⛔ Cannot ban Admins.", show_alert=True)
         return
@@ -310,7 +289,6 @@ async def action_export_json(client, callback):
         await callback.answer("User not found.", show_alert=True)
         return
 
-    # Fetch usage data as well
     usage = await db.get_user_usage(uid)
     user['usage_stats'] = usage
 
@@ -332,3 +310,12 @@ async def action_export_json(client, callback):
     )
 
     await show_users_menu(client, callback)
+
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------

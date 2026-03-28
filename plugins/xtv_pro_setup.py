@@ -1,3 +1,4 @@
+# --- Imports ---
 import asyncio
 import os
 import random
@@ -19,14 +20,15 @@ from utils.log import get_logger
 logger = get_logger("plugins.xtv_pro_setup")
 pro_setup_sessions = {}
 
-
+# === Helper Functions ===
 def get_pro_session_data(user_id):
     if user_id not in pro_setup_sessions:
         pro_setup_sessions[user_id] = {}
     return pro_setup_sessions[user_id]
 
-
 @Client.on_callback_query(filters.regex(r"^pro_setup_menu$"))
+
+# --- Handlers ---
 async def pro_menu(client, callback_query):
     user_id = callback_query.from_user.id
     if user_id != Config.CEO_ID:
@@ -67,7 +69,6 @@ async def pro_menu(client, callback_query):
     except MessageNotModified:
         pass
 
-
 @Client.on_callback_query(filters.regex(r"^pro_setup_delete$"))
 async def delete_setup(client, callback_query):
     await callback_query.answer()
@@ -92,7 +93,6 @@ async def delete_setup(client, callback_query):
         ),
     )
 
-
 @Client.on_callback_query(filters.regex(r"^pro_setup_start$"))
 async def start_setup(client, callback_query):
     await callback_query.answer()
@@ -112,7 +112,6 @@ async def start_setup(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 @Client.on_message(filters.private & filters.user(Config.CEO_ID), group=1)
 async def pro_setup_handler(client, message):
@@ -351,7 +350,6 @@ async def pro_setup_handler(client, message):
                 pass
             del pro_setup_sessions[user_id]
 
-
 async def finalize_setup(userbot, user_id, msg):
     try:
         me = await userbot.get_me()
@@ -417,7 +415,6 @@ async def finalize_setup(userbot, user_id, msg):
         except MessageNotModified:
             pass
         del pro_setup_sessions[user_id]
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

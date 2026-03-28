@@ -1,3 +1,4 @@
+# --- Imports ---
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, Message
@@ -11,13 +12,12 @@ import io
 logger = get_logger("plugins.admin")
 admin_sessions = {}
 
-
+# === Helper Functions ===
 def get_admin_main_menu(pro_session, public_mode):
     pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
 
     keyboard = []
 
-    # Insert User Management universally
     keyboard.append(
         [InlineKeyboardButton("👤 User Management", callback_data="admin_users_menu")]
     )
@@ -94,7 +94,6 @@ def get_admin_main_menu(pro_session, public_mode):
 
     return InlineKeyboardMarkup(keyboard)
 
-
 def get_admin_templates_menu():
     return InlineKeyboardMarkup(
         [
@@ -122,7 +121,6 @@ def get_admin_templates_menu():
             [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
         ]
     )
-
 
 def get_admin_access_limits_menu():
     buttons = []
@@ -166,7 +164,6 @@ def get_admin_access_limits_menu():
     buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
     return InlineKeyboardMarkup(buttons)
 
-
 def get_admin_public_settings_menu():
     return InlineKeyboardMarkup(
         [
@@ -196,13 +193,13 @@ def get_admin_public_settings_menu():
         ]
     )
 
-
 def is_admin(user_id):
 
     return user_id == Config.CEO_ID
 
-
 @Client.on_message(filters.command("admin") & filters.private)
+
+# --- Handlers ---
 async def admin_panel(client, message):
     if not is_admin(message.from_user.id):
         return
@@ -229,12 +226,10 @@ async def admin_panel(client, message):
         text, reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE)
     )
 
-
 from pyrogram import ContinuePropagation
 from utils.logger import debug
 
 debug("✅ Loaded handler: admin_callback")
-
 
 @Client.on_callback_query(
     filters.regex(
@@ -664,7 +659,6 @@ async def admin_callback(client, callback_query):
             channels = config.get("force_sub_channels", [])
             legacy_ch = config.get("force_sub_channel")
 
-            # Show live preview summary
             num_channels = len(channels) if channels else (1 if legacy_ch else 0)
             status = "ON" if num_channels > 0 else "OFF"
 
@@ -792,7 +786,6 @@ async def admin_callback(client, callback_query):
                 channels.pop(idx)
                 await db.update_public_config("force_sub_channels", channels)
 
-                # Update legacy if needed
                 if len(channels) > 0:
                     await db.update_public_config("force_sub_channel", channels[0].get("id"))
                     await db.update_public_config("force_sub_link", channels[0].get("link"))
@@ -1528,7 +1521,7 @@ async def admin_callback(client, callback_query):
         new_mode = "smart_media_mode" if data.endswith("smart") else "quick_rename_mode"
         await db.update_workflow_mode(new_mode, None)
         await callback_query.answer("Global Workflow Mode updated!", show_alert=True)
-        # Re-trigger the menu
+
         from plugins.admin import handle_admin_callbacks
         class MockQuery:
             def __init__(self, msg, usr):
@@ -1538,7 +1531,7 @@ async def admin_callback(client, callback_query):
             async def answer(self, *args, **kwargs): pass
         await handle_admin_callbacks(client, MockQuery(callback_query.message, callback_query.from_user))
     elif data == "admin_general_channel":
-        current_channel = await db.get_channel(None) # Use None for global settings
+        current_channel = await db.get_channel(None)
         try:
             await callback_query.message.edit_text(
                 f"📢 **Global Channel Username Settings**\n\n"
@@ -1715,9 +1708,7 @@ async def admin_callback(client, callback_query):
         except MessageNotModified:
             pass
 
-
 from pyrogram import ContinuePropagation
-
 
 @Client.on_message(filters.photo & filters.private, group=1)
 async def handle_admin_photo(client, message):
@@ -1770,7 +1761,6 @@ async def handle_admin_photo(client, message):
             await msg.edit_text(f"❌ Error: {e}")
         except MessageNotModified:
             pass
-
 
 @Client.on_message(
     (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
@@ -1847,11 +1837,10 @@ async def handle_admin_text(client, message):
         val = message.text.strip()
         from utils.state import clear_session
 
-        # Check if they provided an ID directly
         if val.isdigit():
             user_id = int(val)
         else:
-            # Maybe they provided a username
+
             try:
                 user = await client.get_users(val)
                 user_id = user.id
@@ -2185,7 +2174,7 @@ async def handle_admin_text(client, message):
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_fs_edit_btn")]])
             )
         elif field == "btn_emoji":
-            # Just take the first character in case they sent a word with emoji
+
             emoji = val[0] if val else "📢"
             await db.update_public_config("force_sub_button_emoji", emoji)
             await message.reply_text(
@@ -2262,7 +2251,6 @@ async def handle_admin_text(client, message):
 
 debug("✅ Loaded handler: admin_dashboard_overview_cb")
 
-
 @Client.on_callback_query(
     filters.regex("^admin_usage_dashboard$") & filters.user(Config.CEO_ID)
 )
@@ -2270,17 +2258,15 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
     await callback_query.answer()
     stats = await db.get_dashboard_stats()
 
-    # Active slots logic using semaphores in process.py
     from plugins.process import _SEMAPHORES
 
     active_slots = 0
     for phase in ["download", "process", "upload"]:
         for user_sems in _SEMAPHORES.values():
             if phase in user_sems and user_sems[phase] is not None:
-                # value of semaphore is internal counter. Max is 3. So acquired = 3 - value
+
                 active_slots += 3 - user_sems[phase]._value
 
-    # Format egress strings
     def format_egress(mb):
         if mb >= 1048576:
             return f"{mb / 1048576:.2f} TB"
@@ -2295,7 +2281,6 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
     start_date_obj = datetime.datetime.strptime(stats.get("bot_start_date"), "%Y-%m-%d")
     start_date_str = start_date_obj.strftime("%d %b %Y")
 
-    # Build text
     text = (
         f"📊 **𝕏TV Usage Dashboard**\n"
         f"Updated: {current_time_str}\n"
@@ -2355,9 +2340,7 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
     except MessageNotModified:
         pass
 
-
 debug("✅ Loaded handler: admin_dashboard_top_cb")
-
 
 @Client.on_callback_query(
     filters.regex(r"^admin_dashboard_top_(\d+)$") & filters.user(Config.CEO_ID)
@@ -2383,7 +2366,6 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
             rank = skip + i + 1
             user_id = user["_id"].replace("user_", "")
 
-            # Try to get user info if possible (fallback to ID)
             try:
                 user_obj = await client.get_users(int(user_id))
                 display_name = (
@@ -2405,7 +2387,6 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
 
             text += f"**#{rank}** {display_name} — {files} files · {mb_str}\n"
 
-    # Pagination
     buttons = []
     nav_row = []
 
@@ -2446,9 +2427,7 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
     except MessageNotModified:
         pass
 
-
 debug("✅ Loaded handler: admin_dashboard_daily_cb")
-
 
 @Client.on_callback_query(
     filters.regex("^admin_dashboard_daily$") & filters.user(Config.CEO_ID)
@@ -2484,7 +2463,6 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
 
             is_today = " ← today" if stat["date"] == current_utc_date else ""
 
-            # Format columns
             text += f"`{date_str:<13} {files:<7} {egress_str:>7}`{is_today}\n"
 
     try:
@@ -2503,12 +2481,10 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
     except MessageNotModified:
         pass
 
-
 @Client.on_message(filters.regex(r"^/lookup (\d+)$") & filters.user(Config.CEO_ID))
 async def admin_lookup_user(client: Client, message: Message):
     user_id = int(message.matches[0].group(1))
     await show_user_lookup(client, message, user_id)
-
 
 async def show_user_lookup(client: Client, message: Message, user_id: int):
     usage = await db.get_user_usage(user_id)
@@ -2539,7 +2515,6 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
         else:
             return f"{mb:.2f} MB"
 
-    # Try to get user profile info
     try:
         user_obj = await client.get_users(user_id)
         name = user_obj.first_name
@@ -2551,7 +2526,6 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
     user_settings = await db.get_settings(user_id)
     joined_date = "Unknown"
 
-    # Check if there is a document at all
     has_thumb = "No"
     current_template = "Default"
 
@@ -2565,11 +2539,10 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
         if templates and templates.get("caption") != "{random}":
             current_template = "Custom"
 
-        # Try to extract joined date from ObjectID if available, else from usage.date
         _id = user_settings.get("_id")
         if _id:
             try:
-                # ObjectId contains a timestamp
+
                 import bson
 
                 if isinstance(_id, bson.ObjectId):
@@ -2633,9 +2606,7 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
 
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
-
 debug("✅ Loaded handler: admin_block_user_cb")
-
 
 @Client.on_callback_query(
     filters.regex(r"^admin_block_(\d+)$") & filters.user(Config.CEO_ID)
@@ -2647,9 +2618,7 @@ async def admin_block_user_cb(client: Client, callback_query: CallbackQuery):
     await show_user_lookup(client, callback_query.message, user_id)
     await callback_query.message.delete()
 
-
 debug("✅ Loaded handler: admin_unblock_user_cb")
-
 
 @Client.on_callback_query(
     filters.regex(r"^admin_unblock_(\d+)$") & filters.user(Config.CEO_ID)
@@ -2661,9 +2630,7 @@ async def admin_unblock_user_cb(client: Client, callback_query: CallbackQuery):
     await show_user_lookup(client, callback_query.message, user_id)
     await callback_query.message.delete()
 
-
 debug("✅ Loaded handler: admin_reset_quota_cb")
-
 
 @Client.on_callback_query(
     filters.regex(r"^admin_reset_quota_(\d+)$") & filters.user(Config.CEO_ID)
@@ -2675,9 +2642,7 @@ async def admin_reset_quota_cb(client: Client, callback_query: CallbackQuery):
     await show_user_lookup(client, callback_query.message, user_id)
     await callback_query.message.delete()
 
-
 debug("✅ Loaded handler: admin_prompt_lookup_cb")
-
 
 @Client.on_callback_query(
     filters.regex("^prompt_user_lookup$") & filters.user(Config.CEO_ID)
@@ -2704,7 +2669,6 @@ async def admin_prompt_lookup_cb(client: Client, callback_query: CallbackQuery):
 
     set_state(callback_query.from_user.id, "awaiting_user_lookup")
 
-
 @Client.on_message(
     filters.text & filters.private & filters.user(Config.CEO_ID), group=1
 )
@@ -2716,11 +2680,10 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
     if state == "awaiting_user_lookup":
         val = message.text.strip()
 
-        # Check if they provided an ID directly
         if val.isdigit():
             user_id = int(val)
         else:
-            # Maybe they provided a username
+
             try:
                 user = await client.get_users(val)
                 user_id = user.id
@@ -2743,7 +2706,6 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
         await show_user_lookup(client, message, user_id)
         clear_session(message.from_user.id)
         raise ContinuePropagation
-
 
 @Client.on_callback_query(filters.regex("^noop$"))
 async def noop_cb(client, callback_query):

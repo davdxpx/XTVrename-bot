@@ -1,12 +1,14 @@
+# --- Imports ---
 from pyrogram import Client, filters
 from utils.log import get_logger
 
 logger = get_logger("plugins.debug")
 
-
 from pyrogram import ContinuePropagation
 
 @Client.on_message(filters.all, group=-1)
+
+# --- Handlers ---
 async def debug_all_messages(client, message):
     sender_id = (
         message.from_user.id
@@ -17,7 +19,6 @@ async def debug_all_messages(client, message):
         f"Received message from {sender_id}: {message.text or message.caption or '[Media]'}"
     )
     raise ContinuePropagation
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

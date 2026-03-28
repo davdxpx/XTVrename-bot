@@ -1,3 +1,4 @@
+# --- Imports ---
 import os
 import time
 import asyncio
@@ -25,7 +26,7 @@ logger = logging.getLogger("TaskProcessor")
 
 _SEMAPHORES: Dict[int, Dict[str, Optional[asyncio.Semaphore]]] = {}
 
-
+# === Helper Functions ===
 def get_semaphore(user_id: int, phase: str) -> asyncio.Semaphore:
     if user_id not in _SEMAPHORES:
         _SEMAPHORES[user_id] = {"download": None, "process": None, "upload": None}
@@ -35,7 +36,7 @@ def get_semaphore(user_id: int, phase: str) -> asyncio.Semaphore:
 
     return _SEMAPHORES[user_id][phase]
 
-
+# === Classes ===
 class TaskProcessor:
 
     def __init__(self, client: Client, message: Message, data: Dict[str, Any]):
@@ -108,7 +109,6 @@ class TaskProcessor:
             if media:
                 file_size = getattr(media, "file_size", 0)
 
-        # Base timeout config: (1h base + roughly 5m per GB)
         timeout_base = 3600
         timeout_multiplier = (file_size / (1024 * 1024 * 1024)) * 300 if file_size else 0
         phase_timeout = timeout_base + timeout_multiplier
@@ -340,19 +340,17 @@ class TaskProcessor:
             if self.data.get("audio_album"):
                 self.metadata["album"] = self.data.get("audio_album", "")
 
-        # If we have a local_file_path (from archive extraction), just move it instead of downloading
         if self.data.get("local_file_path"):
             local_path = self.data.get("local_file_path")
             if os.path.exists(local_path):
                 import shutil
-                # Use asyncio.to_thread to prevent blocking the event loop on large files
+
                 await asyncio.to_thread(shutil.move, local_path, self.input_path)
                 file_size = os.path.getsize(self.input_path)
                 logger.info(f"Local file moved: {self.input_path} ({file_size} bytes)")
 
-                # We need to artificially set file_size on the dummy message object so cleanup/quota works later
                 if self.file_message:
-                    # Create a dummy object with file_size attribute to satisfy quota check
+
                     class DummyMedia:
                         def __init__(self, size):
                             self.file_size = size
@@ -544,8 +542,6 @@ class TaskProcessor:
 
         pref_sep = await db.get_preferred_separator(self.user_id) if hasattr(self, 'user_id') else "."
 
-        # Use provided metadata from data dict (from flow.py user selections/detection) if present
-        # otherwise fallback to extracting it here (for direct api/batch runs that might bypass flow)
         if "specials" in self.data:
             extracted_specials = self.data["specials"]
         else:
@@ -623,17 +619,13 @@ class TaskProcessor:
         }
 
         def clean_filename(name, orig_template=""):
-            # Clean empty brackets
+
             name = re.sub(r'\[\s*\]', '', name)
             name = re.sub(r'\(\s*\)', '', name)
             name = re.sub(r'\{\s*\}', '', name)
 
-            # Collapse multiple consecutive separators of the same type or mixed type
             name = re.sub(r'[\._\s]{2,}', pref_sep, name)
 
-            # Restore single-space replacement logic based on the user's template
-            # If the user specifically excluded spaces in the template but used dots/underscores,
-            # we should replace any single spaces (e.g. from Title) with the preferred separator.
             if orig_template and " " not in orig_template:
                 if "." in orig_template:
                     name = name.replace(" ", ".")
@@ -644,7 +636,6 @@ class TaskProcessor:
                     if "." not in orig_template:
                         name = name.replace(".", "_")
 
-            # Final trim
             name = name.strip('._ ')
             return name
 
@@ -668,10 +659,10 @@ class TaskProcessor:
 
         elif self.media_type == "convert":
             target_format = self.data.get('target_format', 'mkv')
-            # For special conversions, we might keep the original extension or default to .mkv
+
             target_ext = f".{target_format}"
             if target_format in ["x264", "x265", "audionorm"]:
-                target_ext = ".mkv"  # Use .mkv container for these to ensure compatibility
+                target_ext = ".mkv"
 
             final_filename = f"{safe_title}{target_ext}"
             meta_title = f"{safe_title}"
@@ -919,7 +910,7 @@ class TaskProcessor:
             cmd.append(self.output_path)
             err = None
         elif self.media_type == "extract_subtitles":
-            # Just extract the first subtitle track to avoid srt format limitations with multiple streams
+
             cmd = ["ffmpeg", "-y", "-i", self.input_path, "-map", "0:s:0?", "-c:s", "srt", self.output_path]
             err = None
         else:
@@ -961,7 +952,7 @@ class TaskProcessor:
 
             if total_duration > 0 and (time.time() - last_update_time) > 5:
                 try:
-                    # time_str is like 00:01:23.45
+
                     h, m, s = time_str.split(':')
                     current_time = int(h) * 3600 + int(m) * 60 + float(s)
 
@@ -1007,7 +998,7 @@ class TaskProcessor:
             return False
 
         if self.media_type == "extract_subtitles":
-            # Check if subtitle was actually extracted
+
             if not os.path.exists(self.output_path) or os.path.getsize(self.output_path) == 0:
                 logger.error("Subtitle extraction failed: no subtitles found in stream.")
                 await self._update_status("❌ **Extraction Failed**\n\nNo subtitles were found in this video.")
@@ -1204,19 +1195,18 @@ class TaskProcessor:
                                     self.user_id,
                                     f"❌ **Delivery Error**\n\nThe file was processed successfully but the bot failed to deliver it to you from the tunnel. Error: `{e}`",
                                 )
-                break # Break out of the upload_attempt loop if successful
+                break
             except FloodWait as e:
                 logger.warning(f"FloodWait during upload: sleeping {e.value}s before retrying")
                 await asyncio.sleep(e.value + 1)
             except Exception as e:
                 if upload_attempt == max_upload_retries - 1:
-                    raise e # Re-raise if we're out of retries
+                    raise e
                 logger.warning(f"Upload attempt {upload_attempt + 1} failed: {e}. Retrying...")
                 await asyncio.sleep(5)
 
         try:
 
-            # Attempt Auto-Delete of original message
             file_chat_id = self.data.get("file_chat_id")
             file_message_id = self.data.get("file_message_id")
             if file_chat_id and file_message_id:
@@ -1225,25 +1215,20 @@ class TaskProcessor:
                 except Exception as del_err:
                     logger.warning(f"Failed to auto-delete original message: {del_err}")
 
-            # --- USAGE TRACKING INJECTION ---
             usage_text = ""
             try:
-                # Get the original file size from the message to release the reservation
+
                 original_size = 0
                 if self.file_message:
                     media = self.file_message.document or self.file_message.video or self.file_message.audio or self.file_message.photo
                     original_size = getattr(media, "file_size", 0) if media else 0
 
-                # Update usage stats using the actual output size, and release the original reservation
                 processed_size = os.path.getsize(self.output_path)
 
-                # Fetch old usage to calculate the diff properly if needed, though db.update_usage handles it.
                 await db.update_usage(self.user_id, processed_size, reserved_file_size_bytes=original_size)
 
-                # Set success flag so cleanup doesn't release quota again
                 self.processing_successful = True
 
-                # Add usage to success message
                 usage = await db.get_user_usage(self.user_id)
                 config = await db.get_public_config()
 
@@ -1315,7 +1300,6 @@ class TaskProcessor:
                 logger.error(
                     f"Error fetching/updating usage for success message: {usage_e}"
                 )
-            # --- END USAGE TRACKING INJECTION ---
 
             await self.status_msg.delete()
 
@@ -1404,7 +1388,7 @@ class TaskProcessor:
 
             elif not batch_id:
                 try:
-                    # Fallback if no batch mechanism (should be rare)
+
                     await self.client.send_message(
                         self.user_id, f"✅ **Processing Complete!**\n\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
                     )
@@ -1484,13 +1468,10 @@ class TaskProcessor:
             except Exception:
                 pass
 
-        # Clean up the extraction directory if this is the last item in the batch
         if self.data.get("extract_dir") and self.data.get("batch_id"):
             extract_dir = self.data.get("extract_dir")
             batch_id = self.data.get("batch_id")
 
-            # Use queue_manager to check if this is the last pending item
-            # If all other items in the batch are completed or failed, we can safely delete the dir
             if queue_manager.is_batch_complete(batch_id):
                 if os.path.exists(extract_dir):
                     try:
@@ -1498,7 +1479,6 @@ class TaskProcessor:
                     except Exception as e:
                         logger.warning(f"Failed to remove extraction directory {extract_dir}: {e}")
 
-        # If processing didn't complete successfully, release the reserved quota
         if not getattr(self, "processing_successful", False):
             try:
                 original_size = 0
@@ -1511,9 +1491,8 @@ class TaskProcessor:
             except Exception as e:
                 logger.error(f"Failed to release quota in cleanup: {e}")
 
-
 async def process_file(client, message, data):
-    # Update user in DB when they process a file
+
     await db.ensure_user(
         user_id=message.from_user.id if message.from_user else message.chat.id,
         first_name=message.from_user.first_name if message.from_user else message.chat.title,
@@ -1522,10 +1501,9 @@ async def process_file(client, message, data):
         language_code=message.from_user.language_code if message.from_user else None,
         is_bot=message.from_user.is_bot if message.from_user else False
     )
-    # Quota check and reservation is now done upstream in handle_file_upload
+
     processor = TaskProcessor(client, message, data)
     await processor.run()
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

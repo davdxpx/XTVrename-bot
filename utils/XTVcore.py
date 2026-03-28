@@ -1,7 +1,8 @@
+# --- Imports ---
 from datetime import datetime
 import time
 
-
+# === Classes ===
 class XTVEngine:
     NAME_CORE = "𝕏TV Core"
     VERSION_CORE = "3.1"
@@ -62,7 +63,6 @@ class XTVEngine:
             + ((str(seconds) + "s") if seconds else "")
         )
         return tmp[:-2] if tmp.endswith(", ") else tmp
-
 
 engine = XTVEngine()
 
