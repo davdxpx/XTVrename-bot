@@ -192,11 +192,11 @@ async def execute_ffmpeg(cmd, progress_callback=None):
                 if time_match:
                     await progress_callback(time_match.group(1))
 
+    wait_task = asyncio.create_task(process.wait())
+    read_task = asyncio.create_task(read_stderr())
+
     try:
-        await asyncio.gather(
-            process.wait(),
-            read_stderr()
-        )
+        await asyncio.gather(wait_task, read_task)
         stderr_str = "".join(stderr_lines).encode()
         return process.returncode == 0, stderr_str
     except asyncio.CancelledError:
@@ -206,7 +206,14 @@ async def execute_ffmpeg(cmd, progress_callback=None):
                 process.terminate()
                 await asyncio.wait_for(process.wait(), timeout=5.0)
             except asyncio.TimeoutError:
-                process.kill()
+                logging.getLogger("ffmpeg_tools").warning("FFmpeg process did not terminate, killing...")
+                try:
+                    process.kill()
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except Exception as e:
+                    logging.getLogger("ffmpeg_tools").error(f"Failed to kill FFmpeg process: {e}")
+        wait_task.cancel()
+        read_task.cancel()
         raise
 
 # --------------------------------------------------------------------------
