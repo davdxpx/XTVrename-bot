@@ -346,11 +346,36 @@ async def handle_text_input(client, message):
         valid_reply_ids = [file_msg_id, prompt_msg_id]
 
         if file_msg_id and (not message.reply_to_message or message.reply_to_message.id not in valid_reply_ids):
-            await message.reply_text("⚠️ **Please reply directly to my prompt message** when sending the new name, so I know which file you are renaming.", quote=True)
+            warning_msg = await message.reply_text("⚠️ **Please reply directly to my prompt message** when sending the new name, so I know which file you are renaming.", quote=True)
+
+            # Auto-delete the warning message and the invalid user message after 5 seconds to keep chat clean
+            async def delete_warning():
+                import asyncio
+                await asyncio.sleep(5)
+                try:
+                    await warning_msg.delete()
+                    await message.delete()
+                except Exception:
+                    pass
+            import asyncio
+            asyncio.create_task(delete_warning())
             return
 
         new_name = message.text.strip()
         update_data(user_id, "general_name", new_name)
+
+        # Delete the user's reply message containing the new name
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        # Delete the bot's ForceReply prompt message
+        if prompt_msg_id:
+            try:
+                await client.delete_messages(chat_id=user_id, message_ids=prompt_msg_id)
+            except Exception:
+                pass
 
         await prompt_dumb_channel(client, user_id, message, is_edit=False)
 
@@ -640,7 +665,7 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
             except MessageNotModified:
                 pass
         else:
-            await message_obj.reply_text(text, reply_markup=reply_markup)
+            await client.send_message(user_id, text, reply_markup=reply_markup)
         return
 
     set_state(user_id, "awaiting_dumb_channel_selection")
@@ -671,7 +696,7 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
         except MessageNotModified:
             pass
     else:
-        await message_obj.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 @Client.on_callback_query(filters.regex(r"^sel_dumb_(.*)$"))
@@ -748,7 +773,7 @@ async def initiate_language_selection(client, user_id, message_obj):
         except MessageNotModified:
             pass
     else:
-        await message_obj.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
 @Client.on_callback_query(filters.regex(r"^lang_"))
