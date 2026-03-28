@@ -364,18 +364,21 @@ async def handle_text_input(client, message):
         new_name = message.text.strip()
         update_data(user_id, "general_name", new_name)
 
-        # Delete the user's reply message containing the new name
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        # Delete the bot's ForceReply prompt message
-        if prompt_msg_id:
+        # Delay deletion slightly so it feels less jarring
+        async def delayed_cleanup():
+            import asyncio
+            await asyncio.sleep(1)
             try:
-                await client.delete_messages(chat_id=user_id, message_ids=prompt_msg_id)
+                await message.delete()
             except Exception:
                 pass
+            if prompt_msg_id:
+                try:
+                    await client.delete_messages(chat_id=user_id, message_ids=prompt_msg_id)
+                except Exception:
+                    pass
+        import asyncio
+        asyncio.create_task(delayed_cleanup())
 
         await prompt_dumb_channel(client, user_id, message, is_edit=False)
 
@@ -620,6 +623,9 @@ async def process_ready_file(client, user_id, message_obj, session_data):
         }
 
         meta = analyze_filename(session_data.get("original_name"))
+        # DO NOT overwrite the explicitly set type (e.g. 'general') with auto-detected type ('movie'/'series')
+        if "type" in meta and data.get("type"):
+            meta.pop("type")
         data.update(meta)
 
         try:
@@ -851,11 +857,12 @@ async def handle_gen_prompt_rename(client, callback_query):
     except Exception:
         pass
 
+    orig_name = session_data.get("original_name", "Unknown File")
     text = (
         "✏️ **Enter the new name for this file:**\n\n"
         "You can use variables like `{filename}`, `{Season_Episode}`, `{Quality}`, `{Year}`, `{Title}`.\n"
         "*(The extension is added automatically)*\n\n"
-        "Example: `My File - {filename}`"
+        f"Original Name: `{orig_name}`"
     )
 
     prompt_msg = None
