@@ -22,6 +22,10 @@ The **𝕏TV Rename Bot** is a high-performance, enterprise-grade **Telegram Bot
 *   **𝕏TV Pro™: Ephemeral Tunnels**: Seamless integration with a Premium Userbot session to handle **Large Files (>2GB up to 4GB)**. The system generates secure, temporary private tunnels for every single large file transfer, bypassing API limits, cache crashing, and `PEER_ID_INVALID` errors.
 
 ### 🔹 Intelligent Recognition
+*   **Workflow Modes (Starter Setup)**: The bot greets users with an interactive, beautifully-formatted **Starter Setup Menu** when they join your Force-Sub channel or press `/start`. Users can pick their primary mode of operation, which can be changed anytime via settings:
+    *   **🧠 Smart Media Mode**: Best for TV Shows & Movies. Automatically triggers the Auto-Detection Matrix and fetches TMDb metadata/posters natively.
+    *   **⚡ Quick Rename Mode**: Best for Personal Videos, Anime, or generic files. Instantly bypasses all auto-detection logic and brings the user straight to the General Mode renaming prompt for rapid processing.
+*   **Seamless Chat Cleanup**: The bot aggressively keeps the chat history pristine during the renaming process. It natively utilizes Telegram's `ForceReply` functionality to ask for new filenames, ensuring absolute accuracy even with multiple files in the queue. As soon as a user provides the new filename, the bot **auto-deletes** both its own prompt and the user's reply, keeping the interface uncluttered.
 *   **Auto-Detection Matrix**: Automatically scans filenames to detect Movie/Series titles, Years, Qualities, and Episode numbers with high accuracy.
 *   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork. Now supports **Multilingual Metadata** (e.g. `de-DE`, `es-ES`), customizable per user in `/settings`!
 *   **Automatic Archive Unpacking**: Automatically detects and downloads `.zip`, `.rar`, and `.7z` archives. It smartly identifies password-protected archives, prompts the user for the password, extracts the contents, and automatically feeds all valid media files directly into the batch processing queue!
