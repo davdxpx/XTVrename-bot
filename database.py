@@ -33,6 +33,7 @@ class Database:
             self.settings = self.db["user_settings"]
             self.users = self.db["users"]
             self.daily_stats = self.db["daily_stats"]
+            self.pending_payments = self.db["pending_payments"]
 
     def _get_doc_id(self, user_id=None):
         if Config.PUBLIC_MODE and user_id is not None:
@@ -470,6 +471,19 @@ class Database:
                             "watermarker": True,
                             "subtitle_extractor": True,
                         }
+                    },
+                    "payment_methods": {
+                        "paypal_enabled": False,
+                        "paypal_email": "",
+                        "crypto_enabled": False,
+                        "crypto_address": "",
+                        "upi_enabled": False,
+                        "upi_id": "",
+                        "stars_enabled": False
+                    },
+                    "discounts": {
+                        "months_3": 0,
+                        "months_12": 0
                     }
                 }
                 await self.settings.insert_one(default_config)
@@ -1104,6 +1118,38 @@ class Database:
     async def add_log(self, action: str, admin_id: int, description: str):
 
         logger.info(f"ADMIN_LOG [{action}] by {admin_id}: {description}")
+
+    async def add_pending_payment(self, payment_id: str, user_id: int, plan: str, duration_months: int, amount_str: str, method: str):
+        if self.pending_payments is None:
+            return
+        import time
+        doc = {
+            "_id": payment_id,
+            "user_id": user_id,
+            "plan": plan,
+            "duration_months": duration_months,
+            "amount": amount_str,
+            "method": method,
+            "status": "pending",
+            "created_at": time.time()
+        }
+        await self.pending_payments.insert_one(doc)
+
+    async def get_pending_payment(self, payment_id: str):
+        if self.pending_payments is None:
+            return None
+        return await self.pending_payments.find_one({"_id": payment_id})
+
+    async def update_pending_payment_status(self, payment_id: str, status: str):
+        if self.pending_payments is None:
+            return
+        await self.pending_payments.update_one({"_id": payment_id}, {"$set": {"status": status}})
+
+    async def get_all_pending_payments(self, limit: int = 20):
+        if self.pending_payments is None:
+            return []
+        cursor = self.pending_payments.find({"status": "pending"}).sort("created_at", 1).limit(limit)
+        return await cursor.to_list(length=limit)
 
 db = Database()
 

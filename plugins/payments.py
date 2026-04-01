@@ -9,37 +9,242 @@ logger = get_logger("plugins.payments")
 def is_public_mode():
     return Config.PUBLIC_MODE
 
-@Client.on_callback_query(filters.regex(r"^buy_stars_(standard|deluxe)$"))
+import uuid
+import re
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+@Client.on_callback_query(filters.regex(r"^buy_premium_dur_(standard|deluxe)$"))
+async def handle_buy_premium_dur(client, callback_query):
+    if not is_public_mode():
+        return
+
+    plan = callback_query.matches[0].group(1)
+    config = await db.get_public_config()
+
+    plan_key = f"premium_{plan}"
+    plan_settings = config.get(plan_key, {})
+    price_string = plan_settings.get("price_string", "0 USD")
+
+    match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£)?", price_string.upper())
+    if not match:
+        await callback_query.answer("Pricing is misconfigured.", show_alert=True)
+        return
+
+    base_price = float(match.group(1))
+    currency = match.group(2) or "USD"
+
+    discounts = config.get("discounts", {})
+    d3 = discounts.get("months_3", 0)
+    d12 = discounts.get("months_12", 0)
+
+    def calc_price(months, discount):
+        total = base_price * months
+        if discount > 0:
+            total = total * (1 - (discount / 100.0))
+        return f"{total:g} {currency}"
+
+    p1 = f"{base_price:g} {currency}"
+    p3 = calc_price(3, d3)
+    p12 = calc_price(12, d12)
+
+    text = (
+        f"🛒 **Select Billing Cycle ({plan.capitalize()})**\n\n"
+        f"Choose how long you want to subscribe. Longer cycles offer better value!\n\n"
+    )
+
+    if d3 > 0:
+        text += f"**3 Months:** `{p3}` (Save {d3}%!)\n"
+    else:
+        text += f"**3 Months:** `{p3}`\n"
+
+    if d12 > 0:
+        text += f"**12 Months:** `{p12}` (Save {d12}%!)\n"
+    else:
+        text += f"**12 Months:** `{p12}`\n"
+
+    try:
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"1 Month ({p1})", callback_data=f"buy_premium_pay_{plan}_1")],
+                [InlineKeyboardButton(f"3 Months ({p3})", callback_data=f"buy_premium_pay_{plan}_3")],
+                [InlineKeyboardButton(f"12 Months ({p12})", callback_data=f"buy_premium_pay_{plan}_12")],
+                [InlineKeyboardButton("← Back", callback_data="cancel_rename")]
+            ])
+        )
+    except Exception as e:
+        logger.error(e)
+
+@Client.on_callback_query(filters.regex(r"^buy_premium_pay_(standard|deluxe)_(\d+)$"))
+async def handle_buy_premium_pay(client, callback_query):
+    if not is_public_mode():
+        return
+
+    plan = callback_query.matches[0].group(1)
+    months = int(callback_query.matches[0].group(2))
+
+    config = await db.get_public_config()
+    pm = config.get("payment_methods", {})
+
+    methods_available = False
+    buttons = []
+
+    if pm.get("stars_enabled", False):
+        methods_available = True
+        buttons.append([InlineKeyboardButton("⭐ Pay with Telegram Stars", callback_data=f"buy_stars_{plan}_{months}")])
+
+    if pm.get("paypal_enabled", False) and pm.get("paypal_email"):
+        methods_available = True
+        buttons.append([InlineKeyboardButton("💳 Pay with PayPal", callback_data=f"buy_manual_{plan}_{months}_paypal")])
+
+    if pm.get("crypto_enabled", False) and pm.get("crypto_address"):
+        methods_available = True
+        buttons.append([InlineKeyboardButton("🪙 Pay with Crypto", callback_data=f"buy_manual_{plan}_{months}_crypto")])
+
+    if pm.get("upi_enabled", False) and pm.get("upi_id"):
+        methods_available = True
+        buttons.append([InlineKeyboardButton("🏦 Pay with UPI", callback_data=f"buy_manual_{plan}_{months}_upi")])
+
+    buttons.append([InlineKeyboardButton("← Back", callback_data=f"buy_premium_dur_{plan}")])
+
+    if not methods_available:
+        await callback_query.answer("No payment methods are currently available. Please contact the administrator.", show_alert=True)
+        return
+
+    text = (
+        f"💳 **Select Payment Method**\n\n"
+        f"Plan: **Premium {plan.capitalize()}**\n"
+        f"Duration: **{months} Month(s)**\n\n"
+        f"Choose your preferred payment method below:"
+    )
+
+    try:
+        await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        logger.error(e)
+
+@Client.on_callback_query(filters.regex(r"^buy_manual_(standard|deluxe)_(\d+)_(paypal|crypto|upi)$"))
+async def handle_buy_manual(client, callback_query):
+    if not is_public_mode():
+        return
+
+    user_id = callback_query.from_user.id
+    plan = callback_query.matches[0].group(1)
+    months = int(callback_query.matches[0].group(2))
+    method = callback_query.matches[0].group(3)
+
+    config = await db.get_public_config()
+    pm = config.get("payment_methods", {})
+
+    dest = ""
+    if method == "paypal":
+        dest = pm.get("paypal_email", "")
+    elif method == "crypto":
+        dest = pm.get("crypto_address", "")
+    elif method == "upi":
+        dest = pm.get("upi_id", "")
+
+    plan_key = f"premium_{plan}"
+    plan_settings = config.get(plan_key, {})
+    price_string = plan_settings.get("price_string", "0 USD")
+
+    match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£)?", price_string.upper())
+    base_price = float(match.group(1)) if match else 0.0
+    currency = (match.group(2) if match else "USD") or "USD"
+
+    discounts = config.get("discounts", {})
+    d3 = discounts.get("months_3", 0)
+    d12 = discounts.get("months_12", 0)
+
+    total = base_price * months
+    if months == 3 and d3 > 0:
+        total = total * (1 - (d3 / 100.0))
+    elif months == 12 and d12 > 0:
+        total = total * (1 - (d12 / 100.0))
+
+    final_price_str = f"{total:g} {currency}"
+    payment_id = f"PAY-XTV-{str(uuid.uuid4())[:8].upper()}"
+
+    await db.add_pending_payment(payment_id, user_id, plan, months, final_price_str, method)
+
+    text = (
+        f"📝 **Manual Payment Instructions**\n\n"
+        f"**Amount Due:** `{final_price_str}`\n"
+        f"**Method:** `{method.capitalize()}`\n"
+        f"**Send To:** `{dest}`\n\n"
+        f"⚠️ **IMPORTANT:** You MUST include this Payment ID in the transaction notes/memo:\n"
+        f"`{payment_id}`\n\n"
+        f"Once you have sent the money, click the button below to notify the admins."
+    )
+
+    try:
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ I Have Paid", callback_data=f"paid_manual_{payment_id}")],
+                [InlineKeyboardButton("← Cancel", callback_data="cancel_rename")]
+            ])
+        )
+    except Exception as e:
+        logger.error(e)
+
+@Client.on_callback_query(filters.regex(r"^paid_manual_(.*)$"))
+async def handle_paid_manual(client, callback_query):
+    payment_id = callback_query.matches[0].group(1)
+    p = await db.get_pending_payment(payment_id)
+
+    if not p:
+        await callback_query.answer("Transaction not found.", show_alert=True)
+        return
+
+    await callback_query.answer("Admins have been notified. Please wait for approval.", show_alert=True)
+
+    try:
+        await callback_query.message.edit_text(
+            "✅ **Payment Submitted for Review**\n\n"
+            f"Your Payment ID `{payment_id}` has been sent to the admins.\n"
+            "Your account will be upgraded automatically once the transaction is verified."
+        )
+    except:
+        pass
+
+@Client.on_callback_query(filters.regex(r"^buy_stars_(standard|deluxe)_(\d+)$"))
 async def handle_buy_stars(client, callback_query):
     if not is_public_mode():
         return
 
     plan = callback_query.matches[0].group(1)
+    months = int(callback_query.matches[0].group(2))
     user_id = callback_query.from_user.id
 
     config = await db.get_public_config()
 
     plan_key = f"premium_{plan}"
     plan_settings = config.get(plan_key, {})
-    stars_price = plan_settings.get("stars_price", 0)
+    base_stars = plan_settings.get("stars_price", 0)
 
-    if stars_price <= 0:
+    if base_stars <= 0:
         await callback_query.answer("❌ Stars payment is not configured for this plan.", show_alert=True)
         return
 
-    title = f"Premium {plan.capitalize()} Plan"
-    description = f"Purchase the Premium {plan.capitalize()} Plan via Telegram Stars. You will enjoy enhanced limits and features."
-    payload = f"buy_premium_{plan}_{user_id}"
-    currency = "XTR"
+    discounts = config.get("discounts", {})
+    d3 = discounts.get("months_3", 0)
+    d12 = discounts.get("months_12", 0)
 
-    # In Pyrogram v2, we must use the raw `SendInvoice` method for sending invoices,
-    # or the raw Invoice object. Wait, Pyrogram does not have a native `send_invoice` wrapper
-    # unless it was added later. Let's use the raw API method just to be completely safe.
+    total_stars = base_stars * months
+    if months == 3 and d3 > 0:
+        total_stars = int(total_stars * (1 - (d3 / 100.0)))
+    elif months == 12 and d12 > 0:
+        total_stars = int(total_stars * (1 - (d12 / 100.0)))
+
+    title = f"Premium {plan.capitalize()} Plan ({months} Months)"
+    description = f"Purchase the Premium {plan.capitalize()} Plan for {months} month(s) via Telegram Stars. You will enjoy enhanced limits and exclusive features."
+    payload = f"buy_premium_{plan}_{months}_{user_id}"
+    currency = "XTR"
 
     try:
         from pyrogram.raw.functions.messages import SendMedia
         from pyrogram.raw.types import InputMediaInvoice, Invoice, InputPeerUser, DataJSON
-        import json
 
         peer = await client.resolve_peer(user_id)
 
@@ -53,7 +258,7 @@ async def handle_buy_stars(client, callback_query):
             phone_to_provider=False,
             email_to_provider=False,
             currency=currency,
-            prices=[LabeledPrice(label=title, amount=stars_price)]
+            prices=[LabeledPrice(label=title, amount=total_stars)]
         )
 
         input_media = InputMediaInvoice(
@@ -143,18 +348,18 @@ async def handle_successful_payment(client, message):
     if is_payment and payload:
         if payload.startswith("buy_premium_"):
             parts = payload.split("_")
-            if len(parts) >= 4:
+            if len(parts) >= 5:
                 plan = parts[2]
-                target_user_id = int(parts[3])
+                months = int(parts[3])
+                target_user_id = int(parts[4])
 
-                # Default hardcoded period is 30 days
-                # Add 30 days for Stars payment
-                await db.add_premium_user(target_user_id, days=30, plan=plan)
+                days = months * 30
+                await db.add_premium_user(target_user_id, days=days, plan=plan)
 
                 await message.reply_text(
                     f"✅ **Payment Successful!**\n\n"
                     f"Thank you for purchasing the **Premium {plan.capitalize()} Plan**.\n\n"
-                    f"Your account has been upgraded for 30 days. Enjoy!"
+                    f"Your account has been upgraded for {months} Month(s). Enjoy!"
                 )
 
-                await db.add_log("stars_payment", Config.CEO_ID, f"User {target_user_id} paid for {plan} plan")
+                await db.add_log("stars_payment", Config.CEO_ID, f"User {target_user_id} paid for {plan} plan ({months} months)")

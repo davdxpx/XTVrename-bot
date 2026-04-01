@@ -211,29 +211,10 @@ async def handle_premium_command(client, message):
         text += f"🎁 **Special Offer:** You are eligible for a **{trial_days}-Day Premium Trial** (Standard Plan)!"
         buttons.append([InlineKeyboardButton("🎁 Claim Premium Trial", callback_data="claim_trial")])
 
-    std_stars = standard_settings.get("stars_price", 0)
-    dlx_stars = deluxe_settings.get("stars_price", 0)
+    buttons.append([InlineKeyboardButton("🛒 Purchase Premium Standard", callback_data="buy_premium_dur_standard")])
 
-    if std_stars > 0:
-        buttons.append([InlineKeyboardButton(f"⭐ Buy Standard ({std_stars} Stars)", callback_data="buy_stars_standard")])
-    if deluxe_enabled and dlx_stars > 0:
-        buttons.append([InlineKeyboardButton(f"⭐ Buy Deluxe ({dlx_stars} Stars)", callback_data="buy_stars_deluxe")])
-
-    support_contact = config.get("support_contact", "Not set")
-    if support_contact != "Not set":
-        import re
-        sc = support_contact.strip()
-        if sc.startswith("http://") or sc.startswith("https://"):
-            url = sc
-        elif sc.startswith("@"):
-            url = f"https://t.me/{sc[1:]}"
-        elif re.match(r"^[a-zA-Z0-9_]{5,32}$", sc):
-            url = f"https://t.me/{sc}"
-        else:
-            url = None
-
-        if url:
-            buttons.append([InlineKeyboardButton("💬 Contact Admin to Buy", url=url)])
+    if deluxe_enabled:
+        buttons.append([InlineKeyboardButton("👑 Purchase Premium Deluxe", callback_data="buy_premium_dur_deluxe")])
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="user_cancel")])
 
