@@ -1307,11 +1307,29 @@ async def handle_file_upload(client, message):
             )
             return
 
-        if file_size > 2000 * 1000 * 1000 and getattr(client, "user_bot", None) is None:
-            await message.reply_text(
-                "❌ **𝕏TV Pro™ Required**\n\nThis file is larger than 2GB. You must configure the 𝕏TV Pro™ Premium Userbot in the `/admin` panel to process files of this size."
-            )
-            return
+        if file_size > 2000 * 1000 * 1000:
+            if getattr(client, "user_bot", None) is None:
+                await message.reply_text(
+                    "❌ **𝕏TV Pro™ Required**\n\nThis file is larger than 2GB. The 𝕏TV Pro™ Premium Userbot must be configured to process files of this size."
+                )
+                return
+
+            if Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
+                config = await db.get_public_config()
+                access_setting = config.get("xtv_pro_4gb_access", "all")
+
+                if access_setting != "all":
+                    user_doc = await db.get_user(user_id)
+                    is_premium = user_doc and user_doc.get("is_premium", False)
+                    plan_name = user_doc.get("premium_plan", "standard") if user_doc else "standard"
+
+                    if not is_premium:
+                        await message.reply_text("❌ **Premium Required**\n\nThis file is larger than 2GB. Please upgrade to a Premium plan to process files up to 4GB.")
+                        return
+
+                    if access_setting == "premium_deluxe" and plan_name != "deluxe":
+                        await message.reply_text("❌ **Premium Deluxe Required**\n\nThis file is larger than 2GB. Only Premium Deluxe users can process files up to 4GB. Please upgrade your plan.")
+                        return
 
         quota_ok, error_msg, _ = await db.check_daily_quota(user_id, file_size)
         if not quota_ok:
@@ -1392,6 +1410,26 @@ async def handle_file_upload(client, message):
         session_data.get("language", "en") if session_data.get("is_subtitle") else None
     )
 
+    is_priority = False
+    if Config.PUBLIC_MODE:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+
+    is_priority = False
+    if Config.PUBLIC_MODE:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+
     if user_id not in batch_sessions:
         batch_id = queue_manager.create_batch()
         batch_sessions[user_id] = {"batch_id": batch_id, "items": []}
@@ -1421,7 +1459,7 @@ async def handle_file_upload(client, message):
 
     update_data(user_id, "batch_id", batch_id)
 
-    queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, message.id)
+    queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, message.id, is_priority=is_priority)
 
     metadata = analyze_filename(file_name)
     data = {
@@ -1634,6 +1672,16 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         if user_id in batch_tasks:
             batch_tasks[user_id].cancel()
 
+        is_priority = False
+        if Config.PUBLIC_MODE:
+            user_doc = await db.get_user(user_id)
+            if user_doc and user_doc.get("is_premium"):
+                plan_name = user_doc.get("premium_plan", "standard")
+                config = await db.get_public_config()
+                if config.get("premium_system_enabled", False):
+                    plan_settings = config.get(f"premium_{plan_name}", {})
+                    is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+
         batch_id = batch_sessions[user_id]["batch_id"]
         item_id = str(uuid.uuid4())
 
@@ -1662,7 +1710,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
 
         dummy_msg = DummyMessage(msg)
 
-        queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, dummy_msg.id)
+        queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, dummy_msg.id, is_priority=is_priority)
 
         data = {
             "file_message": dummy_msg,
@@ -1777,7 +1825,7 @@ async def handle_auto_detection(client, message):
         else f"{quality}"
     )
 
-    queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, message.id)
+    queue_manager.add_to_batch(batch_id, item_id, sort_key, display_name, message.id, is_priority=is_priority)
 
     data = {
         "file_message": message,

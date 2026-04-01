@@ -80,6 +80,7 @@ class Database:
                         "username": None,
                         "banned": False,
                         "is_premium": False,
+                        "premium_plan": "standard",
                         "premium_expiry": None,
                         "trial_claimed": False,
                         "joined_at": now,
@@ -87,6 +88,9 @@ class Database:
                         "referral_count": 0,
                     }
                     await self.users.insert_one(new_user)
+                else:
+                    if user_doc.get("is_premium") and "premium_plan" not in user_doc:
+                        await self.users.update_one({"user_id": user_id}, {"$set": {"premium_plan": "standard"}})
 
         await self.settings.update_one({"_id": "global_settings"}, {"$set": {"migration_to_users_done": True}}, upsert=True)
         logger.info("Migration completed.")
@@ -431,6 +435,42 @@ class Database:
                     "daily_egress_mb": 0,
                     "daily_file_count": 0,
                     "global_daily_egress_mb": 0,
+                    "premium_system_enabled": False,
+                    "premium_trial_enabled": False,
+                    "premium_trial_days": 1,
+                    "premium_deluxe_enabled": False,
+                    "currency_conversion_enabled": True,
+                    "base_currency": "USD",
+                    "stars_payment_enabled": False,
+                    "xtv_pro_4gb_access": "all",
+                    "premium_standard": {
+                        "daily_egress_mb": 0,
+                        "daily_file_count": 0,
+                        "price_string": "0 USD",
+                        "stars_price": 0,
+                        "features": {
+                            "priority_queue": False,
+                            "xtv_pro_4gb": False,
+                            "file_converter": True,
+                            "audio_editor": True,
+                            "watermarker": True,
+                            "subtitle_extractor": True,
+                        }
+                    },
+                    "premium_deluxe": {
+                        "daily_egress_mb": 0,
+                        "daily_file_count": 0,
+                        "price_string": "0 USD",
+                        "stars_price": 0,
+                        "features": {
+                            "priority_queue": True,
+                            "xtv_pro_4gb": True,
+                            "file_converter": True,
+                            "audio_editor": True,
+                            "watermarker": True,
+                            "subtitle_extractor": True,
+                        }
+                    }
                 }
                 await self.settings.insert_one(default_config)
                 return default_config
@@ -573,16 +613,22 @@ class Database:
 
         user_doc = await self.get_user(user_id)
         is_premium = False
+        premium_plan = "standard"
         if user_doc:
             exp = user_doc.get("premium_expiry")
             if user_doc.get("is_premium") and (exp is None or exp > now):
                 is_premium = True
+                premium_plan = user_doc.get("premium_plan", "standard")
 
         premium_system_enabled = config.get("premium_system_enabled", False)
 
         if is_premium and premium_system_enabled:
-            daily_egress_mb_limit = config.get("premium_daily_egress_mb", 0)
-            daily_file_count_limit = config.get("premium_daily_file_count", 0)
+            if premium_plan == "deluxe" and config.get("premium_deluxe_enabled", False):
+                plan_settings = config.get("premium_deluxe", {})
+            else:
+                plan_settings = config.get("premium_standard", {})
+            daily_egress_mb_limit = plan_settings.get("daily_egress_mb", 0)
+            daily_file_count_limit = plan_settings.get("daily_file_count", 0)
 
         if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0:
             return True, "", {}
@@ -935,6 +981,7 @@ class Database:
                 "is_bot": is_bot,
                 "banned": False,
                 "is_premium": False,
+                "premium_plan": "standard",
                 "premium_expiry": None,
                 "trial_claimed": False,
                 "joined_at": now,
@@ -959,6 +1006,8 @@ class Database:
                 update_fields["banned"] = False
             if "is_premium" not in user_doc:
                 update_fields["is_premium"] = False
+            if "premium_plan" not in user_doc:
+                update_fields["premium_plan"] = "standard"
             if "premium_expiry" not in user_doc:
                 update_fields["premium_expiry"] = None
             if "trial_claimed" not in user_doc:
@@ -1008,7 +1057,7 @@ class Database:
         cursor = self.users.find(filter_dict).limit(limit)
         return await cursor.to_list(length=limit)
 
-    async def add_premium_user(self, user_id: int, days: float):
+    async def add_premium_user(self, user_id: int, days: float, plan: str = "standard"):
         if self.users is None:
             return
         import time
@@ -1019,7 +1068,8 @@ class Database:
             return
 
         current_exp = user_doc.get("premium_expiry", 0)
-        if current_exp and current_exp > now:
+        current_plan = user_doc.get("premium_plan", "standard")
+        if current_exp and current_exp > now and current_plan == plan:
             new_exp = current_exp + (days * 86400)
         else:
             new_exp = now + (days * 86400)
@@ -1028,6 +1078,7 @@ class Database:
             {"user_id": user_id},
             {"$set": {
                 "is_premium": True,
+                "premium_plan": plan,
                 "premium_expiry": new_exp
             }}
         )
@@ -1039,6 +1090,7 @@ class Database:
             {"user_id": user_id},
             {"$set": {
                 "is_premium": False,
+                "premium_plan": "standard",
                 "premium_expiry": None
             }}
         )

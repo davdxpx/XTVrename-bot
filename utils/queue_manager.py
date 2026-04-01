@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional
 # === Classes ===
 class QueueItem:
     def __init__(
-        self, item_id: str, sort_key: tuple, display_name: str, message_id: int
+        self, item_id: str, sort_key: tuple, display_name: str, message_id: int, is_priority: bool = False
     ):
         self.item_id = item_id
         self.sort_key = sort_key
@@ -15,6 +15,7 @@ class QueueItem:
         self.message_id = message_id
         self.status = "processing"
         self.error = None
+        self.is_priority = is_priority
 
 class BatchQueue:
     def __init__(self, batch_id: str):
@@ -31,6 +32,10 @@ class BatchQueue:
     def is_blocked(self, item_id: str) -> Optional[QueueItem]:
         item = self.items.get(item_id)
         if not item:
+            return None
+
+        if item.is_priority:
+            # Priority items bypass strict order waits
             return None
 
         earlier_items = [i for i in self.items.values() if i.sort_key < item.sort_key]
@@ -60,11 +65,12 @@ class QueueManager:
         sort_key: tuple,
         display_name: str,
         message_id: int,
+        is_priority: bool = False
     ):
         if batch_id not in self.batches:
             self.batches[batch_id] = BatchQueue(batch_id)
 
-        item = QueueItem(item_id, sort_key, display_name, message_id)
+        item = QueueItem(item_id, sort_key, display_name, message_id, is_priority)
         self.batches[batch_id].add_item(item)
 
     def update_status(

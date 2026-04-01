@@ -131,6 +131,8 @@ async def handle_premium_command(client, message):
 
     import time
     from datetime import datetime
+    from utils.currency import convert_to_usd_str
+
     user_id = message.from_user.id
     user = await db.get_user(user_id)
     config = await db.get_public_config()
@@ -142,18 +144,23 @@ async def handle_premium_command(client, message):
         return
 
     is_prem = False
+    current_plan = "standard"
     if user:
         exp = user.get("premium_expiry")
         if user.get("is_premium") and (exp is None or exp > time.time()):
             is_prem = True
+            current_plan = user.get("premium_plan", "standard")
 
     if is_prem:
         exp_text = "Lifetime"
         if user.get("premium_expiry"):
             exp_text = datetime.fromtimestamp(user.get("premium_expiry")).strftime('%Y-%m-%d %H:%M')
 
+        plan_display = "Premium Standard" if current_plan == "standard" else "Premium Deluxe"
+
         await message.reply_text(
             f"💎 **Premium Status: ACTIVE**\n\n"
+            f"**Current Plan:** {plan_display}\n"
             f"**Expiry Date:** {exp_text}\n\n"
             "You currently enjoy enhanced limits and bypass standard quotas!"
         )
@@ -163,16 +170,58 @@ async def handle_premium_command(client, message):
     trial_days = config.get("premium_trial_days", 0)
     trial_claimed = user.get("trial_claimed", False) if user else False
 
-    text = "💎 **Premium Status: INACTIVE**\n\nYou are currently on the free plan."
+    deluxe_enabled = config.get("premium_deluxe_enabled", False)
+
+    standard_settings = config.get("premium_standard", {})
+    deluxe_settings = config.get("premium_deluxe", {})
+
+    std_usd = await convert_to_usd_str(standard_settings.get("price_string", "0 USD"))
+    dlx_usd = await convert_to_usd_str(deluxe_settings.get("price_string", "0 USD"))
+
+    std_egress = f"{standard_settings.get('daily_egress_mb', 0)} MB" if standard_settings.get("daily_egress_mb", 0) > 0 else "Unlimited"
+    std_files = f"{standard_settings.get('daily_file_count', 0)}" if standard_settings.get("daily_file_count", 0) > 0 else "Unlimited"
+
+    text = "💎 **Upgrade to Premium** 💎\n\nYou are currently on the free plan. Unlock the full potential of 𝕏TV with our premium plans!\n\n"
+
+    text += f"🌟 **Premium Standard**\n"
+    text += f"• **Daily Egress Limit:** `{std_egress}`\n"
+    text += f"• **Daily File Limit:** `{std_files}`\n"
+    if standard_settings.get("features", {}).get("priority_queue"):
+        text += f"• ✅ Priority Queue\n"
+    if standard_settings.get("features", {}).get("xtv_pro_4gb"):
+        text += f"• ✅ XTV Pro 4GB Bypass\n"
+    text += f"**Price:** `{std_usd}`\n\n"
+
+    if deluxe_enabled:
+        dlx_egress = f"{deluxe_settings.get('daily_egress_mb', 0)} MB" if deluxe_settings.get("daily_egress_mb", 0) > 0 else "Unlimited"
+        dlx_files = f"{deluxe_settings.get('daily_file_count', 0)}" if deluxe_settings.get("daily_file_count", 0) > 0 else "Unlimited"
+
+        text += f"👑 **Premium Deluxe**\n"
+        text += f"• **Daily Egress Limit:** `{dlx_egress}`\n"
+        text += f"• **Daily File Limit:** `{dlx_files}`\n"
+        if deluxe_settings.get("features", {}).get("priority_queue"):
+            text += f"• ✅ Priority Queue\n"
+        if deluxe_settings.get("features", {}).get("xtv_pro_4gb"):
+            text += f"• ✅ XTV Pro 4GB Bypass\n"
+        text += f"**Price:** `{dlx_usd}`\n\n"
+
     buttons = []
 
     if trial_enabled and trial_days > 0 and not trial_claimed:
-        text += f"\n\n🎁 **Special Offer:** You are eligible for a **{trial_days}-Day Premium Trial**!"
+        text += f"🎁 **Special Offer:** You are eligible for a **{trial_days}-Day Premium Trial** (Standard Plan)!"
         buttons.append([InlineKeyboardButton("🎁 Claim Premium Trial", callback_data="claim_trial")])
+
+    std_stars = standard_settings.get("stars_price", 0)
+    dlx_stars = deluxe_settings.get("stars_price", 0)
+
+    if std_stars > 0:
+        buttons.append([InlineKeyboardButton(f"⭐ Buy Standard ({std_stars} Stars)", callback_data="buy_stars_standard")])
+    if deluxe_enabled and dlx_stars > 0:
+        buttons.append([InlineKeyboardButton(f"⭐ Buy Deluxe ({dlx_stars} Stars)", callback_data="buy_stars_deluxe")])
 
     support_contact = config.get("support_contact", "Not set")
     if support_contact != "Not set":
-        text += f"\n\nTo purchase premium, contact: {support_contact}"
+        buttons.append([InlineKeyboardButton("💬 Contact Admin to Buy", url=f"https://t.me/{support_contact.replace('@', '')}")])
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="user_cancel")])
 
