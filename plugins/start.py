@@ -59,27 +59,23 @@ async def handle_start_command_unique(client, message):
         is_bot=message.from_user.is_bot
     )
 
+    toggles = await db.get_feature_toggles()
+    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
+
+    buttons = [
+        [InlineKeyboardButton("📁 Rename / Tag Media", callback_data="start_renaming")]
+    ]
+    if show_other:
+        buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
+    buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
+
     await message.reply_text(
         f"{bot_name}\n\n"
         f"Welcome to the {community_name} file renaming tool.\n"
         "This bot provides professional renaming and metadata management.\n\n"
         "💡 **Tip:** You don't need to click anything to begin! Simply send or forward a file directly to me, and I will auto-detect the details.\n\n"
         "Click below to start manually or to view the guide.",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "📁 Rename / Tag Media", callback_data="start_renaming"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "✨ Other Features", callback_data="other_features_menu"
-                    )
-                ],
-                [InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")],
-            ]
-        ),
+        reply_markup=InlineKeyboardMarkup(buttons),
     )
 
 @Client.on_message(filters.command(["r", "rename"]) & filters.private, group=0)
@@ -135,6 +131,12 @@ async def handle_audio_command(client, message):
         user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS
     ):
         return
+
+    toggles = await db.get_feature_toggles()
+    if not toggles.get("audio_editor", True):
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
     from plugins.flow import handle_audio_editor_menu
 
     class MockCallbackQuery:
@@ -181,6 +183,12 @@ async def handle_convert_command(client, message):
         user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS
     ):
         return
+
+    toggles = await db.get_feature_toggles()
+    if not toggles.get("file_converter", True):
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
     from plugins.flow import handle_file_converter_menu
 
     class MockCallbackQuery:
@@ -204,6 +212,12 @@ async def handle_watermark_command(client, message):
         user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS
     ):
         return
+
+    toggles = await db.get_feature_toggles()
+    if not toggles.get("watermarker", True):
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
     from plugins.flow import handle_watermarker_menu
 
     class MockCallbackQuery:
@@ -259,25 +273,21 @@ async def handle_end_command_unique(client, message):
     user_id = message.from_user.id
     logger.debug(f"CMD received: {message.text} from {user_id}")
     clear_session(user_id)
+    toggles = await db.get_feature_toggles()
+    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
+
+    buttons = [
+        [InlineKeyboardButton("🎬 Start Renaming Manually", callback_data="start_renaming")]
+    ]
+    if show_other:
+        buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
+    buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
+
     await message.reply_text(
         "**Current Task Cancelled** ❌\n\n"
         "Your progress has been cleared.\n"
         "You can simply send me a file anytime to start over, or use the buttons below.",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🎬 Start Renaming Manually", callback_data="start_renaming"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "✨ Other Features", callback_data="other_features_menu"
-                    )
-                ],
-                [InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")],
-            ]
-        ),
+        reply_markup=InlineKeyboardMarkup(buttons),
     )
 
 from utils.logger import debug
@@ -287,35 +297,25 @@ debug("✅ Loaded handler: help_callback")
 @Client.on_callback_query(filters.regex(r"^other_features_menu$"))
 async def handle_other_features_menu(client, callback_query):
     await callback_query.answer()
+    toggles = await db.get_feature_toggles()
+
+    buttons = []
+    if toggles.get("audio_editor", True):
+        buttons.append([InlineKeyboardButton("🎵 Audio Metadata Editor", callback_data="audio_editor_menu")])
+    if toggles.get("file_converter", True):
+        buttons.append([InlineKeyboardButton("🔀 File Converter", callback_data="file_converter_menu")])
+    if toggles.get("watermarker", True):
+        buttons.append([InlineKeyboardButton("© Image Watermarker", callback_data="watermarker_menu")])
+    if toggles.get("subtitle_extractor", True):
+        buttons.append([InlineKeyboardButton("📝 Subtitle Extractor", callback_data="subtitle_extractor_menu")])
+
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="help_close")])
+
     try:
         await callback_query.message.edit_text(
             "**✨ Other Features**\n\n"
             "Select an additional tool below:",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🎵 Audio Metadata Editor", callback_data="audio_editor_menu"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔀 File Converter", callback_data="file_converter_menu"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "© Image Watermarker", callback_data="watermarker_menu"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📝 Subtitle Extractor", callback_data="subtitle_extractor_menu"
-                        )
-                    ],
-                    [InlineKeyboardButton("❌ Close", callback_data="help_close")],
-                ]
-            ),
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
     except MessageNotModified:
         pass

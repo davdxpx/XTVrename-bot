@@ -477,6 +477,41 @@ class Database:
         except Exception as e:
             logger.error(f"Error updating global daily egress limit: {e}")
 
+    async def get_feature_toggles(self):
+        if self.settings is None:
+            return {}
+        try:
+            if Config.PUBLIC_MODE:
+                config = await self.get_public_config()
+                return config.get("feature_toggles", {})
+            else:
+                doc = await self.settings.find_one({"_id": "global_settings"})
+                if doc:
+                    return doc.get("feature_toggles", {})
+                return {}
+        except Exception as e:
+            logger.error(f"Error fetching feature toggles: {e}")
+            return {}
+
+    async def update_feature_toggle(self, feature_name: str, enabled: bool):
+        if self.settings is None:
+            return
+        try:
+            if Config.PUBLIC_MODE:
+                await self.settings.update_one(
+                    {"_id": "public_mode_config"},
+                    {"$set": {f"feature_toggles.{feature_name}": enabled}},
+                    upsert=True
+                )
+            else:
+                await self.settings.update_one(
+                    {"_id": "global_settings"},
+                    {"$set": {f"feature_toggles.{feature_name}": enabled}},
+                    upsert=True
+                )
+        except Exception as e:
+            logger.error(f"Error updating feature toggle: {e}")
+
     async def get_user_usage(self, user_id: int) -> dict:
         if self.settings is None:
             return {}

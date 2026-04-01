@@ -906,25 +906,22 @@ async def handle_cancel(client, callback_query):
                 logger.warning(f"Failed to remove archive on cancel: {e}")
 
     clear_session(user_id)
+    toggles = await db.get_feature_toggles()
+    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
+
+    buttons = [
+        [InlineKeyboardButton("🎬 Start Renaming Manually", callback_data="start_renaming")]
+    ]
+    if show_other:
+        buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
+    buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
+
     try:
         await callback_query.message.edit_text(
             "**Current Task Cancelled** ❌\n\n"
             "Your progress has been cleared.\n"
             "You can simply send me a file anytime to start over, or use the buttons below.",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🎬 Start Renaming Manually", callback_data="start_renaming"
-                        )
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "📖 Help & Guide", callback_data="help_guide"
-                        )
-                    ],
-                ]
-            ),
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
     except MessageNotModified:
         pass

@@ -161,6 +161,13 @@ def get_admin_access_limits_menu():
             )
         ]
     )
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                "⚙️ Feature Toggles", callback_data="admin_feature_toggles"
+            )
+        ]
+    )
     buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
     return InlineKeyboardMarkup(buttons)
 
@@ -290,6 +297,54 @@ async def admin_callback(client, callback_query):
             except MessageNotModified:
                 pass
             return
+
+
+    if data == "admin_feature_toggles":
+        toggles = await db.get_feature_toggles()
+        # Default True if not set
+        audio_en = toggles.get("audio_editor", True)
+        conv_en = toggles.get("file_converter", True)
+        wm_en = toggles.get("watermarker", True)
+        sub_en = toggles.get("subtitle_extractor", True)
+
+        def emoji(state): return "✅" if state else "❌"
+
+        text = (
+            "⚙️ **Feature Toggles**\n\n"
+            "Enable or disable specific features of the bot to save server resources.\n\n"
+            "**Performance Impact:**\n"
+            "• **File Converter:** High CPU & RAM\n"
+            "• **Watermarker:** Medium CPU\n"
+            "• **Audio Editor:** Low CPU\n"
+            "• **Subtitle Extractor:** Medium CPU\n\n"
+            "Click on a feature below to toggle its state globally:"
+        )
+
+        buttons = [
+            [InlineKeyboardButton(f"{emoji(conv_en)} File Converter", callback_data="admin_toggle_file_converter")],
+            [InlineKeyboardButton(f"{emoji(sub_en)} Subtitle Extractor", callback_data="admin_toggle_subtitle_extractor")],
+            [InlineKeyboardButton(f"{emoji(wm_en)} Image Watermarker", callback_data="admin_toggle_watermarker")],
+            [InlineKeyboardButton(f"{emoji(audio_en)} Audio Editor", callback_data="admin_toggle_audio_editor")],
+            [InlineKeyboardButton("← Back", callback_data="admin_access_limits")]
+        ]
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("admin_toggle_"):
+        feature = data.replace("admin_toggle_", "")
+        toggles = await db.get_feature_toggles()
+        current_state = toggles.get(feature, True)
+        new_state = not current_state
+        await db.update_feature_toggle(feature, new_state)
+        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} feature.", show_alert=True)
+        # Re-render the menu
+        callback_query.data = "admin_feature_toggles"
+        await admin_callback(client, callback_query)
+        return
 
     if data == "admin_global_daily_egress":
         current_val = await db.get_global_daily_egress_limit()
