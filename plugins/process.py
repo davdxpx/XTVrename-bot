@@ -19,7 +19,7 @@ from database import db
 from utils.ffmpeg_tools import generate_ffmpeg_command, execute_ffmpeg, probe_file
 from utils.progress import progress_for_pyrogram
 import math
-from utils.XTVcore import XTVEngine
+from utils.XTVengine import XTVEngine
 from utils.queue_manager import queue_manager
 
 logger = logging.getLogger("TaskProcessor")
@@ -82,6 +82,7 @@ class TaskProcessor:
         self.active_client = self.client
         self.tunnel_id = None
         self.tunneled_message_id = None
+        self.is_priority = False
 
         try:
             user_bot = getattr(self.client, "user_bot", None)
@@ -123,6 +124,7 @@ class TaskProcessor:
                 if config.get("premium_system_enabled", False):
                     plan_settings = config.get(f"premium_{plan_name}", {})
                     is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+        self.is_priority = is_priority
 
         try:
             if not await self._initialize():
@@ -451,6 +453,7 @@ class TaskProcessor:
                         self.status_msg,
                         download_start,
                         self.mode,
+                        self.is_priority,
                     ),
                 )
 
@@ -1102,6 +1105,7 @@ class TaskProcessor:
                             self.status_msg,
                             upload_start,
                             self.mode,
+                            self.is_priority,
                         ),
                     )
                 elif send_as == "media":
@@ -1120,6 +1124,7 @@ class TaskProcessor:
                                 self.status_msg,
                                 upload_start,
                                 self.mode,
+                                self.is_priority,
                             ),
                         )
                     elif is_vid_ext:
@@ -1138,6 +1143,7 @@ class TaskProcessor:
                                 self.status_msg,
                                 upload_start,
                                 self.mode,
+                                self.is_priority,
                             ),
                         )
                     elif is_aud_ext:
@@ -1158,6 +1164,7 @@ class TaskProcessor:
                                 self.status_msg,
                                 upload_start,
                                 self.mode,
+                                self.is_priority,
                             ),
                         )
                     else:
@@ -1176,6 +1183,7 @@ class TaskProcessor:
                                 self.status_msg,
                                 upload_start,
                                 self.mode,
+                                self.is_priority,
                             ),
                         )
                 else:
@@ -1194,6 +1202,7 @@ class TaskProcessor:
                             self.status_msg,
                             upload_start,
                             self.mode,
+                            self.is_priority,
                         ),
                     )
 
