@@ -5,7 +5,10 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from database import db
 from config import Config
-from utils.gate import is_public_mode
+from config import Config
+
+def is_public_mode():
+    return Config.PUBLIC_MODE
 from utils.currency import convert_to_usd_str
 
 # --- Handlers ---
