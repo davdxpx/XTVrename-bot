@@ -62,10 +62,17 @@ async def handle_start_command_unique(client, message):
     toggles = await db.get_feature_toggles()
     show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
 
+    is_premium_user = False
+    plan_display = "Standard"
+    status_emoji = "⭐"
+
     if Config.PUBLIC_MODE and not show_other:
         user_doc = await db.get_user(user_id)
         if user_doc and user_doc.get("is_premium"):
+            is_premium_user = True
             plan_name = user_doc.get("premium_plan", "standard")
+            plan_display = "Deluxe" if plan_name == "deluxe" else "Standard"
+            status_emoji = "💎" if plan_name == "deluxe" else "⭐"
             config = await db.get_public_config()
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
@@ -73,21 +80,43 @@ async def handle_start_command_unique(client, message):
                 if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
                     show_other = True
 
+    if Config.PUBLIC_MODE and show_other and not is_premium_user:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            is_premium_user = True
+            plan_name = user_doc.get("premium_plan", "standard")
+            plan_display = "Deluxe" if plan_name == "deluxe" else "Standard"
+            status_emoji = "💎" if plan_name == "deluxe" else "⭐"
+
     buttons = [
         [InlineKeyboardButton("📁 Rename / Tag Media", callback_data="start_renaming")]
     ]
     if show_other:
         buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
+    if Config.PUBLIC_MODE:
+        buttons.append([InlineKeyboardButton("💎 Premium Dashboard", callback_data="user_premium_menu")])
     buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
 
-    await message.reply_text(
-        f"{bot_name}\n\n"
-        f"Welcome to the {community_name} file renaming tool.\n"
-        "This bot provides professional renaming and metadata management.\n\n"
-        "💡 **Tip:** You don't need to click anything to begin! Simply send or forward a file directly to me, and I will auto-detect the details.\n\n"
-        "Click below to start manually or to view the guide.",
-        reply_markup=InlineKeyboardMarkup(buttons),
-    )
+    if is_premium_user:
+        await message.reply_text(
+            f"{status_emoji} **Welcome back, {message.from_user.first_name}!** {status_emoji}\n\n"
+            f"> Your **Premium {plan_display}** status is Active ✅\n\n"
+            f"I am {bot_name}, your advanced media processing engine by the {community_name}.\n\n"
+            f"**Quick Actions:**\n"
+            f"• Send me any media file to begin priority processing\n"
+            f"• Explore your premium tools in the dashboard below\n\n"
+            f"Thank you for being a valued Premium member!",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+    else:
+        await message.reply_text(
+            f"{bot_name}\n\n"
+            f"Welcome to the {community_name} file renaming tool.\n"
+            "This bot provides professional renaming and metadata management.\n\n"
+            "💡 **Tip:** You don't need to click anything to begin! Simply send or forward a file directly to me, and I will auto-detect the details.\n\n"
+            "Click below to start manually or to view the guide.",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
 
 @Client.on_message(filters.command(["r", "rename"]) & filters.private, group=0)
 async def handle_rename_command(client, message):

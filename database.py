@@ -456,6 +456,8 @@ class Database:
                             "audio_editor": True,
                             "watermarker": True,
                             "subtitle_extractor": True,
+                            "4k_enhancement": True,
+                            "batch_processing_pro": True
                         }
                     },
                     "premium_deluxe": {
@@ -470,6 +472,8 @@ class Database:
                             "audio_editor": True,
                             "watermarker": True,
                             "subtitle_extractor": True,
+                            "4k_enhancement": True,
+                            "batch_processing_pro": True
                         }
                     },
                     "payment_methods": {

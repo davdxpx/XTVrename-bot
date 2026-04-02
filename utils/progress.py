@@ -1,11 +1,11 @@
 # --- Imports ---
 import time
 import math
-from utils.XTVcore import XTVEngine
+from utils.XTVengine import XTVEngine
 
 # === Helper Functions ===
 async def progress_for_pyrogram(
-    current, total, ud_type, message, start_time, mode="core"
+    current, total, ud_type, message, start_time, mode="core", is_priority=False
 ):
     now = time.time()
     diff = now - start_time
@@ -48,6 +48,9 @@ async def progress_for_pyrogram(
     text += f"**💾 Size:** `{current_fmt}` / `{total_fmt}`\n"
     text += f"**🚀 Speed:** `{speed_fmt}/s`\n"
     text += f"**⏳ ETA:** `{estimated_total_time}`\n"
+
+    if is_priority:
+        text += f"\n🚀 **Priority Queue:** `Active`\n"
 
     text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
     text += f"{XTVEngine.get_signature(mode=mode)}"
