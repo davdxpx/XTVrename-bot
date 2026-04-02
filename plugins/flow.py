@@ -999,7 +999,7 @@ async def handle_file_upload(client, message):
 
     if state is None:
         user_mode = await db.get_workflow_mode(user_id if Config.PUBLIC_MODE else None)
-        if user_mode == "quick_rename_mode":
+        if user_mode == "quick_mode":
 
             state = "awaiting_general_file"
             set_state(user_id, state)

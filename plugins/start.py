@@ -319,7 +319,7 @@ async def handle_help_command_unique(client, message):
         "**📖 Help & Guide**\n\n"
         "Welcome to the MediaStudio Guide!\n"
         "Whether you are organizing a massive media library of popular series and movies, "
-        "or just want to rename and manage your **personal home videos** and files, I can help!\n\n"
+        "or just want to process and manage your **personal media** and files, I can help!\n\n"
         "Please select a topic below to learn more:",
         reply_markup=InlineKeyboardMarkup(
             [
@@ -435,7 +435,7 @@ async def handle_help_callbacks(client, callback_query):
                 "**📖 Help & Guide**\n\n"
                 "Welcome to the MediaStudio Guide!\n"
                 "Whether you are organizing a massive media library of popular series and movies, "
-                "or just want to rename and manage your **personal home videos** and files, I can help!\n\n"
+                "or just want to process and manage your **personal media** and files, I can help!\n\n"
                 "Please select a topic below to learn more:",
                 reply_markup=InlineKeyboardMarkup(
                     [

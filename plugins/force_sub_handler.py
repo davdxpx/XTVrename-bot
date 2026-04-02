@@ -187,7 +187,7 @@ async def send_starter_setup_message(client, user_id, first_name=""):
         "**🧠 Smart Media Mode**\n"
         "├ **Best for:** `TV Shows & Movies`\n"
         "└ **Action:** `Auto-detects metadata and pulls beautiful TMDb posters automatically.`\n\n"
-        "**⚡ Quick Rename Mode**\n"
+        "**⚡ Quick Mode**\n"
         "├ **Best for:** `Personal Videos, Anime, General Files`\n"
         "└ **Action:** `Skips auto-detection, bypasses TMDb, and goes straight to renaming.`\n\n"
         "*(Don't worry, you can always change this later in /settings)*"
@@ -196,7 +196,7 @@ async def send_starter_setup_message(client, user_id, first_name=""):
     markup = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("🧠 Smart Media Mode", callback_data="setup_mode_smart")],
-            [InlineKeyboardButton("⚡ Quick Rename Mode", callback_data="setup_mode_quick")]
+            [InlineKeyboardButton("⚡ Quick Mode", callback_data="setup_mode_quick")]
         ]
     )
 
@@ -216,8 +216,8 @@ async def handle_setup_mode_callback(client, callback_query):
         mode = "smart_media_mode"
         mode_str = "🧠 Smart Media Mode"
     else:
-        mode = "quick_rename_mode"
-        mode_str = "⚡ Quick Rename Mode"
+        mode = "quick_mode"
+        mode_str = "⚡ Quick Mode"
 
     await db.update_workflow_mode(mode, user_id)
     await db.mark_setup_completed(user_id, True)

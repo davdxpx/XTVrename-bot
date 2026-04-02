@@ -778,13 +778,13 @@ async def user_settings_callback(client, callback_query):
             pass
     elif data == "user_general_workflow":
         current_mode = await db.get_workflow_mode(user_id)
-        mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Rename Mode"
+        mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Mode"
         try:
             await callback_query.message.edit_text(
                 f"⚙️ **Personal Workflow Mode Settings**\n\n"
                 f"Current Mode: `{mode_str}`\n\n"
                 "**🧠 Smart Media Mode:** Auto-detects Series/Movies and fetches TMDb metadata.\n"
-                "**⚡ Quick Rename Mode:** Bypasses auto-detection and goes straight to general rename (great for personal files).\n\n"
+                "**⚡ Quick Mode:** Bypasses auto-detection and goes straight to general rename (great for personal files).\n\n"
                 "Select your preferred mode:",
                 reply_markup=InlineKeyboardMarkup(
                     [
@@ -796,7 +796,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "✅ Quick Rename Mode" if current_mode == "quick_rename_mode" else "⚡ Quick Rename Mode",
+                                "✅ Quick Mode" if current_mode == "quick_mode" else "⚡ Quick Mode",
                                 callback_data="set_user_workflow_quick"
                             )
                         ],
@@ -807,7 +807,7 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data.startswith("set_user_workflow_"):
-        new_mode = "smart_media_mode" if data.endswith("smart") else "quick_rename_mode"
+        new_mode = "smart_media_mode" if data.endswith("smart") else "quick_mode"
         await db.update_workflow_mode(new_mode, user_id)
         await callback_query.answer("Workflow Mode updated!", show_alert=True)
 
