@@ -151,15 +151,19 @@ async def view_user_profile(client, callback):
 
     is_prem = user.get("is_premium", False)
     prem_exp = user.get("premium_expiry", 0)
-    prem_status = "❌ Free"
+    prem_plan = user.get("premium_plan", "standard")
+
+    prem_status = "🆓 Free Plan"
     if is_prem:
+        plan_display = "⭐ Standard" if prem_plan == "standard" else "💎 Deluxe"
+
         if not prem_exp:
-            prem_status = "💎 Premium (Lifetime)"
+            prem_status = f"{plan_display} (Lifetime)"
         elif prem_exp > time.time():
             dt = datetime.fromtimestamp(prem_exp).strftime('%Y-%m-%d')
-            prem_status = f"💎 Premium (Exp: {dt})"
+            prem_status = f"{plan_display} (Exp: {dt})"
         else:
-            prem_status = "❌ Expired"
+            prem_status = f"🔴 Expired (was {plan_display})"
 
     banned = user.get("banned", False)
     status_emoji = "🔴 BANNED" if banned else "🟢 Active"
@@ -191,12 +195,16 @@ async def view_user_profile(client, callback):
         markup.append([InlineKeyboardButton("🔴 Ban User", callback_data=f"act_ban|{target_id}")])
 
     if Config.PUBLIC_MODE:
-        prem_btn_text = "🔄 Extend Premium" if is_prem else "➕ Add Premium"
-        markup.append([
-            InlineKeyboardButton(prem_btn_text, callback_data=f"act_add_prem_ask|{target_id}")
-        ])
         if is_prem:
-            markup[-1].append(InlineKeyboardButton("❌ Remove Premium", callback_data=f"act_reset_prem|{target_id}"))
+            markup.append([
+                InlineKeyboardButton("🔄 Extend Plan", callback_data=f"act_add_prem_ask|{target_id}"),
+                InlineKeyboardButton("❌ Remove Premium", callback_data=f"act_reset_prem|{target_id}")
+            ])
+        else:
+            markup.append([
+                InlineKeyboardButton("➕ Add Standard", callback_data=f"act_add_prem_ask_standard|{target_id}"),
+                InlineKeyboardButton("➕ Add Deluxe", callback_data=f"act_add_prem_ask_deluxe|{target_id}")
+            ])
 
     markup.append([
         InlineKeyboardButton("🗑 Delete Data", callback_data=f"act_del_data_ask|{target_id}"),
@@ -242,13 +250,25 @@ async def action_reset_prem(client, callback):
     await callback.answer("✅ Premium reset to Free.", show_alert=True)
     await view_user_profile(client, callback)
 
-@Client.on_callback_query(filters.regex(r"^act_add_prem_ask\|"))
+@Client.on_callback_query(filters.regex(r"^act_add_prem_ask(_standard|_deluxe)?\|"))
 async def action_add_prem_ask(client, callback):
+    data = callback.data.split("|")[0]
     uid = int(callback.data.split("|")[1])
-    admin_sessions[callback.from_user.id] = {"state": "wait_add_prem_days", "target_id": uid}
+
+    plan = "standard"
+    if data.endswith("_standard"):
+        plan = "standard"
+    elif data.endswith("_deluxe"):
+        plan = "deluxe"
+    else:
+        user = await db.get_user(uid)
+        plan = user.get("premium_plan", "standard") if user else "standard"
+
+    admin_sessions[callback.from_user.id] = {"state": "wait_add_prem_days", "target_id": uid, "plan": plan}
+
     try:
         await callback.message.edit_text(
-            f"**➕ Add Premium for User {uid}**\n\nEnter the duration in **DAYS** (e.g. `30`):",
+            f"**➕ Add Premium ({plan.capitalize()}) for User {uid}**\n\nEnter the duration in **DAYS** (e.g. `30`):",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{uid}")]])
         )
     except Exception:

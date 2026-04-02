@@ -476,7 +476,9 @@ class Database:
                         "paypal_enabled": False,
                         "paypal_email": "",
                         "crypto_enabled": False,
-                        "crypto_address": "",
+                        "crypto_usdt": "",
+                        "crypto_btc": "",
+                        "crypto_eth": "",
                         "upi_enabled": False,
                         "upi_id": "",
                         "stars_enabled": False

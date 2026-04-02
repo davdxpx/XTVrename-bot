@@ -1485,7 +1485,10 @@ async def handle_file_upload(client, message):
 
     async def wait_and_process():
         try:
-            await asyncio.sleep(3.0)
+            # Give non-priority users a slightly longer collection window to allow Priority users
+            # to jump into the processing loop faster.
+            delay = 1.0 if is_priority else 3.0
+            await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
                 del batch_tasks[user_id]
             await process_batch(client, user_id)
@@ -1746,7 +1749,8 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
 
     async def wait_and_process():
         try:
-            await asyncio.sleep(3.0)
+            delay = 1.0 if is_priority else 3.0
+            await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
                 del batch_tasks[user_id]
             await process_batch(client, user_id)
@@ -1798,6 +1802,16 @@ async def handle_auto_detection(client, message):
     media_lang = metadata.get("language", "en")
 
     default_dumb_channel = await db.get_default_dumb_channel(user_id)
+
+    is_priority = False
+    if Config.PUBLIC_MODE:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                is_priority = plan_settings.get("features", {}).get("priority_queue", False)
 
     if user_id not in batch_sessions:
         batch_id = queue_manager.create_batch()
@@ -1855,7 +1869,8 @@ async def handle_auto_detection(client, message):
 
     async def wait_and_process():
         try:
-            await asyncio.sleep(3.0)
+            delay = 1.0 if is_priority else 3.0
+            await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
                 del batch_tasks[user_id]
             await process_batch(client, user_id)

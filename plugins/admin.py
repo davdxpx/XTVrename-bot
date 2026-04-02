@@ -251,7 +251,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -339,13 +339,20 @@ async def admin_callback(client, callback_query):
         up = pm.get("upi_enabled", False)
         st = pm.get("stars_enabled", False)
 
+        usdt = pm.get("crypto_usdt", "Not set")
+        btc = pm.get("crypto_btc", "Not set")
+        eth = pm.get("crypto_eth", "Not set")
+
         text = (
             "⚙️ **Payment Settings**\n\n"
             "Toggle payment methods and configure their respective addresses/IDs.\n"
             "*(Users will only see the enabled methods during checkout)*\n\n"
             f"**PayPal Email:** `{pm.get('paypal_email', 'Not set')}`\n"
-            f"**Crypto Address:** `{pm.get('crypto_address', 'Not set')}`\n"
-            f"**UPI ID:** `{pm.get('upi_id', 'Not set')}`\n"
+            f"**UPI ID:** `{pm.get('upi_id', 'Not set')}`\n\n"
+            f"**Crypto Addresses:**\n"
+            f"• USDT: `{usdt}`\n"
+            f"• BTC: `{btc}`\n"
+            f"• ETH: `{eth}`"
         )
 
         try:
@@ -354,12 +361,27 @@ async def admin_callback(client, callback_query):
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton(f"{emoji(pp)} PayPal", callback_data="admin_pay_toggle_paypal"),
                      InlineKeyboardButton("✏️ Edit Email", callback_data="prompt_pay_paypal")],
-                    [InlineKeyboardButton(f"{emoji(cr)} Crypto", callback_data="admin_pay_toggle_crypto"),
-                     InlineKeyboardButton("✏️ Edit Address", callback_data="prompt_pay_crypto")],
                     [InlineKeyboardButton(f"{emoji(up)} UPI", callback_data="admin_pay_toggle_upi"),
                      InlineKeyboardButton("✏️ Edit ID", callback_data="prompt_pay_upi")],
+                    [InlineKeyboardButton(f"{emoji(cr)} Crypto", callback_data="admin_pay_toggle_crypto"),
+                     InlineKeyboardButton("✏️ Edit Addresses", callback_data="admin_pay_crypto_menu")],
                     [InlineKeyboardButton(f"{emoji(st)} Telegram Stars", callback_data="admin_pay_toggle_stars")],
                     [InlineKeyboardButton("← Back", callback_data="admin_payments_menu")]
+                ])
+            )
+        except MessageNotModified:
+            pass
+        return
+
+    if data == "admin_pay_crypto_menu":
+        try:
+            await callback_query.message.edit_text(
+                "🪙 **Crypto Address Settings**\n\nSelect which cryptocurrency address you want to edit:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("USDT (TRC20/ERC20)", callback_data="prompt_pay_crypto_usdt")],
+                    [InlineKeyboardButton("BTC (Bitcoin)", callback_data="prompt_pay_crypto_btc")],
+                    [InlineKeyboardButton("ETH (Ethereum)", callback_data="prompt_pay_crypto_eth")],
+                    [InlineKeyboardButton("← Back", callback_data="admin_pay_settings")]
                 ])
             )
         except MessageNotModified:
@@ -380,10 +402,15 @@ async def admin_callback(client, callback_query):
     if data.startswith("prompt_pay_"):
         method = data.replace("prompt_pay_", "")
         admin_sessions[user_id] = f"awaiting_pay_{method}"
+
+        cancel_data = "admin_pay_settings"
+        if method.startswith("crypto_"):
+            cancel_data = "admin_pay_crypto_menu"
+
         try:
             await callback_query.message.edit_text(
-                f"✏️ **Edit {method.capitalize()} Details**\n\nPlease send the new address/ID/email:",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_pay_settings")]])
+                f"✏️ **Edit {method.replace('_', ' ').upper()} Details**\n\nPlease send the new address/ID/email:",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=cancel_data)]])
             )
         except MessageNotModified:
             pass
@@ -2432,7 +2459,7 @@ async def handle_admin_text(client, message):
             admin_sessions.pop(user_id, None)
         return
 
-    if state and state.startswith("awaiting_pay_"):
+    if isinstance(state, str) and state.startswith("awaiting_pay_"):
         val = message.text.strip() if message.text else ""
         if not val:
             raise ContinuePropagation
@@ -2465,16 +2492,24 @@ async def handle_admin_text(client, message):
 
             if method == "paypal":
                 pm["paypal_email"] = val
-            elif method == "crypto":
-                pm["crypto_address"] = val
             elif method == "upi":
                 pm["upi_id"] = val
+            elif method == "crypto_usdt":
+                pm["crypto_usdt"] = val
+            elif method == "crypto_btc":
+                pm["crypto_btc"] = val
+            elif method == "crypto_eth":
+                pm["crypto_eth"] = val
 
             await db.update_public_config("payment_methods", pm)
 
+            back_data = "admin_pay_settings"
+            if method.startswith("crypto_"):
+                back_data = "admin_pay_crypto_menu"
+
             await message.reply_text(
-                f"✅ {method.capitalize()} details updated to `{val}`.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_pay_settings")]])
+                f"✅ {method.replace('_', ' ').upper()} details updated to `{val}`.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=back_data)]])
             )
             admin_sessions.pop(user_id, None)
             return

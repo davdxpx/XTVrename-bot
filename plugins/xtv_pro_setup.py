@@ -113,7 +113,7 @@ async def start_setup(client, callback_query):
     except MessageNotModified:
         pass
 
-@Client.on_message(filters.private & filters.user(Config.CEO_ID), group=1)
+@Client.on_message(filters.private & filters.user(Config.CEO_ID), group=0)
 async def pro_setup_handler(client, message):
     user_id = message.from_user.id
     if user_id not in pro_setup_sessions:
