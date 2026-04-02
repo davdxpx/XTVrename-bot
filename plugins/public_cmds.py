@@ -156,10 +156,12 @@ async def handle_premium_command(client, message):
         if user.get("premium_expiry"):
             exp_text = datetime.fromtimestamp(user.get("premium_expiry")).strftime('%Y-%m-%d %H:%M')
 
-        plan_display = "Premium Standard" if current_plan == "standard" else "Premium Deluxe"
+        plan_display = "⭐ Premium Standard" if current_plan == "standard" else "💎 Premium Deluxe"
+
+        status_emoji = "⭐" if current_plan == "standard" else "💎"
 
         await message.reply_text(
-            f"💎 **Premium Status: ACTIVE**\n\n"
+            f"{status_emoji} **Premium Status: ACTIVE**\n\n"
             f"**Current Plan:** {plan_display}\n"
             f"**Expiry Date:** {exp_text}\n\n"
             "You currently enjoy enhanced limits and bypass standard quotas!"
@@ -183,7 +185,7 @@ async def handle_premium_command(client, message):
 
     text = "💎 **Upgrade to Premium** 💎\n\nYou are currently on the free plan. Unlock the full potential of 𝕏TV with our premium plans!\n\n"
 
-    text += f"🌟 **Premium Standard**\n"
+    text += f"⭐ **Premium Standard**\n"
     text += f"• **Daily Egress Limit:** `{std_egress}`\n"
     text += f"• **Daily File Limit:** `{std_files}`\n"
     if standard_settings.get("features", {}).get("priority_queue"):
@@ -196,7 +198,7 @@ async def handle_premium_command(client, message):
         dlx_egress = f"{deluxe_settings.get('daily_egress_mb', 0)} MB" if deluxe_settings.get("daily_egress_mb", 0) > 0 else "Unlimited"
         dlx_files = f"{deluxe_settings.get('daily_file_count', 0)}" if deluxe_settings.get("daily_file_count", 0) > 0 else "Unlimited"
 
-        text += f"👑 **Premium Deluxe**\n"
+        text += f"💎 **Premium Deluxe**\n"
         text += f"• **Daily Egress Limit:** `{dlx_egress}`\n"
         text += f"• **Daily File Limit:** `{dlx_files}`\n"
         if deluxe_settings.get("features", {}).get("priority_queue"):
@@ -211,10 +213,10 @@ async def handle_premium_command(client, message):
         text += f"🎁 **Special Offer:** You are eligible for a **{trial_days}-Day Premium Trial** (Standard Plan)!"
         buttons.append([InlineKeyboardButton("🎁 Claim Premium Trial", callback_data="claim_trial")])
 
-    buttons.append([InlineKeyboardButton("🛒 Purchase Premium Standard", callback_data="buy_premium_dur_standard")])
+    buttons.append([InlineKeyboardButton("⭐ Purchase Premium Standard", callback_data="buy_premium_dur_standard")])
 
     if deluxe_enabled:
-        buttons.append([InlineKeyboardButton("👑 Purchase Premium Deluxe", callback_data="buy_premium_dur_deluxe")])
+        buttons.append([InlineKeyboardButton("💎 Purchase Premium Deluxe", callback_data="buy_premium_dur_deluxe")])
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="user_cancel")])
 

@@ -97,7 +97,8 @@ async def handle_buy_premium_pay(client, callback_query):
         methods_available = True
         buttons.append([InlineKeyboardButton("💳 Pay with PayPal", callback_data=f"buy_manual_{plan}_{months}_paypal")])
 
-    if pm.get("crypto_enabled", False) and pm.get("crypto_address"):
+    has_crypto = pm.get("crypto_usdt") or pm.get("crypto_btc") or pm.get("crypto_eth")
+    if pm.get("crypto_enabled", False) and has_crypto:
         methods_available = True
         buttons.append([InlineKeyboardButton("🪙 Pay with Crypto", callback_data=f"buy_manual_{plan}_{months}_crypto")])
 
@@ -138,11 +139,17 @@ async def handle_buy_manual(client, callback_query):
 
     dest = ""
     if method == "paypal":
-        dest = pm.get("paypal_email", "")
+        dest = f"`{pm.get('paypal_email', '')}`"
     elif method == "crypto":
-        dest = pm.get("crypto_address", "")
+        usdt = pm.get("crypto_usdt")
+        btc = pm.get("crypto_btc")
+        eth = pm.get("crypto_eth")
+        dest = ""
+        if usdt: dest += f"\n• USDT: `{usdt}`"
+        if btc: dest += f"\n• BTC: `{btc}`"
+        if eth: dest += f"\n• ETH: `{eth}`"
     elif method == "upi":
-        dest = pm.get("upi_id", "")
+        dest = f"`{pm.get('upi_id', '')}`"
 
     plan_key = f"premium_{plan}"
     plan_settings = config.get(plan_key, {})
@@ -171,7 +178,7 @@ async def handle_buy_manual(client, callback_query):
         f"📝 **Manual Payment Instructions**\n\n"
         f"**Amount Due:** `{final_price_str}`\n"
         f"**Method:** `{method.capitalize()}`\n"
-        f"**Send To:** `{dest}`\n\n"
+        f"**Send To:**\n{dest}\n\n"
         f"⚠️ **IMPORTANT:** You MUST include this Payment ID in the transaction notes/memo:\n"
         f"`{payment_id}`\n\n"
         f"Once you have sent the money, click the button below to notify the admins."
@@ -207,6 +214,25 @@ async def handle_paid_manual(client, callback_query):
         )
     except:
         pass
+
+    admin_ids = [Config.CEO_ID] + getattr(Config, "ADMIN_IDS", [])
+
+    notification_text = (
+        "🔔 **New Pending Payment!**\n\n"
+        f"**User ID:** `{p['user_id']}`\n"
+        f"**Payment ID:** `{payment_id}`\n"
+        f"**Plan:** `{p['plan'].capitalize()}`\n"
+        f"**Duration:** `{p['duration_months']} Months`\n"
+        f"**Amount:** `{p['amount']}`\n"
+        f"**Method:** `{p['method'].capitalize()}`\n\n"
+        "Check your Admin Panel -> Manage Payments to approve or reject."
+    )
+
+    for aid in admin_ids:
+        try:
+            await client.send_message(aid, notification_text)
+        except Exception:
+            pass
 
 @Client.on_callback_query(filters.regex(r"^buy_stars_(standard|deluxe)_(\d+)$"))
 async def handle_buy_stars(client, callback_query):
