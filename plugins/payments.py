@@ -337,48 +337,43 @@ async def raw_update_handler(client, update, users, chats):
         except Exception as e:
             logger.error(f"Failed to answer pre-checkout query: {e}")
 
-@Client.on_message(filters.service & filters.private)
+def check_payment_message(_, __, message):
+    if getattr(message, "successful_payment", None):
+        return True
+    if hasattr(message, "action") and message.action:
+        action_str = str(message.action)
+        if "Payment" in action_str or "payment" in action_str:
+            return True
+        if "PaymentSuccessful" in type(message.action).__name__:
+            return True
+    return False
+
+payment_filter = filters.create(check_payment_message)
+
+@Client.on_message(payment_filter & filters.private)
 async def handle_successful_payment(client, message):
     if not is_public_mode():
         return
 
-    # In Pyrogram v2, the Action object may contain the payment info, or it may be raw.
-    # The `message.action` type could be `MessageActionPaymentSuccessfulMe` or similar.
-    # Since Pyrogram doesn't have a cleanly parsed `successful_payment` object in the standard Message,
-    # we inspect the raw message action or text if possible.
-
-    action = getattr(message, "action", None)
-
-    # We can also check raw if the action doesn't map directly
     is_payment = False
     payload = ""
     amount = 0
-
-    if hasattr(message, "action") and message.action:
-        # Check action string representations
-        if "Payment" in str(message.action) or "payment" in str(message.action):
-            is_payment = True
-
-    # Alternatively, Pyrogram may attach it to message.successful_payment directly in some patches
-    # or the raw type is accessible via message.service.
-
-    # Actually, a safer approach to catch the payment is to parse the `MessageActionPaymentSuccessful`
-    # from the raw message if it exists.
 
     if getattr(message, "successful_payment", None):
         is_payment = True
         payment_info = message.successful_payment
         payload = getattr(payment_info, "invoice_payload", "")
         amount = getattr(payment_info, "total_amount", 0)
-    elif getattr(message, "_client", None):
-        # Dig into raw pyrogram message to find payment
-        raw_msg = message
-        if hasattr(raw_msg, "action") and raw_msg.action:
-            action_type = type(raw_msg.action).__name__
-            if "PaymentSuccessful" in action_type:
-                is_payment = True
-                payload = getattr(raw_msg.action, "invoice_payload", b"").decode('utf-8', errors='ignore')
-                amount = getattr(raw_msg.action, "total_amount", 0)
+    elif hasattr(message, "action") and message.action:
+        action_type = type(message.action).__name__
+        if "PaymentSuccessful" in action_type or "Payment" in str(message.action) or "payment" in str(message.action):
+            is_payment = True
+            payload_raw = getattr(message.action, "invoice_payload", b"")
+            if isinstance(payload_raw, bytes):
+                payload = payload_raw.decode('utf-8', errors='ignore')
+            else:
+                payload = str(payload_raw)
+            amount = getattr(message.action, "total_amount", 0)
 
     if is_payment and payload:
         if payload.startswith("buy_premium_"):
