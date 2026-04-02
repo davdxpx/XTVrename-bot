@@ -180,6 +180,116 @@ async def handle_premium_command(client, message):
     std_usd = await convert_to_usd_str(standard_settings.get("price_string", "0 USD"))
     dlx_usd = await convert_to_usd_str(deluxe_settings.get("price_string", "0 USD"))
 
+    def format_egress(mb):
+        if mb >= 1048576:
+            return f"{mb / 1048576:.2f} TB"
+        elif mb >= 1024:
+            return f"{mb / 1024:.2f} GB"
+        else:
+            return f"{mb} MB"
+
+    std_mb = standard_settings.get('daily_egress_mb', 0)
+    std_egress = format_egress(std_mb) if std_mb > 0 else "Unlimited"
+    std_files = f"{standard_settings.get('daily_file_count', 0)}" if standard_settings.get("daily_file_count", 0) > 0 else "Unlimited"
+
+    text = "💎 **Upgrade to Premium** 💎\n\nYou are currently on the free plan. Unlock the full potential of 𝕏TV with our premium plans!\n\n"
+
+    text += f"⭐ **Premium Standard**\n"
+    text += f"• **Daily Egress Limit:** `{std_egress}`\n"
+    text += f"• **Daily File Limit:** `{std_files}`\n"
+    if standard_settings.get("features", {}).get("priority_queue"):
+        text += f"• ✅ Priority Queue\n"
+    if standard_settings.get("features", {}).get("xtv_pro_4gb"):
+        text += f"• ✅ XTV Pro 4GB Bypass\n"
+    text += f"**Price:** `{std_usd}`\n\n"
+
+    if deluxe_enabled:
+        dlx_mb = deluxe_settings.get('daily_egress_mb', 0)
+        dlx_egress = format_egress(dlx_mb) if dlx_mb > 0 else "Unlimited"
+        dlx_files = f"{deluxe_settings.get('daily_file_count', 0)}" if deluxe_settings.get("daily_file_count", 0) > 0 else "Unlimited"
+
+        text += f"💎 **Premium Deluxe**\n"
+        text += f"• **Daily Egress Limit:** `{dlx_egress}`\n"
+        text += f"• **Daily File Limit:** `{dlx_files}`\n"
+        if deluxe_settings.get("features", {}).get("priority_queue"):
+            text += f"• ✅ Priority Queue\n"
+        if deluxe_settings.get("features", {}).get("xtv_pro_4gb"):
+            text += f"• ✅ XTV Pro 4GB Bypass\n"
+        text += f"**Price:** `{dlx_usd}`\n\n"
+
+    buttons = []
+
+    if trial_enabled and trial_days > 0 and not trial_claimed:
+        text += f"🎁 **Special Offer:** You are eligible for a **{trial_days}-Day Premium Trial** (Standard Plan)!"
+        buttons.append([InlineKeyboardButton("🎁 Claim Premium Trial", callback_data="claim_trial")])
+
+    buttons.append([InlineKeyboardButton("⭐ Purchase Premium Standard", callback_data="buy_premium_dur_standard")])
+
+    if deluxe_enabled:
+        buttons.append([InlineKeyboardButton("💎 Purchase Premium Deluxe", callback_data="buy_premium_dur_deluxe")])
+
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="user_cancel")])
+
+    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex(r"^user_premium_menu$"))
+async def handle_user_premium_menu(client, callback_query):
+    await callback_query.answer()
+
+    # We essentially rerun the handle_premium_command logic to refresh the menu
+    # But since we can't easily invoke the message handler with a callback query,
+    # we'll just extract the logic.
+
+    import time
+    from datetime import datetime
+    from utils.currency import convert_to_usd_str
+
+    user_id = callback_query.from_user.id
+    user = await db.get_user(user_id)
+    config = await db.get_public_config()
+
+    premium_system_enabled = config.get("premium_system_enabled", False)
+
+    if not premium_system_enabled:
+        await callback_query.message.edit_text("❌ **Premium System is currently disabled.**")
+        return
+
+    is_prem = False
+    current_plan = "standard"
+    if user:
+        exp = user.get("premium_expiry")
+        if user.get("is_premium") and (exp is None or exp > time.time()):
+            is_prem = True
+            current_plan = user.get("premium_plan", "standard")
+
+    if is_prem:
+        exp_text = "Lifetime"
+        if user.get("premium_expiry"):
+            exp_text = datetime.fromtimestamp(user.get("premium_expiry")).strftime('%Y-%m-%d %H:%M')
+
+        plan_display = "⭐ Premium Standard" if current_plan == "standard" else "💎 Premium Deluxe"
+        status_emoji = "⭐" if current_plan == "standard" else "💎"
+
+        await callback_query.message.edit_text(
+            f"{status_emoji} **Premium Status: ACTIVE**\n\n"
+            f"**Current Plan:** {plan_display}\n"
+            f"**Expiry Date:** {exp_text}\n\n"
+            "You currently enjoy enhanced limits and bypass standard quotas!"
+        )
+        return
+
+    trial_enabled = config.get("premium_trial_enabled", False)
+    trial_days = config.get("premium_trial_days", 0)
+    trial_claimed = user.get("trial_claimed", False) if user else False
+
+    deluxe_enabled = config.get("premium_deluxe_enabled", False)
+
+    standard_settings = config.get("premium_standard", {})
+    deluxe_settings = config.get("premium_deluxe", {})
+
+    std_usd = await convert_to_usd_str(standard_settings.get("price_string", "0 USD"))
+    dlx_usd = await convert_to_usd_str(deluxe_settings.get("price_string", "0 USD"))
+
     std_egress = f"{standard_settings.get('daily_egress_mb', 0)} MB" if standard_settings.get("daily_egress_mb", 0) > 0 else "Unlimited"
     std_files = f"{standard_settings.get('daily_file_count', 0)}" if standard_settings.get("daily_file_count", 0) > 0 else "Unlimited"
 
@@ -220,7 +330,11 @@ async def handle_premium_command(client, message):
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="user_cancel")])
 
-    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    try:
+        await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    except MessageNotModified:
+        pass
+
 
 @Client.on_callback_query(filters.regex("^claim_trial$"))
 async def handle_claim_trial(client, callback_query):

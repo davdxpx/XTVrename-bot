@@ -43,45 +43,62 @@ async def get_exchange_rate(base_currency: str, target_currency: str = "USD") ->
     logger.warning(f"Using fallback exchange rate 1.0 for {base_currency} to {target_currency}")
     return 1.0
 
-def round_to_nearest_10_cents(amount: float) -> float:
-    """Rounds a float to the nearest 10 cents (0.10)."""
-    return round(amount * 10) / 10.0
+def format_fiat(amount: float, currency: str) -> str:
+    """Formats fiat currency based on 'strength' (e.g. strong currencies get decimals, weak get rounded)."""
+    strong_currencies = ["USD", "EUR", "GBP", "AUD", "CAD", "CHF"]
+    currency = currency.upper()
+
+    # Map common currencies to their symbols
+    symbols = {
+        "USD": "$", "EUR": "€", "GBP": "£", "INR": "₹", "RUB": "₽", "BRL": "R$"
+    }
+    sym = symbols.get(currency, f"{currency} ")
+
+    if currency in strong_currencies:
+        # Round to nearest 10 cents and keep 2 decimal places
+        val = round(amount * 10) / 10.0
+        return f"{sym}{val:.2f}".replace(" $", "$").replace(" €", "€").replace(" £", "£")
+    else:
+        # For weak currencies, round to nearest whole number
+        val = int(round(amount))
+        return f"{val} {sym}".strip()
 
 async def convert_to_usd_str(price_string: str) -> str:
-    """Converts a price string like '100 INR' or '$10' to nicely rounded USD."""
+    """Converts a price string to a dual display: Local Fiat / USD."""
     price_string = price_string.strip().upper()
     if not price_string:
         return ""
 
     try:
-        # Basic parsing: look for number and letters
         import re
-        match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£)?", price_string)
+        match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£|₹|₽)?", price_string)
         if not match:
-            return price_string # Return original if unparseable
+            return price_string
 
         amount_str = match.group(1)
         currency_sym = match.group(2)
 
         amount = float(amount_str)
-        currency = "USD" # Default
+        currency = "USD"
 
         if currency_sym:
             if currency_sym == "$": currency = "USD"
             elif currency_sym == "€": currency = "EUR"
             elif currency_sym == "£": currency = "GBP"
+            elif currency_sym == "₹": currency = "INR"
+            elif currency_sym == "₽": currency = "RUB"
             else: currency = currency_sym
 
+        local_formatted = format_fiat(amount, currency)
+
         if currency == "USD":
-            # Just format and return
-            rounded = round_to_nearest_10_cents(amount)
-            return f"${rounded:.2f}"
+            return local_formatted
 
         rate = await get_exchange_rate(currency, "USD")
         usd_amount = amount * rate
-        rounded_usd = round_to_nearest_10_cents(usd_amount)
+        usd_formatted = format_fiat(usd_amount, "USD")
 
-        return f"${rounded_usd:.2f}"
+        return f"{local_formatted} / {usd_formatted}"
     except Exception as e:
         logger.error(f"Error converting price '{price_string}': {e}")
         return price_string

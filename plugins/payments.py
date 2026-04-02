@@ -25,7 +25,9 @@ async def handle_buy_premium_dur(client, callback_query):
     plan_settings = config.get(plan_key, {})
     price_string = plan_settings.get("price_string", "0 USD")
 
-    match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£)?", price_string.upper())
+    from utils.currency import convert_to_usd_str
+
+    match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£|₹|₽)?", price_string.upper())
     if not match:
         await callback_query.answer("Pricing is misconfigured.", show_alert=True)
         return
@@ -43,9 +45,13 @@ async def handle_buy_premium_dur(client, callback_query):
             total = total * (1 - (discount / 100.0))
         return f"{total:g} {currency}"
 
-    p1 = f"{base_price:g} {currency}"
-    p3 = calc_price(3, d3)
-    p12 = calc_price(12, d12)
+    p1_raw = f"{base_price:g} {currency}"
+    p3_raw = calc_price(3, d3)
+    p12_raw = calc_price(12, d12)
+
+    p1 = await convert_to_usd_str(p1_raw)
+    p3 = await convert_to_usd_str(p3_raw)
+    p12 = await convert_to_usd_str(p12_raw)
 
     text = (
         f"🛒 **Select Billing Cycle ({plan.capitalize()})**\n\n"
@@ -69,7 +75,7 @@ async def handle_buy_premium_dur(client, callback_query):
                 [InlineKeyboardButton(f"1 Month ({p1})", callback_data=f"buy_premium_pay_{plan}_1")],
                 [InlineKeyboardButton(f"3 Months ({p3})", callback_data=f"buy_premium_pay_{plan}_3")],
                 [InlineKeyboardButton(f"12 Months ({p12})", callback_data=f"buy_premium_pay_{plan}_12")],
-                [InlineKeyboardButton("← Back", callback_data="cancel_rename")]
+                [InlineKeyboardButton("← Back", callback_data="user_premium_menu")]
             ])
         )
     except Exception as e:
@@ -155,7 +161,9 @@ async def handle_buy_manual(client, callback_query):
     plan_settings = config.get(plan_key, {})
     price_string = plan_settings.get("price_string", "0 USD")
 
-    match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£)?", price_string.upper())
+    from utils.currency import convert_to_usd_str
+
+    match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£|₹|₽)?", price_string.upper())
     base_price = float(match.group(1)) if match else 0.0
     currency = (match.group(2) if match else "USD") or "USD"
 
@@ -169,7 +177,8 @@ async def handle_buy_manual(client, callback_query):
     elif months == 12 and d12 > 0:
         total = total * (1 - (d12 / 100.0))
 
-    final_price_str = f"{total:g} {currency}"
+    final_price_raw = f"{total:g} {currency}"
+    final_price_str = await convert_to_usd_str(final_price_raw)
     payment_id = f"PAY-XTV-{str(uuid.uuid4())[:8].upper()}"
 
     await db.add_pending_payment(payment_id, user_id, plan, months, final_price_str, method)
@@ -189,7 +198,7 @@ async def handle_buy_manual(client, callback_query):
             text,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("✅ I Have Paid", callback_data=f"paid_manual_{payment_id}")],
-                [InlineKeyboardButton("← Cancel", callback_data="cancel_rename")]
+                [InlineKeyboardButton("← Cancel", callback_data=f"buy_premium_pay_{plan}_{months}")]
             ])
         )
     except Exception as e:

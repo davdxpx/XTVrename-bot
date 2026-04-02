@@ -885,35 +885,35 @@ async def admin_callback(client, callback_query):
                     pass
                 return
 
-        elif data.startswith("admin_prem_cur_"):
-            parts = data.replace("admin_prem_cur_", "").split("_")
-            plan_name = parts[0]
-            currency = parts[1]
+    if data.startswith("admin_prem_cur_"):
+        parts = data.replace("admin_prem_cur_", "").split("_")
+        plan_name = parts[0]
+        currency = parts[1]
 
-            admin_sessions[user_id] = {
-                "state": f"awaiting_premium_{plan_name}_price",
-                "currency": currency
-            }
+        admin_sessions[user_id] = {
+            "state": f"awaiting_premium_{plan_name}_price",
+            "currency": currency
+        }
 
-            try:
-                await callback_query.message.edit_text(
-                    f"💵 **Set Price in {currency}**\n\nPlease enter the numeric amount (e.g., `9.99` or `500`):",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
-                )
-            except MessageNotModified:
-                pass
-            return
+        try:
+            await callback_query.message.edit_text(
+                f"💵 **Set Price in {currency}**\n\nPlease enter the numeric amount (e.g., `9.99` or `500`):",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
+            )
+        except MessageNotModified:
+            pass
+        return
 
-        elif data == "prompt_trial_days":
-            admin_sessions[user_id] = "awaiting_trial_days"
-            try:
-                await callback_query.message.edit_text(
-                    "⏱ **Send the new PREMIUM TRIAL duration in days (e.g., 7).**\nSend `0` to disable.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
-                )
-            except MessageNotModified:
-                pass
-            return
+    if data == "prompt_trial_days":
+        admin_sessions[user_id] = "awaiting_trial_days"
+        try:
+            await callback_query.message.edit_text(
+                "⏱ **Send the new PREMIUM TRIAL duration in days (e.g., 7).**\nSend `0` to disable.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
+            )
+        except MessageNotModified:
+            pass
+        return
 
     if data == "prompt_global_daily_egress":
         admin_sessions[user_id] = "awaiting_global_daily_egress"
