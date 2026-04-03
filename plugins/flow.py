@@ -967,7 +967,9 @@ async def process_batch(client, user_id):
         is_series = data.get("type") == "series"
 
         if is_series:
-            return (0, data.get("season", 0), data.get("episode", 0))
+            ep = data.get("episode", 0)
+            ep_sort = ep[0] if isinstance(ep, list) else ep
+            return (0, data.get("season", 0), ep_sort)
         else:
             return (1, data.get("original_name", "").lower(), 0)
 
