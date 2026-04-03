@@ -337,59 +337,45 @@ async def raw_update_handler(client, update, users, chats):
         except Exception as e:
             logger.error(f"Failed to answer pre-checkout query: {e}")
 
-def check_payment_message(_, __, message):
-    if getattr(message, "successful_payment", None):
-        return True
-    if hasattr(message, "action") and message.action:
-        action_str = str(message.action)
-        if "Payment" in action_str or "payment" in action_str:
-            return True
-        if "PaymentSuccessful" in type(message.action).__name__:
-            return True
-    return False
-
-payment_filter = filters.create(check_payment_message)
-
-@Client.on_message(payment_filter & filters.private, group=-2)
-async def handle_successful_payment(client, message):
+@Client.on_raw_update(group=-1)
+async def raw_successful_payment_handler(client, update, users, chats):
     if not is_public_mode():
         return
 
-    is_payment = False
-    payload = ""
-    amount = 0
+    from pyrogram.raw.types import UpdateNewMessage, MessageService, MessageActionPaymentSentMe
 
-    if getattr(message, "successful_payment", None):
-        is_payment = True
-        payment_info = message.successful_payment
-        payload = getattr(payment_info, "invoice_payload", "")
-        amount = getattr(payment_info, "total_amount", 0)
-    elif hasattr(message, "action") and message.action:
-        action_type = type(message.action).__name__
-        if "PaymentSuccessful" in action_type or "Payment" in str(message.action) or "payment" in str(message.action):
-            is_payment = True
-            payload_raw = getattr(message.action, "invoice_payload", b"")
-            if isinstance(payload_raw, bytes):
-                payload = payload_raw.decode('utf-8', errors='ignore')
-            else:
-                payload = str(payload_raw)
-            amount = getattr(message.action, "total_amount", 0)
+    if isinstance(update, UpdateNewMessage):
+        message = update.message
+        if isinstance(message, MessageService):
+            action = getattr(message, "action", None)
+            if isinstance(action, MessageActionPaymentSentMe):
+                payload_raw = getattr(action, "payload", b"")
 
-    if is_payment and payload:
-        if payload.startswith("buy_premium_"):
-            parts = payload.split("_")
-            if len(parts) >= 5:
-                plan = parts[2]
-                months = int(parts[3])
-                target_user_id = int(parts[4])
+                if isinstance(payload_raw, bytes):
+                    payload = payload_raw.decode('utf-8', errors='ignore')
+                else:
+                    payload = str(payload_raw)
 
-                days = months * 30
-                await db.add_premium_user(target_user_id, days=days, plan=plan)
+                if payload.startswith("buy_premium_"):
+                    parts = payload.split("_")
+                    if len(parts) >= 5:
+                        plan = parts[2]
+                        months = int(parts[3])
+                        target_user_id = int(parts[4])
 
-                await message.reply_text(
-                    f"✅ **Payment Successful!**\n\n"
-                    f"Thank you for purchasing the **Premium {plan.capitalize()} Plan**.\n\n"
-                    f"Your account has been upgraded for {months} Month(s). Enjoy!"
-                )
+                        days = months * 30
+                        await db.add_premium_user(target_user_id, days=days, plan=plan)
 
-                await db.add_log("stars_payment", Config.CEO_ID, f"User {target_user_id} paid for {plan} plan ({months} months)")
+                        logger.info(f"Payment Confirmation: User {target_user_id} successfully paid for Premium {plan.capitalize()} Plan ({months} Months).")
+
+                        try:
+                            await client.send_message(
+                                target_user_id,
+                                f"✅ **Payment Successful!**\n\n"
+                                f"Thank you for purchasing the **Premium {plan.capitalize()} Plan**.\n\n"
+                                f"Your account has been upgraded for {months} Month(s). Enjoy!"
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to send payment confirmation to {target_user_id}: {e}")
+
+                        await db.add_log("stars_payment", Config.CEO_ID, f"User {target_user_id} paid for {plan} plan ({months} months)")
