@@ -350,7 +350,7 @@ def check_payment_message(_, __, message):
 
 payment_filter = filters.create(check_payment_message)
 
-@Client.on_message(payment_filter & filters.private)
+@Client.on_message(payment_filter & filters.private, group=-2)
 async def handle_successful_payment(client, message):
     if not is_public_mode():
         return
