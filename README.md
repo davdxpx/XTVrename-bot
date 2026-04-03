@@ -167,6 +167,11 @@ This project is open-source under the **XTV Public License**.
 *   **Modifications**: You may fork and modify for personal use.
 *   **Attribution**: **You must retain the original author credits.** Unauthorized removal of the "Developed by 𝕏0L0™" notice is strictly prohibited.
 
+## ⚙️ Admin Feature Toggles (Resource Management)
+As the bot processes extremely heavy tasks like **Video Conversion**, **Subtitle Extraction**, and **Image Watermarking**, it can easily overwhelm standard VPS servers (high CPU & RAM usage). To protect your server and Telegram Premium tunnel account from spam or rate limits:
+- The CEO can globally toggle specific heavy features on and off directly from the `/admin` panel -> **Access & Limits** -> **Feature Toggles**.
+- When a feature is disabled (e.g., File Converter), all UI buttons and commands for it are hidden or disabled for all users.
+
 ---
 <div align="center">
   <h3>Developed by 𝕏0L0™</h3>
@@ -181,9 +186,3 @@ This project is open-source under the **XTV Public License**.
     <i>© 2026 XTV Network Global. All Rights Reserved.</i>
   </p>
 </div>
-
-
-### ⚙️ Admin Feature Toggles (Resource Management)
-As the bot processes extremely heavy tasks like **Video Conversion**, **Subtitle Extraction**, and **Image Watermarking**, it can easily overwhelm standard VPS servers (high CPU & RAM usage). To protect your server and Telegram Premium tunnel account from spam or rate limits:
-- The CEO can globally toggle specific heavy features on and off directly from the `/admin` panel -> **Access & Limits** -> **Feature Toggles**.
-- When a feature is disabled (e.g., File Converter), all UI buttons and commands for it are hidden or disabled for all users.
