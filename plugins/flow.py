@@ -24,6 +24,14 @@ batch_tasks = {}
 
 batch_status_msgs = {}
 
+# === Helper Functions ===
+def format_episode_str(episode):
+    if isinstance(episode, list):
+        return "".join([f"E{int(e):02d}" for e in episode])
+    elif episode:
+        return f"E{int(episode):02d}"
+    return ""
+
 @Client.on_callback_query(filters.regex(r"^start_renaming$"))
 
 # --- Handlers ---
@@ -1398,14 +1406,16 @@ async def handle_file_upload(client, message):
     season = 1
     session_data = get_data(user_id)
     if session_data.get("type") == "series":
-        match = re.search(r"[sS](\d{1,2})[eE](\d{1,2})", file_name)
+        match = re.search(r"[sS](\d{1,2})[eE](\d{1,2}(?:[eE]\d{1,2})*)", file_name)
         if match:
             season = int(match.group(1))
-            episode = int(match.group(2))
+            ep_list = [int(e) for e in re.split(r"[eE]", match.group(2)) if e]
+            episode = ep_list if len(ep_list) > 1 else ep_list[0]
         else:
-            match = re.search(r"[eE](\d{1,2})", file_name)
+            match = re.search(r"[eE](\d{1,2}(?:[eE]\d{1,2})*)", file_name)
             if match:
-                episode = int(match.group(1))
+                ep_list = [int(e) for e in re.split(r"[eE]", match.group(1)) if e]
+                episode = ep_list if len(ep_list) > 1 else ep_list[0]
             else:
                 match = re.search(r"(?:\s|\.|-|^)(\d{1,2})x(\d{1,2})(?:\s|\.|-|$)", file_name, re.IGNORECASE)
                 if match:
@@ -1448,12 +1458,12 @@ async def handle_file_upload(client, message):
     quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
 
     sort_key = (
-        (0, season, episode)
+        (0, season, episode[0] if isinstance(episode, list) else episode)
         if session_data.get("type") == "series"
         else (1, quality_priority.get(quality, 4), 0)
     )
     display_name = (
-        f"S{season:02d}E{episode:02d}"
+        f"S{season:02d}{format_episode_str(episode)}"
         if session_data.get("type") == "series"
         else f"{quality}"
     )
@@ -1690,8 +1700,8 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         item_id = str(uuid.uuid4())
 
         quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
-        sort_key = ((0, season, episode) if tmdb_data["type"] == "series" else (1, quality_priority.get(quality, 4), 0))
-        display_name = f"S{season:02d}E{episode:02d}" if tmdb_data["type"] == "series" else f"{quality}"
+        sort_key = ((0, season, episode[0] if isinstance(episode, list) else episode) if tmdb_data["type"] == "series" else (1, quality_priority.get(quality, 4), 0))
+        display_name = f"S{season:02d}{format_episode_str(episode)}" if tmdb_data["type"] == "series" else f"{quality}"
 
         from pyrogram.types import Message
         import random
@@ -1830,12 +1840,12 @@ async def handle_auto_detection(client, message):
     quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
 
     sort_key = (
-        (0, season, episode)
+        (0, season, episode[0] if isinstance(episode, list) else episode)
         if tmdb_data["type"] == "series"
         else (1, quality_priority.get(quality, 4), 0)
     )
     display_name = (
-        f"S{season:02d}E{episode:02d}"
+        f"S{season:02d}{format_episode_str(episode)}"
         if tmdb_data["type"] == "series"
         else f"{quality}"
     )
@@ -1918,7 +1928,7 @@ async def update_auto_detected_message(client, msg_id, user_id):
         text += f"**Quality:** `{fs['quality']}`\n"
 
     if fs["type"] == "series":
-        text += f"**Season:** `{fs['season']}` | **Episode:** `E{fs['episode']:02d}`\n"
+        text += f"**Season:** `{fs['season']}` | **Episode:** `{format_episode_str(fs['episode'])}`\n"
 
     buttons = []
     buttons.append([InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")])
@@ -2003,7 +2013,7 @@ async def update_confirmation_message(client, msg_id, user_id):
         text += f"**Detected Quality:** `{fs['quality']}`\n"
 
     if media_type == "series":
-        text += f"**Season:** `{fs['season']}` | **Episode:** `E{fs['episode']:02d}`\n"
+        text += f"**Season:** `{fs['season']}` | **Episode:** `{format_episode_str(fs['episode'])}`\n"
 
     buttons = []
     row1 = [InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")]

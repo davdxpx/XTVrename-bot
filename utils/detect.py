@@ -132,10 +132,6 @@ def analyze_filename(filename):
         if isinstance(episode_val, list) and len(episode_val) == 2 and not season_val:
             season_val = episode_val[0]
             episode_val = episode_val[1]
-        elif isinstance(episode_val, list) and len(episode_val) > 0:
-            # If it's still a list (e.g. S01E01-E02), just take the first episode or handle it as needed.
-            # Currently the bot flow expects a single integer for episode. We will extract the first.
-            episode_val = episode_val[0]
 
         if isinstance(season_val, list) and len(season_val) > 0:
             season_val = season_val[0]
