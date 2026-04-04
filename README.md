@@ -35,61 +35,39 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ## 🌟 Core Features
 
-<details>
-<summary><b>🔹 Advanced Processing & Architecture</b></summary>
-<br>
-
+### 🔹 Advanced Processing Engines
 *   **𝕏TV Core™**: Lightning-fast processing for standard files (up to 2GB) using the primary bot API.
 *   **𝕏TV Pro™: Ephemeral Tunnels**: Seamless integration with a Premium Userbot session to handle **Large Files (>2GB up to 4GB)**. The system generates secure, temporary private tunnels for every single large file transfer, bypassing API limits, cache crashing, and `PEER_ID_INVALID` errors.
-*   **Concurrency Control**: Global semaphore system prevents server overload by managing simultaneous downloads/uploads. Premium users get increased concurrency limits!
+*   **Concurrency Control**: Global semaphore system prevents server overload by managing simultaneous downloads/uploads.
 
-</details>
-
-<details>
-<summary><b>🔹 Intelligent Recognition & Auto-Detection</b></summary>
-<br>
-
+### 🔹 Intelligent Recognition
+*   **Workflow Modes (Starter Setup)**: The bot greets users with an interactive, beautifully-formatted **Starter Setup Menu** when they join your Force-Sub channel or press `/start`. Users can pick their primary mode of operation:
+    *   **🧠 Smart Media Mode**: Best for TV Shows & Movies. Automatically triggers the Auto-Detection Matrix and fetches TMDb metadata/posters natively.
+    *   **⚡ Quick Rename Mode**: Best for Personal Videos, Anime, or generic files. Instantly bypasses all auto-detection logic and brings the user straight to the renaming prompt for rapid processing.
+*   **Seamless Chat Cleanup**: The bot aggressively keeps the chat history pristine during the renaming process. It auto-deletes its own prompts and the user's replies, keeping the interface uncluttered.
 *   **Auto-Detection Matrix**: Automatically scans filenames to detect Movie/Series titles, Years, Qualities, and Episode numbers with high accuracy.
 *   **Smart Metadata Fetching**: Integration with **TMDb** to pull official titles, release years, and artwork. Now supports **Multilingual Metadata** (e.g. `de-DE`, `es-ES`), customizable per user in `/settings`!
-*   **Workflow Modes (Starter Setup)**: The bot greets users with an interactive, beautifully-formatted **Starter Setup Menu**:
-    *   **🧠 Smart Media Mode**: Best for TV Shows & Movies. Automatically triggers the Auto-Detection Matrix and fetches TMDb metadata/posters natively.
-    *   **⚡ Quick Rename Mode**: Best for Personal Videos, Anime, or generic files. Instantly bypasses all auto-detection logic for rapid processing.
-*   **Automatic Archive Unpacking**: Automatically detects and downloads `.zip`, `.rar`, and `.7z` archives. It smartly identifies password-protected archives, extracts the contents, and automatically feeds all valid media files directly into the batch processing queue!
+*   **Automatic Archive Unpacking**: Automatically detects and downloads `.zip`, `.rar`, and `.7z` archives. It smartly identifies password-protected archives, prompts the user for the password, extracts the contents, and automatically feeds all valid media files directly into the batch processing queue!
 
-</details>
-
-<details>
-<summary><b>🔹 Media Management & Workflows</b></summary>
-<br>
-
+### 🔹 Media Management & Workflows
+*   **Multiple Dumb Channels & Sequential Batch Forwarding**: Configure multiple independent destination channels (globally or per-user). The bot automatically queues seasons or movie collections in bulk and strictly forwards them in sequential order (e.g., sorting series by Season/Episode and movies by resolution precedence: 2160p > 1080p > 720p > 480p).
 *   **Smart Debounce Queue Manager**: Automatically sorts batched media uploads logically. Instead of simple alphabetical sorting, series are ordered by SxxExx and movies by quality precedence, preventing out-of-order uploads to your channels.
-*   **Multiple Dumb Channels & Sequential Batch Forwarding**: Configure multiple independent destination channels (globally or per-user). The bot automatically queues seasons or movie collections in bulk and strictly forwards them in sequential order.
-*   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit (configurable by the CEO).
-*   **Multipurpose File Utilities**: Built-in direct editing tools accessible via shortcuts for general renaming (`/g`), audio metadata & cover art editing (`/a`), advanced media format conversion (including **x264/x265** and **Audio Normalization**) (`/c`), automated image watermarking (`/w`), and a standalone **Subtitle Extractor**!
-*   **Dynamic Filename Templates**: Fully customizable filename structures via the Admin Panel for Movies, Series, and Subtitles using variables like `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, and `{Channel}`. The template is the absolute source of truth for spacing and formatting.
+*   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit.
+*   **Spam-Proof Forwarding**: Utilizing Pyrogram's `copy()` method, the bot cleanly removes 'Forwarded from' tags when sending to Dumb Channels, preventing Telegram's spam detection from flagging bulk media.
+*   **Personal Media & Unlisted Content**: Direct menu options to bypass metadata databases for personal files, preserving original file extensions (like `.jpeg`) and letting you choose your preferred output format.
+*   **Multipurpose File Utilities**: Built-in direct editing tools accessible via the **✨ Other Features** menu for general renaming (`/g`), audio metadata & cover art editing (`/a`), advanced media format conversion (including **x264/x265** and **Audio Normalization**) (`/c`), automated image watermarking (`/w`), and a standalone **Subtitle Extractor**!
+*   **Dynamic Filename Templates**: Fully customizable filename structures via the Admin Panel for Movies, Series, and Subtitles using variables like `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, and `{Channel}`.
 
-</details>
-
-<details>
-<summary><b>🔹 Professional Metadata Injection</b></summary>
-<br>
-
-*   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers.
+### 🔹 Professional Metadata Injection
+*   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
 *   **Branding**: Sets "Encoded by @XTVglobal" and custom audio/subtitle track titles.
 *   **Thumbnail Embedding**: Embeds custom or poster-based thumbnails into video files.
 *   **Album Support**: Handles multiple file uploads (albums) concurrently without issues.
 
-</details>
-
-<details>
-<summary><b>🔹 Admin Controls & Security</b></summary>
-<br>
-
-*   **Admin Feature Toggles (Resource Management)**: As the bot processes extremely heavy tasks like **Video Conversion**, **Subtitle Extraction**, and **Image Watermarking**, it can easily overwhelm standard VPS servers. Admins can toggle these heavy features on/off globally to protect the server.
-*   **Smart Force-Sub Setup**: Automatically detects when the bot is promoted to an Administrator in a channel, verifies permissions, and dynamically generates and saves an invite link for seamless Force-Sub configuration.
+### 🔹 Security & Privacy
 *   **Anti-Hash Algorithm**: Generates unique, random captions for every file to prevent hash-based tracking or duplicate detection.
-
-</details>
+*   **Smart Force-Sub Setup**: Automatically detects when the bot is promoted to an Administrator in a channel, verifies permissions, and dynamically generates and saves an invite link for seamless Force-Sub configuration.
+*   **Admin Feature Toggles**: Protect your server by toggling heavy CPU/RAM features (like Video Conversion and Watermarking) on or off globally.
 
 ---
 
