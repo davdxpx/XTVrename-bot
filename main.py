@@ -98,15 +98,13 @@ if __name__ == "__main__":
         import time
         from config import Config
 
-        def cleanup_orphaned_files():
-            logger.info("Running automated orphaned file cleanup...")
+        # DB Expiration logic
+        import asyncio
+        from database import db
+        import datetime
 
-            # DB Expiration logic
-            import asyncio
-            from database import db
-            import datetime
-
-            async def db_cleanup():
+        async def db_cleanup():
+            while True:
                 now = datetime.datetime.utcnow()
                 try:
                     # Find all temporary files that have expired
@@ -118,22 +116,20 @@ if __name__ == "__main__":
                         # Delete them from DB
                         await db.files.delete_many({"status": "temporary", "expires_at": {"$lt": now}})
 
-                        # Note: In a full system we'd also delete the message from the db_channel,
-                        # but standard Telegram logic is that messages live forever in channels.
-                        # For privacy/compliance, we'll just delete our record of them.
                 except Exception as e:
                     logger.error(f"Error during DB cleanup: {e}")
 
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(db_cleanup())
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                loop.run_until_complete(db_cleanup())
-                loop.close()
-            except Exception as e:
-                logger.warning(f"Could not run DB cleanup tasks: {e}")
+                # Run the cleanup every 6 hours
+                await asyncio.sleep(21600)
 
+        try:
+            logger.info("Scheduling automated DB cleanup task...")
+            app.loop.create_task(db_cleanup())
+        except Exception as e:
+            logger.warning(f"Could not schedule DB cleanup tasks: {e}")
+
+        def cleanup_orphaned_files():
+            logger.info("Running automated orphaned file cleanup...")
             download_dir = Config.DOWNLOAD_DIR
             if not os.path.exists(download_dir):
                 return

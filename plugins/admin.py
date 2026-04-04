@@ -336,7 +336,8 @@ async def admin_callback(client, callback_query):
         try:
             await callback_query.message.edit_text(
                 f"🗄️ **Set DB Channel for {plan.capitalize()}**\n\n"
-                f"Please forward a message from the desired channel or send the channel ID (e.g. -100...).",
+                f"⚠️ **IMPORTANT:** You MUST add me as an Administrator to this channel with 'Post Messages' permissions so I can save files there!\n\n"
+                f"Please forward any message from the desired channel, or send the channel ID (e.g. `-100...`).",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_myfiles_db_channels")]])
             )
         except MessageNotModified:
@@ -405,11 +406,14 @@ async def admin_callback(client, callback_query):
 
     if data.startswith("admin_myfiles_edit_limits_"):
         plan = data.replace("admin_myfiles_edit_limits_", "")
-        text = f"⚙️ **Edit {plan.capitalize()} Limits**\n\nSelect a limit to edit:"
+        text = (
+            f"⚙️ **Edit {plan.capitalize()} Storage Limits**\n\n"
+            f"Select which specific quota you want to modify for this tier:"
+        )
         buttons = [
-            [InlineKeyboardButton("Permanent Limit", callback_data=f"prompt_myfiles_lim_{plan}_permanent")],
-            [InlineKeyboardButton("Folder Limit", callback_data=f"prompt_myfiles_lim_{plan}_folder")],
-            [InlineKeyboardButton("Expiry Days", callback_data=f"prompt_myfiles_lim_{plan}_expiry")],
+            [InlineKeyboardButton("📌 Edit Permanent Limit", callback_data=f"prompt_myfiles_lim_{plan}_permanent")],
+            [InlineKeyboardButton("📁 Edit Folder Limit", callback_data=f"prompt_myfiles_lim_{plan}_folder")],
+            [InlineKeyboardButton("⏳ Edit Expiry Days", callback_data=f"prompt_myfiles_lim_{plan}_expiry")],
             [InlineKeyboardButton("← Back", callback_data="admin_myfiles_limits")]
         ]
         try:
@@ -423,10 +427,20 @@ async def admin_callback(client, callback_query):
         plan = parts[0]
         field = parts[1]
         admin_sessions[user_id] = f"awaiting_myfiles_lim_{plan}_{field}"
+
+        display_names = {
+            "permanent": "📌 Permanent Storage Slots",
+            "folder": "📁 Custom Folder Limit",
+            "expiry": "⏳ Temporary File Expiry (Days)"
+        }
+        name = display_names.get(field, field.capitalize())
+
         try:
             await callback_query.message.edit_text(
-                f"⚙️ **Set {field.capitalize()} Limit for {plan.capitalize()}**\n\n"
-                f"Send the new integer value (send `-1` for unlimited):",
+                f"⚙️ **Set {name}**\n"
+                f"For the **{plan.capitalize()}** Tier.\n\n"
+                f"Please send a number in the chat (e.g. `50` or `30`).\n"
+                f"> 💡 *Tip: Send `-1` to set this limit to UNLIMITED.*",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
             )
         except MessageNotModified:
@@ -2534,13 +2548,18 @@ async def handle_admin_text(client, message):
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_myfiles_db_channels")]])
             )
             admin_sessions.pop(user_id, None)
-        return
+
+            from pyrogram.errors import StopPropagation
+            raise StopPropagation
 
     if isinstance(state, str) and state.startswith("awaiting_myfiles_lim_"):
         parts = state.replace("awaiting_myfiles_lim_", "").split("_")
         plan = parts[0]
         field = parts[1]
         val = message.text.strip() if message.text else ""
+
+        from pyrogram.errors import StopPropagation
+
         try:
             val_int = int(val)
         except ValueError:
@@ -2548,7 +2567,7 @@ async def handle_admin_text(client, message):
                 "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
             )
-            return
+            raise StopPropagation
 
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         limits = config.get("myfiles_limits", {})
@@ -2572,7 +2591,7 @@ async def handle_admin_text(client, message):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
         )
         admin_sessions.pop(user_id, None)
-        return
+        raise StopPropagation
 
     if state == "awaiting_global_daily_egress":
         val = message.text.strip() if message.text else ""

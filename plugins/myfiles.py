@@ -124,7 +124,7 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data=back_data)])
     return buttons, total_files
 
-@Client.on_message(filters.text & filters.private, group=-1)
+@Client.on_message(filters.text & filters.private, group=-2)
 async def myfiles_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
@@ -169,7 +169,10 @@ async def myfiles_text_handler(client: Client, message: Message):
 
         await message.reply_text(f"✅ Folder **{folder_name}** created successfully.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Folders", callback_data="myfiles_cat_custom")]]))
         await set_myfiles_state(user_id, {})
-        return
+
+        # Stop propagation to prevent flow.py from processing this text
+        from pyrogram.errors import StopPropagation
+        raise StopPropagation
 
     if state.startswith("awaiting_rename_"):
         file_id = state.replace("awaiting_rename_", "")
@@ -179,7 +182,9 @@ async def myfiles_text_handler(client: Client, message: Message):
 
         await message.reply_text(f"✅ File renamed to `{new_name}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to File", callback_data=f"myfiles_file_{file_id}")]]))
         await set_myfiles_state(user_id, {})
-        return
+
+        from pyrogram.errors import StopPropagation
+        raise StopPropagation
 
     from pyrogram import ContinuePropagation
     raise ContinuePropagation
