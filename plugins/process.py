@@ -1344,7 +1344,11 @@ class TaskProcessor:
 
             import datetime
             user_doc = await db.get_user(self.user_id)
-            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            if Config.PUBLIC_MODE:
+                plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            else:
+                plan = "global"
+
             db_channel_id = await db.get_db_channel(plan)
 
             saved_file_id = None
