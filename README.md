@@ -63,6 +63,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **Album Support**: Handles multiple file uploads (albums) concurrently without issues.
 *   **Session State**: Robust user state management allows for cancelling and restarting flows easily.
 *   **Broadcast & Logs**: Features for mass notifications and logging processed files.
+*   **Admin Feature Toggles (Resource Management)**: As the bot processes extremely heavy tasks like **Video Conversion**, **Subtitle Extraction**, and **Image Watermarking**, it can easily overwhelm standard VPS servers (high CPU & RAM usage). To protect your server and Telegram Premium tunnel account from spam or rate limits.
 
 ## 🛠 Deployment Guide
 
@@ -166,11 +167,6 @@ The 𝕏TV MediaStudio™ can operate in two distinct modes via the `PUBLIC_MODE
 This project is open-source under the **XTV Public License**.
 *   **Modifications**: You may fork and modify for personal use.
 *   **Attribution**: **You must retain the original author credits.** Unauthorized removal of the "Developed by 𝕏0L0™" notice is strictly prohibited.
-
-## ⚙️ Admin Feature Toggles (Resource Management)
-As the bot processes extremely heavy tasks like **Video Conversion**, **Subtitle Extraction**, and **Image Watermarking**, it can easily overwhelm standard VPS servers (high CPU & RAM usage). To protect your server and Telegram Premium tunnel account from spam or rate limits:
-- The CEO can globally toggle specific heavy features on and off directly from the `/admin` panel -> **Access & Limits** -> **Feature Toggles**.
-- When a feature is disabled (e.g., File Converter), all UI buttons and commands for it are hidden or disabled for all users.
 
 ---
 <div align="center">
