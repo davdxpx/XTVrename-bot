@@ -1412,6 +1412,21 @@ class TaskProcessor:
                         folder_id = res.inserted_id
                     else:
                         folder_id = folder["_id"]
+                elif self.media_type == "audio":
+                    artist = self.metadata.get("artist", "Unknown Artist").strip()
+                    if not artist:
+                        artist = "Unknown Artist"
+                    folder = await db.folders.find_one({"user_id": self.user_id, "name": artist, "type": "music"})
+                    if not folder:
+                        res = await db.folders.insert_one({
+                            "user_id": self.user_id,
+                            "name": artist,
+                            "type": "music",
+                            "created_at": datetime.datetime.utcnow()
+                        })
+                        folder_id = res.inserted_id
+                    else:
+                        folder_id = folder["_id"]
 
                 file_data = {
                     "user_id": self.user_id,

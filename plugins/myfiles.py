@@ -63,6 +63,7 @@ async def get_myfiles_main_menu(user_id: int):
 
     has_movies = await db.folders.count_documents({"user_id": user_id, "type": "movies"} if Config.PUBLIC_MODE else {"type": "movies"}) > 0
     has_series = await db.folders.count_documents({"user_id": user_id, "type": "series"} if Config.PUBLIC_MODE else {"type": "series"}) > 0
+    has_music = await db.folders.count_documents({"user_id": user_id, "type": "music"} if Config.PUBLIC_MODE else {"type": "music"}) > 0
 
     buttons = [
         [InlineKeyboardButton("🕒 Recent Files", callback_data="myfiles_cat_recent")],
@@ -76,6 +77,9 @@ async def get_myfiles_main_menu(user_id: int):
 
     if media_row:
         buttons.append(media_row)
+
+    if has_music:
+        buttons.append([InlineKeyboardButton("🎵 Music", callback_data="myfiles_cat_music")])
 
     buttons.append([InlineKeyboardButton("📁 Custom Folders", callback_data="myfiles_cat_custom")])
     buttons.append([InlineKeyboardButton("⚙️ Settings", callback_data="myfiles_settings")])
@@ -286,7 +290,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             pass
         return
 
-    if data in ["myfiles_cat_movies", "myfiles_cat_series", "myfiles_cat_custom"]:
+    if data in ["myfiles_cat_movies", "myfiles_cat_series", "myfiles_cat_music", "myfiles_cat_custom"]:
         f_type = data.split("_")[-1]
 
         folder_query = {"user_id": user_id, "type": f_type} if Config.PUBLIC_MODE else {"type": f_type}
