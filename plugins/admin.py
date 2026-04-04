@@ -355,26 +355,42 @@ async def admin_callback(client, callback_query):
             dlx = limits.get("deluxe", {})
 
             text = (
-                "⚙️ **Per-Plan Limits**\n\n"
-                "**Free**\n"
-                f"Permanent: `{f(free.get('permanent_limit'))}` | Folders: `{f(free.get('folder_limit'))}` | Expiry: `{f(free.get('expiry_days'))}` days\n\n"
-                "**Standard**\n"
-                f"Permanent: `{f(std.get('permanent_limit'))}` | Folders: `{f(std.get('folder_limit'))}` | Expiry: `{f(std.get('expiry_days'))}` days\n\n"
-                "**Deluxe**\n"
-                f"Permanent: `{f(dlx.get('permanent_limit'))}` | Folders: `{f(dlx.get('folder_limit'))}` | Expiry: `{f(dlx.get('expiry_days'))}` days\n"
+                "⚙️ **/myfiles Storage Limits**\n\n"
+                "> Manage cloud storage quotas per tier.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "🆓 **Free Plan**\n"
+                f"📌 Permanent Slots : `{f(free.get('permanent_limit'))}`\n"
+                f"📁 Custom Folders  : `{f(free.get('folder_limit'))}`\n"
+                f"⏳ Temp Expiration : `{f(free.get('expiry_days'))} days`\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "🌟 **Standard Plan**\n"
+                f"📌 Permanent Slots : `{f(std.get('permanent_limit'))}`\n"
+                f"📁 Custom Folders  : `{f(std.get('folder_limit'))}`\n"
+                f"⏳ Temp Expiration : `{f(std.get('expiry_days'))} days`\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "💎 **Deluxe Plan**\n"
+                f"📌 Permanent Slots : `{f(dlx.get('permanent_limit'))}`\n"
+                f"📁 Custom Folders  : `{f(dlx.get('folder_limit'))}`\n"
+                f"⏳ Temp Expiration : `{f(dlx.get('expiry_days'))} days`\n"
+                "━━━━━━━━━━━━━━━━━━━━"
             )
             buttons = [
-                [InlineKeyboardButton("✏️ Edit Free", callback_data="admin_myfiles_edit_limits_free")],
-                [InlineKeyboardButton("✏️ Edit Standard", callback_data="admin_myfiles_edit_limits_standard")],
+                [InlineKeyboardButton("✏️ Edit Free", callback_data="admin_myfiles_edit_limits_free"),
+                 InlineKeyboardButton("✏️ Edit Standard", callback_data="admin_myfiles_edit_limits_standard")],
                 [InlineKeyboardButton("✏️ Edit Deluxe", callback_data="admin_myfiles_edit_limits_deluxe")],
                 [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
             ]
         else:
             global_limits = limits.get("global", {})
             text = (
-                "⚙️ **Global Limits**\n\n"
-                "**All Users (Team Drive)**\n"
-                f"Permanent: `{f(global_limits.get('permanent_limit', -1))}` | Folders: `{f(global_limits.get('folder_limit', -1))}` | Expiry: `{f(global_limits.get('expiry_days', -1))}` days\n\n"
+                "⚙️ **Global Storage Limits**\n\n"
+                "> Manage Team Drive storage quotas.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "🌍 **All Users (Team Drive)**\n"
+                f"📌 Permanent Slots : `{f(global_limits.get('permanent_limit', -1))}`\n"
+                f"📁 Custom Folders  : `{f(global_limits.get('folder_limit', -1))}`\n"
+                f"⏳ Temp Expiration : `{f(global_limits.get('expiry_days', -1))} days`\n"
+                "━━━━━━━━━━━━━━━━━━━━"
             )
             buttons = [
                 [InlineKeyboardButton("✏️ Edit Global Limits", callback_data="admin_myfiles_edit_limits_global")],

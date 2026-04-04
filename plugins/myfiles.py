@@ -61,13 +61,24 @@ async def get_myfiles_main_menu(user_id: int):
             "Select a category to view files:"
         )
 
+    has_movies = await db.folders.count_documents({"user_id": user_id, "type": "movies"} if Config.PUBLIC_MODE else {"type": "movies"}) > 0
+    has_series = await db.folders.count_documents({"user_id": user_id, "type": "series"} if Config.PUBLIC_MODE else {"type": "series"}) > 0
+
     buttons = [
         [InlineKeyboardButton("🕒 Recent Files", callback_data="myfiles_cat_recent")],
-        [InlineKeyboardButton("🎬 Movies", callback_data="myfiles_cat_movies"),
-         InlineKeyboardButton("📺 Series", callback_data="myfiles_cat_series")],
-        [InlineKeyboardButton("📁 Custom Folders", callback_data="myfiles_cat_custom")],
-        [InlineKeyboardButton("⚙️ Settings", callback_data="myfiles_settings")]
     ]
+
+    media_row = []
+    if has_movies:
+        media_row.append(InlineKeyboardButton("🎬 Movies", callback_data="myfiles_cat_movies"))
+    if has_series:
+        media_row.append(InlineKeyboardButton("📺 Series", callback_data="myfiles_cat_series"))
+
+    if media_row:
+        buttons.append(media_row)
+
+    buttons.append([InlineKeyboardButton("📁 Custom Folders", callback_data="myfiles_cat_custom")])
+    buttons.append([InlineKeyboardButton("⚙️ Settings", callback_data="myfiles_settings")])
 
     return text, InlineKeyboardMarkup(buttons)
 
@@ -109,7 +120,7 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data=back_data)])
     return buttons, total_files
 
-@Client.on_message(filters.text & filters.private, group=1)
+@Client.on_message(filters.text & filters.private, group=-1)
 async def myfiles_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
