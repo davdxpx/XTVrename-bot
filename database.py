@@ -34,6 +34,8 @@ class Database:
             self.users = self.db["users"]
             self.daily_stats = self.db["daily_stats"]
             self.pending_payments = self.db["pending_payments"]
+            self.files = self.db["files"]
+            self.folders = self.db["folders"]
 
     def _get_doc_id(self, user_id=None):
         if Config.PUBLIC_MODE and user_id is not None:
@@ -490,6 +492,28 @@ class Database:
                     "discounts": {
                         "months_3": 0,
                         "months_12": 0
+                },
+                "database_channels": {
+                    "free": None,
+                    "standard": None,
+                    "deluxe": None
+                },
+                "myfiles_limits": {
+                    "free": {
+                        "permanent_limit": 50,
+                        "folder_limit": 5,
+                        "expiry_days": 10
+                    },
+                    "standard": {
+                        "permanent_limit": 1000,
+                        "folder_limit": 50,
+                        "expiry_days": 30
+                    },
+                    "deluxe": {
+                        "permanent_limit": -1, # -1 for unlimited
+                        "folder_limit": -1,
+                        "expiry_days": -1
+                    }
                     }
                 }
                 await self.settings.insert_one(default_config)
@@ -1106,14 +1130,25 @@ class Database:
     async def reset_user_premium(self, user_id: int):
         if self.users is None:
             return
-        await self.users.update_one(
-            {"user_id": user_id},
-            {"$set": {
-                "is_premium": False,
-                "premium_plan": "standard",
-                "premium_expiry": None
-            }}
-        )
+        user_doc = await self.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            await self.users.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "is_premium": False,
+                    "premium_plan": "donator",
+                    "premium_expiry": None
+                }}
+            )
+        else:
+            await self.users.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "is_premium": False,
+                    "premium_plan": "standard",
+                    "premium_expiry": None
+                }}
+            )
 
     async def delete_user_data(self, user_id: int):
         if self.users is None or self.settings is None:
@@ -1156,6 +1191,34 @@ class Database:
             return []
         cursor = self.pending_payments.find({"status": "pending"}).sort("created_at", 1).limit(limit)
         return await cursor.to_list(length=limit)
+
+    async def get_db_channel(self, plan: str):
+        if self.settings is None:
+            return None
+        if Config.PUBLIC_MODE:
+            config = await self.get_public_config()
+            return config.get("database_channels", {}).get(plan)
+        else:
+            doc = await self.settings.find_one({"_id": "global_settings"})
+            if doc:
+                return doc.get("database_channels", {}).get(plan)
+        return None
+
+    async def update_db_channel(self, plan: str, channel_id: int):
+        if self.settings is None:
+            return
+        if Config.PUBLIC_MODE:
+            await self.settings.update_one(
+                {"_id": "public_mode_config"},
+                {"$set": {f"database_channels.{plan}": channel_id}},
+                upsert=True
+            )
+        else:
+            await self.settings.update_one(
+                {"_id": "global_settings"},
+                {"$set": {f"database_channels.{plan}": channel_id}},
+                upsert=True
+            )
 
 db = Database()
 

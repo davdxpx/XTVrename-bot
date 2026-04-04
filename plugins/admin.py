@@ -94,6 +94,13 @@ def get_admin_main_menu(pro_session, public_mode):
                 ),
             ]
         )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "📁 /myfiles Settings", callback_data="admin_myfiles_settings"
+                ),
+            ]
+        )
 
     keyboard.append(
         [InlineKeyboardButton(pro_btn_text, callback_data="pro_setup_menu")]
@@ -172,6 +179,14 @@ async def get_admin_access_limits_menu():
             )
         ]
     )
+    if Config.PUBLIC_MODE:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "📁 Per-User /myfiles Settings", callback_data="admin_myfiles_settings"
+                )
+            ]
+        )
     buttons.append(
         [
             InlineKeyboardButton(
@@ -251,7 +266,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -261,6 +276,201 @@ async def admin_callback(client, callback_query):
         raise ContinuePropagation
     data = callback_query.data
     debug(f"Admin callback: {data} from user {user_id}")
+
+    if data == "admin_myfiles_settings":
+        text = "📁 **/myfiles Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
+        buttons = [
+            [InlineKeyboardButton("🗄️ Database Channels", callback_data="admin_myfiles_db_channels")],
+            [InlineKeyboardButton("⚙️ Per-Plan Limits", callback_data="admin_myfiles_limits")],
+            [InlineKeyboardButton("🧹 DB Cleanup Tools", callback_data="admin_myfiles_cleanup")],
+            [InlineKeyboardButton("← Back", callback_data="admin_access_limits" if Config.PUBLIC_MODE else "admin_main")]
+        ]
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data == "admin_myfiles_db_channels":
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        channels = config.get("database_channels", {})
+
+        if Config.PUBLIC_MODE:
+            free = channels.get("free", "Not Set")
+            std = channels.get("standard", "Not Set")
+            dlx = channels.get("deluxe", "Not Set")
+            text = (
+                "🗄️ **Database Channels**\n\n"
+                "Set the channels used for storing permanent/temporary files.\n\n"
+                f"**Free Plan Channel:** `{free}`\n"
+                f"**Standard Plan Channel:** `{std}`\n"
+                f"**Deluxe Plan Channel:** `{dlx}`\n"
+            )
+            buttons = [
+                [InlineKeyboardButton("✏️ Edit Free", callback_data="prompt_myfiles_db_free"),
+                 InlineKeyboardButton("✏️ Edit Standard", callback_data="prompt_myfiles_db_standard")],
+                [InlineKeyboardButton("✏️ Edit Deluxe", callback_data="prompt_myfiles_db_deluxe")],
+                [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+            ]
+        else:
+            global_ch = channels.get("global", "Not Set")
+            text = (
+                "🗄️ **Global Database Channel**\n\n"
+                "Set the channel used for storing all files globally.\n\n"
+                f"**Global Channel:** `{global_ch}`\n"
+            )
+            buttons = [
+                [InlineKeyboardButton("✏️ Edit Global", callback_data="prompt_myfiles_db_global")],
+                [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+            ]
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("prompt_myfiles_db_"):
+        plan = data.replace("prompt_myfiles_db_", "")
+        admin_sessions[user_id] = f"awaiting_myfiles_db_{plan}"
+        try:
+            await callback_query.message.edit_text(
+                f"🗄️ **Set DB Channel for {plan.capitalize()}**\n\n"
+                f"Please forward a message from the desired channel or send the channel ID (e.g. -100...).",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_myfiles_db_channels")]])
+            )
+        except MessageNotModified:
+            pass
+        return
+
+    if data == "admin_myfiles_limits":
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        limits = config.get("myfiles_limits", {})
+
+        def f(v): return "Unlimited" if v == -1 else v
+
+        if Config.PUBLIC_MODE:
+            free = limits.get("free", {})
+            std = limits.get("standard", {})
+            dlx = limits.get("deluxe", {})
+
+            text = (
+                "⚙️ **Per-Plan Limits**\n\n"
+                "**Free**\n"
+                f"Permanent: `{f(free.get('permanent_limit'))}` | Folders: `{f(free.get('folder_limit'))}` | Expiry: `{f(free.get('expiry_days'))}` days\n\n"
+                "**Standard**\n"
+                f"Permanent: `{f(std.get('permanent_limit'))}` | Folders: `{f(std.get('folder_limit'))}` | Expiry: `{f(std.get('expiry_days'))}` days\n\n"
+                "**Deluxe**\n"
+                f"Permanent: `{f(dlx.get('permanent_limit'))}` | Folders: `{f(dlx.get('folder_limit'))}` | Expiry: `{f(dlx.get('expiry_days'))}` days\n"
+            )
+            buttons = [
+                [InlineKeyboardButton("✏️ Edit Free", callback_data="admin_myfiles_edit_limits_free")],
+                [InlineKeyboardButton("✏️ Edit Standard", callback_data="admin_myfiles_edit_limits_standard")],
+                [InlineKeyboardButton("✏️ Edit Deluxe", callback_data="admin_myfiles_edit_limits_deluxe")],
+                [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+            ]
+        else:
+            global_limits = limits.get("global", {})
+            text = (
+                "⚙️ **Global Limits**\n\n"
+                "**All Users (Team Drive)**\n"
+                f"Permanent: `{f(global_limits.get('permanent_limit', -1))}` | Folders: `{f(global_limits.get('folder_limit', -1))}` | Expiry: `{f(global_limits.get('expiry_days', -1))}` days\n\n"
+            )
+            buttons = [
+                [InlineKeyboardButton("✏️ Edit Global Limits", callback_data="admin_myfiles_edit_limits_global")],
+                [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+            ]
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("admin_myfiles_edit_limits_"):
+        plan = data.replace("admin_myfiles_edit_limits_", "")
+        text = f"⚙️ **Edit {plan.capitalize()} Limits**\n\nSelect a limit to edit:"
+        buttons = [
+            [InlineKeyboardButton("Permanent Limit", callback_data=f"prompt_myfiles_lim_{plan}_permanent")],
+            [InlineKeyboardButton("Folder Limit", callback_data=f"prompt_myfiles_lim_{plan}_folder")],
+            [InlineKeyboardButton("Expiry Days", callback_data=f"prompt_myfiles_lim_{plan}_expiry")],
+            [InlineKeyboardButton("← Back", callback_data="admin_myfiles_limits")]
+        ]
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("prompt_myfiles_lim_"):
+        parts = data.replace("prompt_myfiles_lim_", "").split("_")
+        plan = parts[0]
+        field = parts[1]
+        admin_sessions[user_id] = f"awaiting_myfiles_lim_{plan}_{field}"
+        try:
+            await callback_query.message.edit_text(
+                f"⚙️ **Set {field.capitalize()} Limit for {plan.capitalize()}**\n\n"
+                f"Send the new integer value (send `-1` for unlimited):",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
+            )
+        except MessageNotModified:
+            pass
+        return
+
+    if data == "admin_myfiles_cleanup":
+        text = (
+            "🧹 **DB Cleanup Tools**\n\n"
+            "Run maintenance tasks to clear up storage."
+        )
+        buttons = [
+            [InlineKeyboardButton("🧹 Clear Free Expired", callback_data="admin_myfiles_clean_free")],
+            [InlineKeyboardButton("🧹 Clear Donator Expired", callback_data="admin_myfiles_clean_donator")],
+            [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+        ]
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data == "admin_myfiles_clean_free" or data == "admin_myfiles_clean_donator":
+        try:
+            await callback_query.answer("Cleanup job started in background.", show_alert=True)
+
+            import asyncio
+            import datetime
+
+            async def run_admin_cleanup():
+                now = datetime.datetime.utcnow()
+                count = 0
+                if data == "admin_myfiles_clean_free":
+                    # Get all free users
+                    cursor = db.users.find({"$or": [{"is_premium": False}, {"premium_plan": "free"}]})
+                    free_users = await cursor.to_list(length=None)
+                    free_ids = [u["user_id"] for u in free_users]
+
+                    if free_ids:
+                        res = await db.files.delete_many({"user_id": {"$in": free_ids}, "status": "temporary", "expires_at": {"$lt": now}})
+                        count = res.deleted_count
+                else:
+                    # Donators
+                    cursor = db.users.find({"is_premium": False, "premium_plan": "donator"})
+                    donators = await cursor.to_list(length=None)
+                    donator_ids = [u["user_id"] for u in donators]
+
+                    if donator_ids:
+                        res = await db.files.delete_many({"user_id": {"$in": donator_ids}, "status": "temporary", "expires_at": {"$lt": now}})
+                        count = res.deleted_count
+
+                try:
+                    await client.send_message(user_id, f"✅ **Cleanup Job Complete**\n\nDeleted {count} expired temporary files.")
+                except Exception:
+                    pass
+
+            asyncio.create_task(run_admin_cleanup())
+        except MessageNotModified:
+            pass
+        return
 
     if data.startswith("dumb_"):
         if data == "dumb_menu":
@@ -2282,6 +2492,71 @@ async def handle_admin_text(client, message):
     state = admin_sessions.get(user_id)
     if not state:
         raise ContinuePropagation
+
+    if isinstance(state, str) and state.startswith("awaiting_myfiles_db_"):
+        plan = state.replace("awaiting_myfiles_db_", "")
+        val = message.text.strip() if message.text else ""
+
+        ch_id = None
+        if message.forward_from_chat:
+            ch_id = message.forward_from_chat.id
+        elif val:
+            try:
+                chat = await client.get_chat(val)
+                ch_id = chat.id
+            except Exception as e:
+                await message.reply_text(
+                    f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_myfiles_db_channels")]])
+                )
+                return
+
+        if ch_id:
+            await db.update_db_channel(plan, ch_id)
+            await message.reply_text(
+                f"✅ {plan.capitalize()} DB Channel updated to `{ch_id}`.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_myfiles_db_channels")]])
+            )
+            admin_sessions.pop(user_id, None)
+        return
+
+    if isinstance(state, str) and state.startswith("awaiting_myfiles_lim_"):
+        parts = state.replace("awaiting_myfiles_lim_", "").split("_")
+        plan = parts[0]
+        field = parts[1]
+        val = message.text.strip() if message.text else ""
+        try:
+            val_int = int(val)
+        except ValueError:
+            await message.reply_text(
+                "❌ Invalid number. Try again.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
+            )
+            return
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        limits = config.get("myfiles_limits", {})
+        if plan not in limits:
+            limits[plan] = {}
+
+        if field == "permanent":
+            limits[plan]["permanent_limit"] = val_int
+        elif field == "folder":
+            limits[plan]["folder_limit"] = val_int
+        elif field == "expiry":
+            limits[plan]["expiry_days"] = val_int
+
+        if Config.PUBLIC_MODE:
+            await db.update_public_config("myfiles_limits", limits)
+        else:
+            await db.settings.update_one({"_id": "global_settings"}, {"$set": {"myfiles_limits": limits}}, upsert=True)
+
+        await message.reply_text(
+            f"✅ {plan.capitalize()} {field} limit updated to `{val_int}`.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
+        )
+        admin_sessions.pop(user_id, None)
+        return
 
     if state == "awaiting_global_daily_egress":
         val = message.text.strip() if message.text else ""

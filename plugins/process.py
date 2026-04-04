@@ -1342,6 +1342,78 @@ class TaskProcessor:
             item_id = self.data.get("item_id")
             dumb_channel = self.data.get("dumb_channel")
 
+            import datetime
+            user_doc = await db.get_user(self.user_id)
+            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            db_channel_id = await db.get_db_channel(plan)
+
+            saved_file_id = None
+            if db_channel_id:
+                try:
+                    if is_tunneling:
+                        db_msg = await self.client.copy_message(
+                            chat_id=db_channel_id,
+                            from_chat_id=self.tunnel_id,
+                            message_id=media_msg.id,
+                        )
+                    else:
+                        db_msg = await self.client.copy_message(
+                            chat_id=db_channel_id,
+                            from_chat_id=media_msg.chat.id,
+                            message_id=media_msg.id,
+                        )
+                    saved_file_id = db_msg.id
+
+                    config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+                    limits = config.get("myfiles_limits", {}).get(plan, {})
+                    perm_limit = limits.get("permanent_limit", 50)
+                    expiry_days = limits.get("expiry_days", 10)
+
+                    auto_perm = True
+                    user_settings = await db.get_settings(self.user_id)
+                    if user_settings and "myfiles_auto_permanent" in user_settings:
+                        auto_perm = user_settings["myfiles_auto_permanent"]
+
+                    perm_count = await db.files.count_documents({"user_id": self.user_id, "status": "permanent"})
+
+                    status = "temporary"
+                    if auto_perm and (perm_limit == -1 or perm_count < perm_limit):
+                        status = "permanent"
+
+                    expiry_date = None
+                    if status == "temporary" and expiry_days != -1:
+                        expiry_date = datetime.datetime.utcnow() + datetime.timedelta(days=expiry_days)
+
+                    folder_id = None
+                    if self.tmdb_id:
+                        folder_type = "series" if self.media_type == "series" else "movies"
+                        folder = await db.folders.find_one({"user_id": self.user_id, "tmdb_id": self.tmdb_id})
+                        if not folder:
+                            res = await db.folders.insert_one({
+                                "user_id": self.user_id,
+                                "name": self.title,
+                                "type": folder_type,
+                                "tmdb_id": self.tmdb_id,
+                                "created_at": datetime.datetime.utcnow()
+                            })
+                            folder_id = res.inserted_id
+                        else:
+                            folder_id = folder["_id"]
+
+                    file_data = {
+                        "user_id": self.user_id,
+                        "file_name": final_filename,
+                        "message_id": saved_file_id,
+                        "channel_id": db_channel_id,
+                        "status": status,
+                        "folder_id": folder_id,
+                        "created_at": datetime.datetime.utcnow(),
+                        "expires_at": expiry_date,
+                    }
+                    await db.files.insert_one(file_data)
+                except Exception as e:
+                    logger.error(f"Failed to save file to DB Channel {db_channel_id}: {e}")
+
             if batch_id and item_id:
                 if not dumb_channel:
                     queue_manager.update_status(batch_id, item_id, "done_dumb")

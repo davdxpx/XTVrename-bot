@@ -100,6 +100,40 @@ if __name__ == "__main__":
 
         def cleanup_orphaned_files():
             logger.info("Running automated orphaned file cleanup...")
+
+            # DB Expiration logic
+            import asyncio
+            from database import db
+            import datetime
+
+            async def db_cleanup():
+                now = datetime.datetime.utcnow()
+                try:
+                    # Find all temporary files that have expired
+                    cursor = db.files.find({"status": "temporary", "expires_at": {"$lt": now}})
+                    expired_files = await cursor.to_list(length=None)
+
+                    if expired_files:
+                        logger.info(f"Found {len(expired_files)} expired temporary files. Cleaning up...")
+                        # Delete them from DB
+                        await db.files.delete_many({"status": "temporary", "expires_at": {"$lt": now}})
+
+                        # Note: In a full system we'd also delete the message from the db_channel,
+                        # but standard Telegram logic is that messages live forever in channels.
+                        # For privacy/compliance, we'll just delete our record of them.
+                except Exception as e:
+                    logger.error(f"Error during DB cleanup: {e}")
+
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(db_cleanup())
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(db_cleanup())
+                loop.close()
+            except Exception as e:
+                logger.warning(f"Could not run DB cleanup tasks: {e}")
+
             download_dir = Config.DOWNLOAD_DIR
             if not os.path.exists(download_dir):
                 return
