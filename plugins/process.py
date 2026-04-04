@@ -823,136 +823,6 @@ class TaskProcessor:
                 f"{XTVEngine.get_signature(mode=self.mode)}"
             )
 
-        if self.media_type == "watermark":
-            wtype = self.data.get("watermark_type")
-            wcontent = self.data.get("watermark_content")
-            pos = self.data.get("watermark_position", "bottomright")
-            size = self.data.get("watermark_size", "medium")
-
-            cmd = ["ffmpeg", "-y", "-i", self.input_path]
-
-            if wtype == "text":
-                escaped_text = wcontent.replace("'", "\\'").replace(":", "\\:")
-
-                if size == "small":
-                    fontsize = "h/20"
-                elif size == "large":
-                    fontsize = "h/5"
-                elif size in ["10", "20", "30"]:
-                    factor = int(size) / 100
-                    fontsize = f"h*{factor}"
-                else:
-                    fontsize = "h/10"
-
-                if pos == "topleft":
-                    x, y = "10", "10"
-                elif pos == "topright":
-                    x, y = "w-text_w-10", "10"
-                elif pos == "bottomleft":
-                    x, y = "10", "h-text_h-10"
-                elif pos == "center":
-                    x, y = "(w-text_w)/2", "(h-text_h)/2"
-                else:
-                    x, y = "w-text_w-10", "h-text_h-10"
-
-                cmd.extend(
-                    [
-                        "-vf",
-                        f"drawtext=text='{escaped_text}':fontcolor=white@0.8:fontsize={fontsize}:x={x}:y={y}:box=1:boxcolor=black@0.5:boxborderw=5",
-                    ]
-                )
-
-            else:
-                watermark_path = os.path.join(
-                    self.download_dir, f"{self.user_id}_wm_overlay.png"
-                )
-                if wcontent:
-                    await self.active_client.download_media(
-                        wcontent, file_name=watermark_path
-                    )
-
-                if os.path.exists(watermark_path):
-                    if size == "small":
-                        scale_expr = "w='main_w*0.1':h='ow/a'"
-                    elif size == "large":
-                        scale_expr = "w='main_w*0.4':h='ow/a'"
-                    elif size in ["10", "20", "30"]:
-                        scale_expr = f"w='main_w*{int(size)/100}':h='ow/a'"
-                    else:
-                        scale_expr = "w='main_w*0.2':h='ow/a'"
-
-                    if pos == "topleft":
-                        overlay_expr = "10:10"
-                    elif pos == "topright":
-                        overlay_expr = "W-w-10:10"
-                    elif pos == "bottomleft":
-                        overlay_expr = "10:H-h-10"
-                    elif pos == "center":
-                        overlay_expr = "(W-w)/2:(H-h)/2"
-                    else:
-                        overlay_expr = "W-w-10:H-h-10"
-
-                    cmd.extend(
-                        [
-                            "-i",
-                            watermark_path,
-                            "-filter_complex",
-                            f"[1:v][0:v]scale2ref={scale_expr}[wm][vid];[vid][wm]overlay={overlay_expr}",
-                        ]
-                    )
-                else:
-                    logger.error("Watermark overlay image missing.")
-
-            cmd.append(self.output_path)
-            err = None
-        elif self.media_type == "convert":
-            target_format = self.data.get("target_format", "mkv")
-            cmd = ["ffmpeg", "-y", "-i", self.input_path]
-
-            if target_format == "mp3":
-                cmd.extend(["-vn", "-c:a", "libmp3lame", "-q:a", "2"])
-            elif target_format == "gif":
-                cmd.extend(["-vf", "fps=10,scale=320:-1:flags=lanczos", "-c:v", "gif"])
-            elif target_format in ["png", "jpg", "jpeg", "webp"]:
-                cmd.extend(["-vframes", "1"])
-            elif target_format == "x264":
-                cmd.extend(["-c:v", "libx264", "-preset", "fast", "-crf", "23", "-c:a", "copy", "-c:s", "copy"])
-            elif target_format == "x265":
-                cmd.extend(["-c:v", "libx265", "-preset", "fast", "-crf", "28", "-c:a", "copy", "-c:s", "copy"])
-            elif target_format == "audionorm":
-                cmd.extend(["-c:v", "copy", "-c:s", "copy", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k"])
-            else:
-                cmd.extend(["-c", "copy"])
-
-            cmd.append(self.output_path)
-            err = None
-        elif self.media_type == "extract_subtitles":
-
-            cmd = ["ffmpeg", "-y", "-i", self.input_path, "-map", "0:s:0?", "-c:s", "srt", self.output_path]
-            err = None
-        else:
-            cmd, err = await generate_ffmpeg_command(
-                input_path=self.input_path,
-                output_path=self.output_path,
-                metadata=self.metadata,
-                thumbnail_path=(
-                    self.thumb_path
-                    if (
-                        os.path.exists(self.thumb_path)
-                        and not self.is_subtitle
-                        and self.media_type != "convert"
-                    )
-                    else None
-                ),
-            )
-
-        if not cmd:
-            logger.error(f"FFmpeg command generation failed: {err}")
-            await self._update_status(
-                f"❌ **Processing Configuration Error**\n\n`{err}`"
-            )
-            return False
-
         total_duration = 0
         if self.media_type == "convert" or self.media_type == "extract_subtitles":
             try:
@@ -1001,9 +871,58 @@ class TaskProcessor:
                 except Exception as e:
                     logger.debug(f"Failed to update ffmpeg progress: {e}")
 
-        if self.media_type == "convert":
-            success, stderr = await execute_ffmpeg(cmd, progress_callback=ffmpeg_progress)
+        if self.media_type == "watermark":
+            from tools.ImageWatermarker import watermark
+            wtype = self.data.get("watermark_type")
+            wcontent = self.data.get("watermark_content")
+            pos = self.data.get("watermark_position", "bottomright")
+            size = self.data.get("watermark_size", "medium")
+
+            success, stderr = await watermark(
+                self.input_path, self.output_path, wtype, wcontent, pos, size,
+                self.download_dir, self.user_id, self.active_client, progress_callback=ffmpeg_progress
+            )
+        elif self.media_type == "convert":
+            from tools.FileConverter import convert
+            target_format = self.data.get("target_format", "mkv")
+
+            success, stderr = await convert(
+                self.input_path, self.output_path, target_format, progress_callback=ffmpeg_progress
+            )
+        elif self.media_type == "extract_subtitles":
+            from tools.SubtitleExtractor import extract_subtitles
+
+            success, stderr = await extract_subtitles(
+                self.input_path, self.output_path, progress_callback=ffmpeg_progress
+            )
+        elif self.media_type == "audio":
+            from tools.AudioMetadataEditor import edit_audio_metadata
+            thumb = self.thumb_path if (self.thumb_path and os.path.exists(self.thumb_path)) else None
+            success, stderr = await edit_audio_metadata(
+                self.input_path, self.output_path, self.metadata, thumb, progress_callback=ffmpeg_progress
+            )
         else:
+            cmd, err = await generate_ffmpeg_command(
+                input_path=self.input_path,
+                output_path=self.output_path,
+                metadata=self.metadata,
+                thumbnail_path=(
+                    self.thumb_path
+                    if (
+                        os.path.exists(self.thumb_path)
+                        and not self.is_subtitle
+                        and self.media_type != "convert"
+                    )
+                    else None
+                ),
+            )
+            if not cmd:
+                logger.error(f"FFmpeg command generation failed: {err}")
+                await self._update_status(
+                    f"❌ **Processing Configuration Error**\n\n`{err}`"
+                )
+                return False
+
             success, stderr = await execute_ffmpeg(cmd)
 
         if not success:

@@ -34,6 +34,26 @@ app = Client(
     plugins=dict(root="plugins"),
 )
 
+# Load additional tools explicitly since they are in a different directory
+# The plugins dict usually only loads from one root. To ensure tools are registered,
+# we import them here before the app starts.
+import tools.FileConverter
+import tools.AudioMetadataEditor
+import tools.ImageWatermarker
+import tools.SubtitleExtractor
+
+def register_tool_handlers(client, module):
+    for name in dir(module):
+        obj = getattr(module, name)
+        if hasattr(obj, "handlers"):
+            for handler, group in obj.handlers:
+                client.add_handler(handler, group)
+
+register_tool_handlers(app, tools.FileConverter)
+register_tool_handlers(app, tools.AudioMetadataEditor)
+register_tool_handlers(app, tools.ImageWatermarker)
+register_tool_handlers(app, tools.SubtitleExtractor)
+
 user_bot = None
 
 if __name__ == "__main__":
