@@ -1356,18 +1356,11 @@ class TaskProcessor:
 
             try:
                 if db_channel_id:
-                    if is_tunneling:
-                        db_msg = await self.client.copy_message(
-                            chat_id=db_channel_id,
-                            from_chat_id=self.tunnel_id,
-                            message_id=media_msg.id,
-                        )
-                    else:
-                        db_msg = await self.client.copy_message(
-                            chat_id=db_channel_id,
-                            from_chat_id=media_msg.chat.id,
-                            message_id=media_msg.id,
-                        )
+                    db_msg = await self.client.copy_message(
+                        chat_id=db_channel_id,
+                        from_chat_id=media_msg.chat.id,
+                        message_id=media_msg.id,
+                    )
                     saved_file_id = db_msg.id
                 else:
                     # Fallback to the chat the user is in if no DB channel is configured

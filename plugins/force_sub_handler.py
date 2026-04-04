@@ -203,7 +203,10 @@ async def send_starter_setup_message(client, user_id, first_name=""):
     try:
         await client.send_message(chat_id=user_id, text=text, reply_markup=markup)
     except Exception as e:
-        logger.error(f"Failed to send starter setup message to {user_id}: {e}")
+            if "PEER_ID_INVALID" in str(e):
+                logger.debug(f"User {user_id} joined channel, but bot has not met them in PM yet. Delaying welcome message until they /start.")
+            else:
+                logger.error(f"Failed to send starter setup message to {user_id}: {e}")
 
 @Client.on_callback_query(filters.regex(r"^setup_mode_"))
 
