@@ -9,9 +9,20 @@ import datetime
 from bson.objectid import ObjectId
 
 logger = get_logger("plugins.myfiles")
-myfiles_sessions = {}
 
 # === Helper Functions ===
+async def set_myfiles_state(user_id: int, state_dict: dict):
+    if not state_dict:
+        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$unset": {"myfiles_state": ""}})
+    else:
+        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"myfiles_state": state_dict}}, upsert=True)
+
+async def get_myfiles_state(user_id: int) -> dict:
+    doc = await db.settings.find_one({"_id": db._get_doc_id(user_id)})
+    if doc and "myfiles_state" in doc:
+        return doc["myfiles_state"]
+    return {}
+
 async def get_myfiles_main_menu(user_id: int):
     config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
 
@@ -101,7 +112,12 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
 @Client.on_message(filters.text & filters.private, group=2)
 async def myfiles_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
-    state_info = myfiles_sessions.get(user_id, {})
+
+    if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
+
+    state_info = await get_myfiles_state(user_id)
     state = state_info.get("state")
 
     if not state:
@@ -112,16 +128,21 @@ async def myfiles_text_handler(client: Client, message: Message):
         folder_name = message.text.strip()
 
         user_doc = await db.get_user(user_id)
-        plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+        if Config.PUBLIC_MODE:
+            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+        else:
+            plan = "global"
+
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         limits = config.get("myfiles_limits", {}).get(plan, {})
         folder_limit = limits.get("folder_limit", 5)
 
         if folder_limit != -1:
-            count = await db.folders.count_documents({"user_id": user_id, "type": "custom"})
+            query_filter = {"user_id": user_id, "type": "custom"} if Config.PUBLIC_MODE else {"type": "custom"}
+            count = await db.folders.count_documents(query_filter)
             if count >= folder_limit:
                 await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="myfiles_cat_custom")]]))
-                myfiles_sessions[user_id] = {}
+                await set_myfiles_state(user_id, {})
                 return
 
         await db.folders.insert_one({
@@ -132,7 +153,7 @@ async def myfiles_text_handler(client: Client, message: Message):
         })
 
         await message.reply_text(f"✅ Folder **{folder_name}** created successfully.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Folders", callback_data="myfiles_cat_custom")]]))
-        myfiles_sessions[user_id] = {}
+        await set_myfiles_state(user_id, {})
         return
 
     if state.startswith("awaiting_rename_"):
@@ -142,7 +163,7 @@ async def myfiles_text_handler(client: Client, message: Message):
         await db.files.update_one({"_id": ObjectId(file_id)}, {"$set": {"file_name": new_name}})
 
         await message.reply_text(f"✅ File renamed to `{new_name}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to File", callback_data=f"myfiles_file_{file_id}")]]))
-        myfiles_sessions[user_id] = {}
+        await set_myfiles_state(user_id, {})
         return
 
     from pyrogram import ContinuePropagation
@@ -158,16 +179,26 @@ async def myfiles_command(client: Client, message: Message):
     text, markup = await get_myfiles_main_menu(user_id)
     await message.reply_text(text, reply_markup=markup)
 
-@Client.on_callback_query(filters.regex(r"^myfiles_"))
+@Client.on_callback_query(filters.regex(r"^(myfiles_|mf_mov_|mf_df_)"))
 async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     data = callback_query.data
     user_id = callback_query.from_user.id
+
+    # Fast-dismiss loading spinner except where we specifically want an alert.
+    # We will answer below if we need a custom text.
+    try:
+        if not (data.startswith("myfiles_send_") or data.startswith("myfiles_sendall_") or data.startswith("myfiles_delfile_") or data.startswith("myfiles_del_folder_") or data.startswith("mf_mov_") or data.startswith("mf_df_")):
+            await callback_query.answer()
+    except Exception:
+        pass
 
     if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
         await callback_query.answer("Access Denied", show_alert=True)
         return
 
-    myfiles_sessions[user_id] = {"last_menu": data}
+    # We shouldn't blindly overwrite the whole state with "last_menu" if there's a "state" going on.
+    # But usually menus overwrite it anyway.
+    await set_myfiles_state(user_id, {"last_menu": data})
 
     if data == "myfiles_main":
         text, markup = await get_myfiles_main_menu(user_id)
@@ -292,7 +323,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
     if data.startswith("myfiles_page_"):
         parts = data.replace("myfiles_page_", "").split("_")
-        page = int(parts[0])
+        page = max(0, int(parts[0]))
         back_data = "_".join(parts[1:])
 
         if back_data == "myfiles_main":
@@ -340,13 +371,16 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         perm_btn_text = "❌ Make Temporary" if status == "permanent" else "📌 Make Permanent"
 
+        state_dict = await get_myfiles_state(user_id)
+        last_menu = state_dict.get("last_menu", "myfiles_main")
+
         buttons = [
             [InlineKeyboardButton("📤 Send File", callback_data=f"myfiles_send_{file_id}")],
             [InlineKeyboardButton(perm_btn_text, callback_data=f"myfiles_toggle_perm_{file_id}")],
             [InlineKeyboardButton("✏️ Rename", callback_data=f"myfiles_rename_{file_id}"),
              InlineKeyboardButton("📂 Move", callback_data=f"myfiles_move_{file_id}")],
             [InlineKeyboardButton("🗑️ Delete File", callback_data=f"myfiles_delfile_{file_id}")],
-            [InlineKeyboardButton("🔙 Back", callback_data=myfiles_sessions[user_id].get("last_menu", "myfiles_main"))]
+            [InlineKeyboardButton("🔙 Back", callback_data=last_menu)]
         ]
 
         try:
@@ -356,7 +390,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     if data == "myfiles_create_folder":
-        myfiles_sessions[user_id] = {"state": "awaiting_folder_name"}
+        await set_myfiles_state(user_id, {"state": "awaiting_folder_name"})
         try:
             await callback_query.message.edit_text(
                 "📁 **Create New Folder**\n\nPlease enter a name for the new folder:",
@@ -369,17 +403,55 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data.startswith("myfiles_del_folder_"):
         folder_id = data.replace("myfiles_del_folder_", "")
 
+        folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
+        if not folder:
+            await callback_query.answer("Folder not found.", show_alert=True)
+            return
+
+        count = await db.files.count_documents({"folder_id": ObjectId(folder_id)})
+        if count == 0:
+            await db.folders.delete_one({"_id": ObjectId(folder_id)})
+            await callback_query.answer("Empty folder deleted.", show_alert=True)
+            callback_query.data = "myfiles_cat_custom"
+            await myfiles_callback(client, callback_query)
+            return
+
+        try:
+            await callback_query.message.edit_text(
+                f"⚠️ **Warning**\n\nThe folder **{folder['name']}** contains `{count}` files.\n"
+                "Do you want to keep the files (they will be moved to the main directory), or delete the files as well?",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📁 Keep Files", callback_data=f"mf_df_keep_{folder_id}")],
+                    [InlineKeyboardButton("🗑️ Delete Files Too", callback_data=f"mf_df_del_{folder_id}")],
+                    [InlineKeyboardButton("❌ Cancel", callback_data=f"myfiles_folder_{folder_id}")]
+                ])
+            )
+            await callback_query.answer()
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("mf_df_keep_"):
+        folder_id = data.replace("mf_df_keep_", "")
         await db.files.update_many({"folder_id": ObjectId(folder_id)}, {"$set": {"folder_id": None}})
         await db.folders.delete_one({"_id": ObjectId(folder_id)})
+        await callback_query.answer("Folder deleted, files kept.", show_alert=True)
+        callback_query.data = "myfiles_cat_custom"
+        await myfiles_callback(client, callback_query)
+        return
 
-        await callback_query.answer("Folder deleted.", show_alert=True)
+    if data.startswith("mf_df_del_"):
+        folder_id = data.replace("mf_df_del_", "")
+        await db.files.delete_many({"folder_id": ObjectId(folder_id)})
+        await db.folders.delete_one({"_id": ObjectId(folder_id)})
+        await callback_query.answer("Folder and all contained files deleted.", show_alert=True)
         callback_query.data = "myfiles_cat_custom"
         await myfiles_callback(client, callback_query)
         return
 
     if data.startswith("myfiles_rename_"):
         file_id = data.replace("myfiles_rename_", "")
-        myfiles_sessions[user_id] = {"state": f"awaiting_rename_{file_id}"}
+        await set_myfiles_state(user_id, {"state": f"awaiting_rename_{file_id}"})
 
         f = await db.files.find_one({"_id": ObjectId(file_id)})
         current_name = f.get("file_name", "") if f else ""
@@ -400,11 +472,11 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         text = "📂 **Move File**\n\nSelect a folder to move this file to:"
         buttons = [
-            [InlineKeyboardButton("🧹 Remove from Folder", callback_data=f"myfiles_do_move_{file_id}_None")]
+            [InlineKeyboardButton("🧹 Remove from Folder", callback_data=f"mf_mov_{file_id}_None")]
         ]
 
         for folder in folders:
-            buttons.append([InlineKeyboardButton(f"📁 {folder['name']}", callback_data=f"myfiles_do_move_{file_id}_{str(folder['_id'])}")])
+            buttons.append([InlineKeyboardButton(f"📁 {folder['name']}", callback_data=f"mf_mov_{file_id}_{str(folder['_id'])}")])
 
         buttons.append([InlineKeyboardButton("🔙 Cancel", callback_data=f"myfiles_file_{file_id}")])
 
@@ -414,8 +486,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             pass
         return
 
-    if data.startswith("myfiles_do_move_"):
-        parts = data.replace("myfiles_do_move_", "").split("_")
+    if data.startswith("mf_mov_"):
+        parts = data.replace("mf_mov_", "").split("_")
         file_id = parts[0]
         folder_id = parts[1]
 
@@ -450,20 +522,14 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data.startswith("myfiles_delfile_"):
         file_id = data.replace("myfiles_delfile_", "")
 
-        # Determine if it was permanent
         f = await db.files.find_one({"_id": ObjectId(file_id)})
         if f:
             await db.files.delete_one({"_id": ObjectId(file_id)})
 
-            # Cascading upgrade: If it was permanent, make the oldest temporary file permanent
-            if f.get("status") == "permanent":
-                oldest_temp = await db.files.find_one({"user_id": user_id, "status": "temporary"}, sort=[("created_at", 1)])
-                if oldest_temp:
-                    await db.files.update_one({"_id": oldest_temp["_id"]}, {"$set": {"status": "permanent", "expires_at": None}})
-
         await callback_query.answer("File deleted.", show_alert=True)
         # Go back
-        callback_query.data = myfiles_sessions[user_id].get("last_menu", "myfiles_main")
+        state_dict = await get_myfiles_state(user_id)
+        callback_query.data = state_dict.get("last_menu", "myfiles_main")
         await myfiles_callback(client, callback_query)
         return
 
@@ -477,13 +543,18 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if new_status == "permanent":
             # Check limits
             user_doc = await db.get_user(user_id)
-            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            if Config.PUBLIC_MODE:
+                plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            else:
+                plan = "global"
+
             config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
             limits = config.get("myfiles_limits", {}).get(plan, {})
             perm_limit = limits.get("permanent_limit", 50)
 
             if perm_limit != -1:
-                perm_count = await db.files.count_documents({"user_id": user_id, "status": "permanent"})
+                query_filter = {"user_id": user_id, "status": "permanent"} if Config.PUBLIC_MODE else {"status": "permanent"}
+                perm_count = await db.files.count_documents(query_filter)
                 if perm_count >= perm_limit:
                     await callback_query.answer(f"You have reached your permanent storage limit ({perm_limit}).", show_alert=True)
                     return
@@ -493,7 +564,11 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if new_status == "temporary":
             # Set expiry
             user_doc = await db.get_user(user_id)
-            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            if Config.PUBLIC_MODE:
+                plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            else:
+                plan = "global"
+
             config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
             limits = config.get("myfiles_limits", {}).get(plan, {})
             expiry_days = limits.get("expiry_days", 10)
@@ -531,7 +606,10 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         # Determine plan for queue management
         user_doc = await db.get_user(user_id)
-        plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+        if Config.PUBLIC_MODE:
+            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+        else:
+            plan = "global"
 
         # Add to Queue Manager
         from utils.queue_manager import queue_manager
