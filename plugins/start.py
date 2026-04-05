@@ -38,7 +38,7 @@ async def handle_start_command_unique(client, message):
         bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
         community_name = config.get("community_name", "Our Community")
 
-    if len(message.command) > 1:
+    if message.command and len(message.command) > 1:
         param = message.command[1]
 
         if param.startswith("file_"):
