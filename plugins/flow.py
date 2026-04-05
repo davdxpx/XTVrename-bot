@@ -1846,6 +1846,14 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         is_subtitle = metadata["is_subtitle"]
 
         default_dumb_channel = await db.get_default_dumb_channel(user_id)
+        if tmdb_data and tmdb_data.get("type") == "movie":
+            mov_ch = await db.get_movie_dumb_channel(user_id)
+            if mov_ch:
+                default_dumb_channel = mov_ch
+        elif tmdb_data and tmdb_data.get("type") == "series":
+            ser_ch = await db.get_series_dumb_channel(user_id)
+            if ser_ch:
+                default_dumb_channel = ser_ch
 
         if user_id not in batch_sessions:
             batch_id = queue_manager.create_batch()
@@ -1870,8 +1878,9 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         item_id = str(uuid.uuid4())
 
         quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
-        sort_key = ((0, season, episode[0] if isinstance(episode, list) else episode) if tmdb_data["type"] == "series" else (1, quality_priority.get(quality, 4), 0))
-        display_name = f"S{season:02d}{format_episode_str(episode)}" if tmdb_data["type"] == "series" else f"{quality}"
+        is_series = tmdb_data and tmdb_data.get("type") == "series"
+        sort_key = ((0, season, episode[0] if isinstance(episode, list) else episode) if is_series else (1, quality_priority.get(quality, 4), 0))
+        display_name = f"S{season:02d}{format_episode_str(episode)}" if is_series else f"{quality}"
 
         from pyrogram.types import Message
         import random
@@ -1906,11 +1915,11 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             "episode": episode,
             "season": season,
             "language": lang,
-            "tmdb_id": tmdb_data["tmdb_id"],
-            "title": tmdb_data["title"],
-            "year": tmdb_data["year"],
-            "poster": tmdb_data["poster"],
-            "type": tmdb_data["type"],
+            "tmdb_id": tmdb_data.get("tmdb_id") if tmdb_data else None,
+            "title": tmdb_data.get("title") if tmdb_data else None,
+            "year": tmdb_data.get("year") if tmdb_data else None,
+            "poster": tmdb_data.get("poster") if tmdb_data else None,
+            "type": tmdb_data.get("type") if tmdb_data else None,
             "is_subtitle": is_subtitle,
             "is_auto": True,
             "dumb_channel": default_dumb_channel,
@@ -1982,6 +1991,14 @@ async def handle_auto_detection(client, message):
     media_lang = metadata.get("language", "en")
 
     default_dumb_channel = await db.get_default_dumb_channel(user_id)
+    if tmdb_data and tmdb_data.get("type") == "movie":
+        mov_ch = await db.get_movie_dumb_channel(user_id)
+        if mov_ch:
+            default_dumb_channel = mov_ch
+    elif tmdb_data and tmdb_data.get("type") == "series":
+        ser_ch = await db.get_series_dumb_channel(user_id)
+        if ser_ch:
+            default_dumb_channel = ser_ch
 
     is_priority = False
     if Config.PUBLIC_MODE:
@@ -2008,15 +2025,16 @@ async def handle_auto_detection(client, message):
     item_id = str(uuid.uuid4())
 
     quality_priority = {"480p": 0, "720p": 1, "1080p": 2, "2160p": 3}
+    is_series = tmdb_data and tmdb_data.get("type") == "series"
 
     sort_key = (
         (0, season, episode[0] if isinstance(episode, list) else episode)
-        if tmdb_data["type"] == "series"
+        if is_series
         else (1, quality_priority.get(quality, 4), 0)
     )
     display_name = (
         f"S{season:02d}{format_episode_str(episode)}"
-        if tmdb_data["type"] == "series"
+        if is_series
         else f"{quality}"
     )
 
@@ -2031,11 +2049,11 @@ async def handle_auto_detection(client, message):
         "episode": episode,
         "season": season,
         "language": media_lang,
-        "tmdb_id": tmdb_data["tmdb_id"],
-        "title": tmdb_data["title"],
-        "year": tmdb_data["year"],
-        "poster": tmdb_data["poster"],
-        "type": tmdb_data["type"],
+            "tmdb_id": tmdb_data.get("tmdb_id") if tmdb_data else None,
+            "title": tmdb_data.get("title") if tmdb_data else None,
+            "year": tmdb_data.get("year") if tmdb_data else None,
+            "poster": tmdb_data.get("poster") if tmdb_data else None,
+            "type": tmdb_data.get("type") if tmdb_data else None,
         "is_subtitle": is_subtitle,
         "is_auto": True,
         "dumb_channel": default_dumb_channel,

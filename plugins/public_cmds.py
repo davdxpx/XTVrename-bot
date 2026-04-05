@@ -160,49 +160,145 @@ async def user_settings_callback(client, callback_query):
     debug(f"User settings callback: {data} from user {user_id}")
 
     if data.startswith("dumb_user_"):
-        if data == "dumb_user_menu":
+        if data.startswith("dumb_user_menu"):
+            page = 1
+            if "_" in data.replace("dumb_user_menu", ""):
+                parts = data.split("_")
+                if len(parts) >= 4:
+                    try:
+                        page = int(parts[3])
+                    except:
+                        pass
+
             channels = await db.get_dumb_channels(user_id)
-            default_ch = await db.get_default_dumb_channel(user_id)
-            text = "📺 **Manage Dumb Channels**\n\n"
-            text += "These channels can be used to forward processed files automatically.\n\n"
-            text += "**Configured Channels:**\n"
+
+            text = (
+                "📺 **Manage Dumb Channels**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "> Configure your channels for auto-forwarding files.\n\n"
+            )
+
             if not channels:
-                text += "- None\n"
-            else:
-                for ch_id, ch_name in channels.items():
-                    marker = " (Default)" if str(ch_id) == default_ch else ""
-                    text += f"- {ch_name} `{ch_id}`{marker}\n"
+                text += "❌ *No Dumb Channels configured yet.*\n\n"
+
+            buttons = [[InlineKeyboardButton("➕ Add New Dumb Channel", callback_data="dumb_user_add")]]
+
+            if channels:
+                import math
+                ch_items = list(channels.items())
+                total_channels = len(ch_items)
+                items_per_page = 10
+                total_pages = math.ceil(total_channels / items_per_page) if total_channels > 0 else 1
+                page = max(1, min(page, total_pages))
+
+                start_idx = (page - 1) * items_per_page
+                end_idx = start_idx + items_per_page
+                current_channels = ch_items[start_idx:end_idx]
+
+                buttons.append([InlineKeyboardButton("─── Your Channels ───", callback_data="noop")])
+                for ch_id, ch_name in current_channels:
+                    buttons.append([
+                        InlineKeyboardButton(f"📺 {ch_name}", callback_data=f"dumb_user_opt_{ch_id}")
+                    ])
+
+                if total_pages > 1:
+                    nav = []
+                    if page > 1:
+                        nav.append(InlineKeyboardButton("⬅️", callback_data=f"dumb_user_menu_{page-1}"))
+                    nav.append(InlineKeyboardButton(f"{page}/{total_pages}", callback_data="noop"))
+                    if page < total_pages:
+                        nav.append(InlineKeyboardButton("➡️", callback_data=f"dumb_user_menu_{page+1}"))
+                    buttons.append(nav)
+
+            buttons.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="user_main")])
 
             try:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except MessageNotModified:
+                pass
+            return
+
+        elif data.startswith("dumb_user_opt_"):
+            ch_id = data.replace("dumb_user_opt_", "")
+            channels = await db.get_dumb_channels(user_id)
+            if ch_id not in channels:
+                await callback_query.answer("Channel not found.", show_alert=True)
+                return
+
+            ch_name = channels[ch_id]
+            default_ch = await db.get_default_dumb_channel(user_id)
+            movie_ch = await db.get_movie_dumb_channel(user_id)
+            series_ch = await db.get_series_dumb_channel(user_id)
+
+            is_def = "✅" if str(ch_id) == default_ch else "❌"
+            is_mov = "✅" if str(ch_id) == movie_ch else "❌"
+            is_ser = "✅" if str(ch_id) == series_ch else "❌"
+
+            text = (
+                f"⚙️ **Channel Settings**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"> **Name:** `{ch_name}`\n"
+                f"> **ID:** `{ch_id}`\n\n"
+                f"**Current Status:**\n"
+                f"> 🔸 Standard Default: `{is_def}`\n"
+                f"> 🎬 Movie Default: `{is_mov}`\n"
+                f"> 📺 Series Default: `{is_ser}`\n\n"
+                f"Select an action below to manage this channel."
+            )
+
+            buttons = [
+                [InlineKeyboardButton("✏️ Rename Channel", callback_data=f"dumb_user_ren_{ch_id}")],
+                [InlineKeyboardButton(f"🔸 Set Standard Default", callback_data=f"dumb_user_def_std_{ch_id}")],
+                [InlineKeyboardButton(f"🎬 Set Movie Default", callback_data=f"dumb_user_def_mov_{ch_id}")],
+                [InlineKeyboardButton(f"📺 Set Series Default", callback_data=f"dumb_user_def_ser_{ch_id}")],
+                [InlineKeyboardButton("🗑 Delete Channel", callback_data=f"dumb_user_del_{ch_id}")],
+                [InlineKeyboardButton("🔙 Back", callback_data="dumb_user_menu")]
+            ]
+
+            try:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except MessageNotModified:
+                pass
+            return
+
+        elif data.startswith("dumb_user_ren_"):
+            ch_id = data.replace("dumb_user_ren_", "")
+            user_sessions[user_id] = {"state": f"awaiting_dumb_user_rename_{ch_id}", "msg_id": callback_query.message.id}
+            try:
                 await callback_query.message.edit_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "➕ Add New Dumb Channel",
-                                    callback_data="dumb_user_add",
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "➖ Remove Dumb Channel",
-                                    callback_data="dumb_user_remove",
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "⭐ Set Default",
-                                    callback_data="dumb_user_set_default",
-                                )
-                            ],
-                            [InlineKeyboardButton("← Back", callback_data="user_main")],
-                        ]
-                    ),
+                    "✏️ **Rename Channel**\n\n"
+                    "Please enter the new name for this channel:\n\n"
+                    "*(Send `disable` to cancel)*",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"dumb_user_opt_{ch_id}")]])
                 )
             except MessageNotModified:
                 pass
             return
+
+        elif data.startswith("dumb_user_def_std_"):
+            ch_id = data.replace("dumb_user_def_std_", "")
+            await db.set_default_dumb_channel(ch_id, user_id)
+            await callback_query.answer("Standard Default channel set.", show_alert=True)
+            callback_query.data = f"dumb_user_opt_{ch_id}"
+            await user_settings_callback(client, callback_query)
+            return
+
+        elif data.startswith("dumb_user_def_mov_"):
+            ch_id = data.replace("dumb_user_def_mov_", "")
+            await db.set_movie_dumb_channel(ch_id, user_id)
+            await callback_query.answer("Movie Default channel set.", show_alert=True)
+            callback_query.data = f"dumb_user_opt_{ch_id}"
+            await user_settings_callback(client, callback_query)
+            return
+
+        elif data.startswith("dumb_user_def_ser_"):
+            ch_id = data.replace("dumb_user_def_ser_", "")
+            await db.set_series_dumb_channel(ch_id, user_id)
+            await callback_query.answer("Series Default channel set.", show_alert=True)
+            callback_query.data = f"dumb_user_opt_{ch_id}"
+            await user_settings_callback(client, callback_query)
+            return
+
         elif data == "dumb_user_add":
             user_sessions[user_id] = {"state": "awaiting_dumb_user_add", "msg_id": callback_query.message.id}
             try:
@@ -224,31 +320,7 @@ async def user_settings_callback(client, callback_query):
             except MessageNotModified:
                 pass
             return
-        elif data == "dumb_user_remove":
-            channels = await db.get_dumb_channels(user_id)
-            if not channels:
-                await callback_query.answer("No channels configured.", show_alert=True)
-                return
-            buttons = []
-            for ch_id, ch_name in channels.items():
-                buttons.append(
-                    [
-                        InlineKeyboardButton(
-                            f"❌ {ch_name}", callback_data=f"dumb_user_del_{ch_id}"
-                        )
-                    ]
-                )
-            buttons.append(
-                [InlineKeyboardButton("← Back", callback_data="dumb_user_menu")]
-            )
-            try:
-                await callback_query.message.edit_text(
-                    "Select a channel to remove:",
-                    reply_markup=InlineKeyboardMarkup(buttons),
-                )
-            except MessageNotModified:
-                pass
-            return
+
         elif data.startswith("dumb_user_del_"):
             ch_id = data.replace("dumb_user_del_", "")
             await db.remove_dumb_channel(ch_id, user_id)
@@ -1078,11 +1150,6 @@ async def handle_user_photo(client, message):
         except MessageNotModified:
             pass
 
-@Client.on_message(
-    (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
-    group=1,
-)
-
 async def edit_or_reply(client, message, msg_id, text, reply_markup=None, disable_web_page_preview=False):
     try:
         await message.delete()
@@ -1101,6 +1168,10 @@ async def edit_or_reply(client, message, msg_id, text, reply_markup=None, disabl
             pass
     return await message.reply_text(text, reply_markup=reply_markup, disable_web_page_preview=disable_web_page_preview)
 
+@Client.on_message(
+    (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
+    group=1,
+)
 async def handle_user_text(client, message):
     if not is_public_mode():
         raise ContinuePropagation
@@ -1112,6 +1183,31 @@ async def handle_user_text(client, message):
 
     state = state_obj if isinstance(state_obj, str) else state_obj.get("state")
     msg_id = None if isinstance(state_obj, str) else state_obj.get("msg_id")
+
+    if state.startswith("awaiting_dumb_user_rename_"):
+        ch_id = state.replace("awaiting_dumb_user_rename_", "")
+        val = message.text.strip() if message.text else ""
+        if val.lower() == "disable":
+            user_sessions.pop(user_id, None)
+            await edit_or_reply(client, message, msg_id, "Cancelled.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back", callback_data=f"dumb_user_opt_{ch_id}")]]
+                ),
+            )
+            return
+
+        channels = await db.get_dumb_channels(user_id)
+        if ch_id in channels:
+            channels[ch_id] = val
+            doc_id = db._get_doc_id(user_id)
+            await db.settings.update_one({"_id": doc_id}, {"$set": {"dumb_channels": channels}}, upsert=True)
+            await edit_or_reply(client, message, msg_id, f"✅ Channel renamed to **{val}**.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back", callback_data=f"dumb_user_opt_{ch_id}")]]
+                ),
+            )
+        user_sessions.pop(user_id, None)
+        return
 
     if state == "awaiting_dumb_user_add":
         val = message.text.strip() if message.text else ""

@@ -364,6 +364,48 @@ class Database:
         except Exception as e:
             logger.error(f"Error setting default dumb channel for {doc_id}: {e}")
 
+    async def get_movie_dumb_channel(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("movie_dumb_channel")
+        return None
+
+    async def set_movie_dumb_channel(self, channel_id, user_id=None):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id},
+                {"$set": {"movie_dumb_channel": str(channel_id)}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set movie dumb channel: {e}")
+            return False
+
+    async def get_series_dumb_channel(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("series_dumb_channel")
+        return None
+
+    async def set_series_dumb_channel(self, channel_id, user_id=None):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id},
+                {"$set": {"series_dumb_channel": str(channel_id)}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set series dumb channel: {e}")
+            return False
+
     async def get_dumb_channel_timeout(self):
         if self.settings is None:
             return 3600

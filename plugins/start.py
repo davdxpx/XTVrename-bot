@@ -492,6 +492,7 @@ async def handle_help_callbacks(client, callback_query):
                         [InlineKeyboardButton("📁 File Management", callback_data="help_file_management")],
                         [InlineKeyboardButton("🤖 Auto-Detect Magic", callback_data="help_auto_detect")],
                         [InlineKeyboardButton("📄 Personal & General Mode", callback_data="help_general")],
+                        [InlineKeyboardButton("📺 Dumb Channels Guide", callback_data="help_dumb_channels")],
                         [InlineKeyboardButton("⚙️ Settings & Info", callback_data="help_settings")],
                         [InlineKeyboardButton("🎞️ Formats & Codecs", callback_data="help_formats")],
                         [InlineKeyboardButton("📈 Quotas & Limits", callback_data="help_quotas")],
@@ -500,6 +501,24 @@ async def handle_help_callbacks(client, callback_query):
                         [InlineKeyboardButton("❌ Close", callback_data="help_close")],
                     ]
                 ),
+            )
+        except MessageNotModified:
+            pass
+
+    elif data == "help_dumb_channels":
+        try:
+            await callback_query.message.edit_text(
+                "**📺 Dumb Channels Guide**\n\n"
+                "> Automate your forwarded files.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**How to Add a Dumb Channel:**\n"
+                "1. Create a Channel or Group.\n"
+                "2. Add me to the Channel as an **Administrator**.\n"
+                "3. Open my menu and go to `Settings` > `Dumb Channels` > `Add New`.\n"
+                "4. Forward a message from that channel to me.\n\n"
+                "**Setting Defaults:**\n"
+                "You can specify a channel to automatically receive Movies, Series, or Everything (Standard). Once setup, you can select these channels as destinations during processing.",
+                reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
             pass
