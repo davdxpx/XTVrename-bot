@@ -11,7 +11,10 @@ from config import Config
 from utils.log import get_logger
 import asyncio
 import re
+from bson.objectid import ObjectId
+import datetime
 import os
+import math
 
 logger = get_logger("plugins.flow")
 logger.info("Loading plugins.flow...")
@@ -225,7 +228,7 @@ async def manual_title_handler(client, message):
         if data.get("is_subtitle"):
             await initiate_language_selection(client, user_id, message)
         else:
-            await prompt_dumb_channel(client, user_id, message, is_edit=False)
+            await prompt_destination_folder(client, user_id, message, is_edit=False)
     elif data.get("personal_type") == "photo":
         set_state(user_id, "awaiting_send_as")
         await message.reply_text(
@@ -249,7 +252,7 @@ async def manual_title_handler(client, message):
             ),
         )
     else:
-        await prompt_dumb_channel(client, user_id, message, is_edit=False)
+        await prompt_destination_folder(client, user_id, message, is_edit=False)
 
 async def search_handler(client, message, media_type):
     user_id = message.from_user.id
@@ -332,6 +335,79 @@ async def handle_text_input(client, message):
     if not state:
         return
 
+    if state == "awaiting_dest_folder_name":
+        folder_name = message.text.strip()
+        user_doc = await db.get_user(user_id)
+        if Config.PUBLIC_MODE:
+            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+        else:
+            plan = "global"
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        limits = config.get("myfiles_limits", {}).get(plan, {})
+        folder_limit = limits.get("folder_limit", 5)
+
+        if folder_limit != -1:
+            query_filter = {"user_id": user_id, "type": "custom"} if Config.PUBLIC_MODE else {"type": "custom"}
+            count = await db.folders.count_documents(query_filter)
+            if count >= folder_limit:
+                try:
+                    await message.delete()
+                except:
+                    pass
+                msg_id = get_data(user_id).get("dest_msg_id")
+                if msg_id:
+                    try:
+                        await client.edit_message_text(message.chat.id, msg_id, f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Options", callback_data="sel_dest_page_1")]]))
+                    except:
+                        pass
+                else:
+                    await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Options", callback_data="sel_dest_page_1")]]))
+                set_state(user_id, "awaiting_destination_selection")
+                return
+
+        folder_id = ObjectId()
+        await db.folders.insert_one({
+            "_id": folder_id,
+            "user_id": user_id,
+            "name": folder_name,
+            "type": "custom",
+            "created_at": datetime.datetime.utcnow()
+        })
+
+        try:
+            await message.delete()
+        except:
+            pass
+
+        msg_id = get_data(user_id).get("dest_msg_id")
+
+        # update destination selection and proceed to dumb channel selection
+        update_data(user_id, "dest_folder", str(folder_id))
+
+        if msg_id:
+            try:
+                await client.edit_message_text(message.chat.id, msg_id, f"✅ Folder **{folder_name}** created successfully and selected!")
+            except:
+                pass
+
+            # Wait briefly then show dumb channel selection
+            import asyncio
+            await asyncio.sleep(1.5)
+
+            # Use a dummy object with `.edit_text`
+            class DummyMessage:
+                async def edit_text(self, text, reply_markup=None):
+                    await client.edit_message_text(message.chat.id, msg_id, text, reply_markup=reply_markup)
+
+            await prompt_dumb_channel(client, user_id, DummyMessage(), is_edit=True)
+        else:
+            msg = await message.reply_text(f"✅ Folder **{folder_name}** created successfully and selected!")
+            import asyncio
+            await asyncio.sleep(1.5)
+            await prompt_dumb_channel(client, user_id, msg, is_edit=True)
+        return
+
     if state == "awaiting_search_movie":
         await search_handler(client, message, "movie")
     elif state == "awaiting_search_series":
@@ -379,7 +455,7 @@ async def handle_text_input(client, message):
         import asyncio
         asyncio.create_task(delayed_cleanup())
 
-        await prompt_dumb_channel(client, user_id, message, is_edit=False)
+        await prompt_destination_folder(client, user_id, message, is_edit=False)
 
     elif state and state.startswith("awaiting_audio_"):
         action = state.replace("awaiting_audio_", "")
@@ -444,7 +520,7 @@ async def handle_text_input(client, message):
             return
 
         update_data(user_id, "language", lang)
-        await prompt_dumb_channel(client, user_id, message, is_edit=False)
+        await prompt_destination_folder(client, user_id, message, is_edit=False)
 
     elif state.startswith("awaiting_episode_correction_"):
         msg_id = int(state.split("_")[-1])
@@ -557,7 +633,7 @@ async def handle_send_as_preference(client, callback_query):
     pref = callback_query.data.split("_")[2]
 
     update_data(user_id, "send_as", pref)
-    await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
+    await prompt_destination_folder(client, user_id, callback_query.message, is_edit=True)
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
@@ -598,7 +674,7 @@ async def handle_tmdb_selection(client, callback_query):
     if data.get("is_subtitle"):
         await initiate_language_selection(client, user_id, callback_query.message)
     else:
-        await prompt_dumb_channel(
+        await prompt_destination_folder(
             client, user_id, callback_query.message, is_edit=True
         )
 
@@ -613,6 +689,7 @@ async def process_ready_file(client, user_id, message_obj, session_data):
             "file_chat_id": session_data.get("file_chat_id"),
             "is_auto": False,
             "dumb_channel": session_data.get("dumb_channel"),
+            "dest_folder": session_data.get("dest_folder"),
             "send_as": session_data.get("send_as"),
             "general_name": session_data.get("general_name"),
         }
@@ -643,7 +720,74 @@ async def process_ready_file(client, user_id, message_obj, session_data):
         clear_session(user_id)
         return
 
-async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
+async def prompt_destination_folder(client, user_id, message_obj, is_edit=False, page=1):
+    folders = []
+    query = {"type": "custom"}
+    if Config.PUBLIC_MODE:
+        query["user_id"] = user_id
+    cursor = db.folders.find(query).sort("created_at", -1)
+    async for folder in cursor:
+        folders.append(folder)
+
+    total_folders = len(folders)
+    items_per_page = 5
+    total_pages = math.ceil(total_folders / items_per_page) if total_folders > 0 else 1
+    page = max(1, min(page, total_pages))
+
+    start_idx = (page - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    current_folders = folders[start_idx:end_idx]
+
+    buttons = []
+
+    # Options for non-specific folders
+    buttons.append([
+        InlineKeyboardButton("📁 Save to MyFiles (Root)", callback_data="sel_dest_root"),
+    ])
+    buttons.append([
+        InlineKeyboardButton("🚫 Don't save to MyFiles", callback_data="sel_dest_none")
+    ])
+    buttons.append([
+        InlineKeyboardButton("➕ Create New Folder", callback_data="sel_dest_create")
+    ])
+
+    if current_folders:
+        buttons.append([InlineKeyboardButton("─── Your Folders ───", callback_data="noop")])
+        for f in current_folders:
+            buttons.append([
+                InlineKeyboardButton(f"📁 {f['name']}", callback_data=f"sel_dest_f_{str(f['_id'])}")
+            ])
+
+        if total_pages > 1:
+            nav = []
+            if page > 1:
+                nav.append(InlineKeyboardButton("⬅️", callback_data=f"sel_dest_page_{page-1}"))
+            nav.append(InlineKeyboardButton(f"{page}/{total_pages}", callback_data="noop"))
+            if page < total_pages:
+                nav.append(InlineKeyboardButton("➡️", callback_data=f"sel_dest_page_{page+1}"))
+            buttons.append(nav)
+
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
+
+    text = (
+        "🗂 **Destination Folder**\n\n"
+        "Where would you like to save the processed files?\n"
+        "If you select a Dumb Channel in the next step, they will still be sent there regardless of this setting."
+    )
+
+    set_state(user_id, "awaiting_destination_selection")
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    if is_edit:
+        try:
+            await message_obj.edit_text(text, reply_markup=reply_markup)
+        except MessageNotModified:
+            pass
+    else:
+        await client.send_message(user_id, text, reply_markup=reply_markup)
+
+
+async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False, page=1):
     channels = await db.get_dumb_channels(user_id)
     session_data = get_data(user_id)
     has_file = session_data and session_data.get("file_message_id")
@@ -672,14 +816,17 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
     set_state(user_id, "awaiting_dumb_channel_selection")
     text = "📺 **Dumb Channel Selection**\n\nWhere should the files from this session be sent?"
     buttons = []
-    for ch_id, ch_name in channels.items():
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    f"Send to {ch_name}", callback_data=f"sel_dumb_{ch_id}"
-                )
-            ]
-        )
+
+    channel_list = list(channels.items())
+    total_channels = len(channel_list)
+    items_per_page = 5
+    total_pages = math.ceil(total_channels / items_per_page) if total_channels > 0 else 1
+    page = max(1, min(page, total_pages))
+
+    start_idx = (page - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    current_channels = channel_list[start_idx:end_idx]
+
     buttons.append(
         [
             InlineKeyboardButton(
@@ -687,6 +834,25 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
             )
         ]
     )
+
+    for ch_id, ch_name in current_channels:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"📺 Send to {ch_name}", callback_data=f"sel_dumb_{ch_id}"
+                )
+            ]
+        )
+
+    if total_pages > 1:
+        nav = []
+        if page > 1:
+            nav.append(InlineKeyboardButton("⬅️", callback_data=f"sel_dumb_page_{page-1}"))
+        nav.append(InlineKeyboardButton(f"{page}/{total_pages}", callback_data="noop"))
+        if page < total_pages:
+            nav.append(InlineKeyboardButton("➡️", callback_data=f"sel_dumb_page_{page+1}"))
+        buttons.append(nav)
+
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
 
     if is_edit:
@@ -699,15 +865,62 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False):
     else:
         await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
+@Client.on_callback_query(filters.regex(r"^sel_dest_(.*)$"))
+async def handle_dest_selection(client, callback_query):
+    from utils.state import get_state
+    if not get_state(callback_query.from_user.id):
+        return await callback_query.answer("⚠️ Session expired. Please start again.", show_alert=True)
+
+    await callback_query.answer()
+    user_id = callback_query.from_user.id
+    action = callback_query.matches[0].group(1)
+
+    if action.startswith("page_"):
+        page = int(action.split("_")[1])
+        await prompt_destination_folder(client, user_id, callback_query.message, is_edit=True, page=page)
+        return
+
+    if action == "create":
+        set_state(user_id, "awaiting_dest_folder_name")
+        update_data(user_id, "dest_msg_id", callback_query.message.id)
+        try:
+            await callback_query.message.edit_text(
+                "📁 **Create New Folder**\n\nPlease enter a name for the new folder:",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
+            )
+        except MessageNotModified:
+            pass
+        return
+
+    dest = None
+    if action == "root":
+        dest = "root"
+    elif action == "none":
+        dest = "none"
+    elif action.startswith("f_"):
+        dest = action[2:]
+
+    update_data(user_id, "dest_folder", dest)
+    await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
+
+
 @Client.on_callback_query(filters.regex(r"^sel_dumb_(.*)$"))
 async def handle_dumb_selection(client, callback_query):
 
     from utils.state import get_state
     if not get_state(callback_query.from_user.id):
         return await callback_query.answer("⚠️ Session expired. Please start again.", show_alert=True)
-    await callback_query.answer()
+
     user_id = callback_query.from_user.id
-    ch_id = callback_query.data.split("_")[2]
+    action = callback_query.matches[0].group(1)
+
+    if action.startswith("page_"):
+        page = int(action.split("_")[1])
+        await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True, page=page)
+        return
+
+    await callback_query.answer()
+    ch_id = action
 
     if ch_id != "none":
         update_data(user_id, "dumb_channel", ch_id)
@@ -794,7 +1007,7 @@ async def handle_language_callback(client, callback_query):
         return
 
     update_data(user_id, "language", data)
-    await prompt_dumb_channel(client, user_id, callback_query.message, is_edit=True)
+    await prompt_destination_folder(client, user_id, callback_query.message, is_edit=True)
 
 @Client.on_callback_query(filters.regex(r"^gen_send_as_(document|media)$"))
 async def handle_gen_send_as(client, callback_query):

@@ -1320,47 +1320,61 @@ class TaskProcessor:
                     expiry_date = datetime.datetime.utcnow() + datetime.timedelta(days=expiry_days)
 
                 folder_id = None
-                if self.tmdb_id:
-                    folder_type = "series" if self.media_type == "series" else "movies"
-                    folder = await db.folders.find_one({"user_id": self.user_id, "tmdb_id": self.tmdb_id})
-                    if not folder:
-                        res = await db.folders.insert_one({
-                            "user_id": self.user_id,
-                            "name": self.title,
-                            "type": folder_type,
-                            "tmdb_id": self.tmdb_id,
-                            "created_at": datetime.datetime.utcnow()
-                        })
-                        folder_id = res.inserted_id
-                    else:
-                        folder_id = folder["_id"]
-                elif self.media_type == "audio":
-                    artist = self.metadata.get("artist", "Unknown Artist").strip()
-                    if not artist:
-                        artist = "Unknown Artist"
-                    folder = await db.folders.find_one({"user_id": self.user_id, "name": artist, "type": "music"})
-                    if not folder:
-                        res = await db.folders.insert_one({
-                            "user_id": self.user_id,
-                            "name": artist,
-                            "type": "music",
-                            "created_at": datetime.datetime.utcnow()
-                        })
-                        folder_id = res.inserted_id
-                    else:
-                        folder_id = folder["_id"]
+                dest_folder = self.data.get("dest_folder")
+                skip_myfiles = False
 
-                file_data = {
-                    "user_id": self.user_id,
-                    "file_name": final_filename,
-                    "message_id": saved_file_id,
-                    "channel_id": storage_channel,
-                    "status": status,
-                    "folder_id": folder_id,
-                    "created_at": datetime.datetime.utcnow(),
-                    "expires_at": expiry_date,
-                }
-                await db.files.insert_one(file_data)
+                if dest_folder == "none":
+                    skip_myfiles = True
+                elif dest_folder and dest_folder != "root":
+                    from bson.objectid import ObjectId
+                    try:
+                        folder_id = ObjectId(dest_folder)
+                    except:
+                        pass
+
+                if not dest_folder and not skip_myfiles:
+                    if self.tmdb_id:
+                        folder_type = "series" if self.media_type == "series" else "movies"
+                        folder = await db.folders.find_one({"user_id": self.user_id, "tmdb_id": self.tmdb_id})
+                        if not folder:
+                            res = await db.folders.insert_one({
+                                "user_id": self.user_id,
+                                "name": self.title,
+                                "type": folder_type,
+                                "tmdb_id": self.tmdb_id,
+                                "created_at": datetime.datetime.utcnow()
+                            })
+                            folder_id = res.inserted_id
+                        else:
+                            folder_id = folder["_id"]
+                    elif self.media_type == "audio":
+                        artist = self.metadata.get("artist", "Unknown Artist").strip()
+                        if not artist:
+                            artist = "Unknown Artist"
+                        folder = await db.folders.find_one({"user_id": self.user_id, "name": artist, "type": "music"})
+                        if not folder:
+                            res = await db.folders.insert_one({
+                                "user_id": self.user_id,
+                                "name": artist,
+                                "type": "music",
+                                "created_at": datetime.datetime.utcnow()
+                            })
+                            folder_id = res.inserted_id
+                        else:
+                            folder_id = folder["_id"]
+
+                if not skip_myfiles:
+                    file_data = {
+                        "user_id": self.user_id,
+                        "file_name": final_filename,
+                        "message_id": saved_file_id,
+                        "channel_id": storage_channel,
+                        "status": status,
+                        "folder_id": folder_id,
+                        "created_at": datetime.datetime.utcnow(),
+                        "expires_at": expiry_date,
+                    }
+                    await db.files.insert_one(file_data)
             except Exception as e:
                 logger.error(f"Failed to save file to DB Channel {storage_channel}: {e}")
 
