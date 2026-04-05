@@ -246,6 +246,10 @@ class TaskProcessor:
 
                         summary_msg = queue_manager.get_batch_summary(batch_id, usage_text)
                         await self.client.send_message(self.user_id, summary_msg)
+                        try:
+                            await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+                        except:
+                            pass
                         if queue_manager.batches.get(batch_id):
                             setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
                     except Exception as e:
@@ -1448,6 +1452,10 @@ class TaskProcessor:
                             await self.client.send_message(
                                 self.user_id, summary_msg
                             )
+                            try:
+                                await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+                            except:
+                                pass
                             if queue_manager.batches.get(batch_id):
                                 setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
                         except Exception as e:
@@ -1520,6 +1528,10 @@ class TaskProcessor:
                     await self.client.send_message(
                         self.user_id, f"✅ **Processing Complete!**\n\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
                     )
+                    try:
+                        await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+                    except:
+                        pass
                 except Exception as e:
                     logger.warning(f"Failed to send single completion msg: {e}")
 

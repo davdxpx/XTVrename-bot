@@ -42,6 +42,7 @@ async def handle_start_command_unique(client, message):
         param = message.command[1]
 
         if param.startswith("file_"):
+            from pyrogram import StopPropagation
             file_id_str = param.replace("file_", "")
             from bson.objectid import ObjectId
             try:
@@ -50,21 +51,24 @@ async def handle_start_command_unique(client, message):
                     if not Config.PUBLIC_MODE:
                         if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
                             await message.reply_text("❌ Access Denied.")
-                            return
+                            raise StopPropagation
 
                     await client.copy_message(
                         chat_id=user_id,
                         from_chat_id=f["channel_id"],
                         message_id=f["message_id"]
                     )
-                    return
+                    await client.send_sticker(chat_id=user_id, sticker="CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+                    raise StopPropagation
                 else:
                     await message.reply_text("❌ File not found.")
-                    return
+                    raise StopPropagation
+            except StopPropagation:
+                raise
             except Exception as e:
                 logger.error(f"Error serving shared file: {e}")
                 await message.reply_text("❌ Invalid link or file not found.")
-                return
+                raise StopPropagation
 
         if param.startswith("pro_setup_"):
             parts = param.split("_")

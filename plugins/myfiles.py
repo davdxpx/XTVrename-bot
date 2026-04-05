@@ -969,6 +969,10 @@ async def process_send_all(client, user_id, files, plan, batch_id):
             logger.error(f"Send all error: {e}")
 
     await client.send_message(user_id, f"✅ Batch send complete. Delivered {count} files.")
+    try:
+        await client.send_sticker(user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+    except Exception:
+        pass
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
