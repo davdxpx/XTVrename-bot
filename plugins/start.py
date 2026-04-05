@@ -38,6 +38,48 @@ async def handle_start_command_unique(client, message):
         bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
         community_name = config.get("community_name", "Our Community")
 
+    if len(message.command) > 1:
+        param = message.command[1]
+
+        if param.startswith("file_"):
+            file_id_str = param.replace("file_", "")
+            from bson.objectid import ObjectId
+            try:
+                f = await db.files.find_one({"_id": ObjectId(file_id_str)})
+                if f:
+                    if not Config.PUBLIC_MODE:
+                        if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
+                            await message.reply_text("❌ Access Denied.")
+                            return
+
+                    await client.copy_message(
+                        chat_id=user_id,
+                        from_chat_id=f["channel_id"],
+                        message_id=f["message_id"]
+                    )
+                    return
+                else:
+                    await message.reply_text("❌ File not found.")
+                    return
+            except Exception as e:
+                logger.error(f"Error serving shared file: {e}")
+                await message.reply_text("❌ Invalid link or file not found.")
+                return
+
+        if param.startswith("pro_setup_"):
+            parts = param.split("_")
+            tunnel_id_str = parts[2]
+
+            try:
+                tunnel_id = int(tunnel_id_str)
+                user_settings = await db.get_settings(user_id)
+                user_settings["temp_pro_tunnel_id"] = tunnel_id
+                await db.settings.update_one({"_id": f"user_{user_id}"}, {"$set": {"temp_pro_tunnel_id": tunnel_id}}, upsert=True)
+                await message.reply_text("✅ Detected Pro Setup Tunnel link. Proceed to connect your Userbot using /setup_pro.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Proceed", callback_data="pro_setup_start")]]))
+                return
+            except Exception as e:
+                pass
+
     is_new_user = False
     user_usage = await db.get_user_usage(user_id)
     if not user_usage:

@@ -515,27 +515,34 @@ class TaskProcessor:
             )
 
         if not self.is_subtitle and self.media_type != "audio":
-            thumb_binary = (
-                self.settings.get("thumbnail_binary") if self.settings else None
-            )
+            thumb_mode = self.settings.get("thumbnail_mode", "none") if self.settings else "none"
 
-            if thumb_binary:
-                def write_thumb():
-                    with open(self.thumb_path, "wb") as f:
-                        f.write(thumb_binary)
-                await asyncio.to_thread(write_thumb)
-            elif self.poster_url:
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(self.poster_url) as resp:
-                            if resp.status == 200:
-                                data = await resp.read()
-                                def write_poster():
-                                    with open(self.thumb_path, "wb") as f:
-                                        f.write(data)
-                                await asyncio.to_thread(write_poster)
-                except Exception as e:
-                    logger.warning(f"Failed to download poster: {e}")
+            if thumb_mode == "none":
+                self.thumb_path = None
+            else:
+                thumb_binary = (
+                    self.settings.get("thumbnail_binary") if self.settings else None
+                )
+
+                if thumb_mode == "custom" and thumb_binary:
+                    def write_thumb():
+                        with open(self.thumb_path, "wb") as f:
+                            f.write(thumb_binary)
+                    await asyncio.to_thread(write_thumb)
+                elif thumb_mode == "auto" and self.poster_url:
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(self.poster_url) as resp:
+                                if resp.status == 200:
+                                    data = await resp.read()
+                                    def write_poster():
+                                        with open(self.thumb_path, "wb") as f:
+                                            f.write(data)
+                                    await asyncio.to_thread(write_poster)
+                    except Exception as e:
+                        logger.warning(f"Failed to download poster: {e}")
+                else:
+                    self.thumb_path = None
 
         safe_title = re.sub(r'[\\/*?:"<>|,;\'!]', "", self.title)
         safe_title = safe_title.replace("&", "and")
@@ -1364,15 +1371,65 @@ class TaskProcessor:
                             folder_id = folder["_id"]
 
                 if not skip_myfiles:
+                    # Smart System Filenames & TMDb Integration
+                    internal_name = final_filename
+
+                    try:
+                        settings = await db.get_settings(self.user_id)
+                        system_filename_template = settings.get("templates", {}).get("system_filename")
+
+                        if system_filename_template:
+                            # Ensure episode is safely formatted for formatting string dict
+                            ep_str_for_sys = "".join([f"E{int(e):02d}" for e in self.episode]) if isinstance(self.episode, list) else f"{self.episode:02d}" if self.episode else ""
+                            sys_fmt_dict = {
+                                "title": safe_title,
+                                "year": year_str,
+                                "season": f"{self.season:02d}" if self.season else "",
+                                "episode": ep_str_for_sys,
+                                "series_name": safe_title if self.media_type == "series" else "",
+                            }
+
+                            # Fallback replacing standard brackets if they were used
+                            try:
+                                base_name = system_filename_template.format(**sys_fmt_dict)
+                            except KeyError:
+                                try:
+                                    base_name = system_filename_template.format(**fmt_dict)
+                                except Exception:
+                                    base_name = self.title if self.title else "unknown"
+
+                            def clean_sys_filename(name, orig_template=""):
+                                import re
+                                name = re.sub(r'\[\s*\]', '', name)
+                                name = re.sub(r'\(\s*\)', '', name)
+                                name = re.sub(r'\{\s*\}', '', name)
+                                name = re.sub(r'[\._\s]{2,}', " ", name)
+                                name = name.strip('._ ')
+                                return name
+                            internal_name = clean_sys_filename(base_name, system_filename_template) + ext
+                        elif self.title:
+                            if self.media_type == "series":
+                                ep_str = "".join([f"E{int(e):02d}" for e in self.episode]) if isinstance(self.episode, list) else f"E{self.episode:02d}" if self.episode else ""
+                                internal_name = f"{self.title} S{self.season:02d}{ep_str}{ext}"
+                            elif self.year:
+                                internal_name = f"{self.title} ({self.year}){ext}"
+                            else:
+                                internal_name = f"{self.title}{ext}"
+                    except Exception as e:
+                        logger.warning(f"Error applying system filename template: {e}")
+
                     file_data = {
                         "user_id": self.user_id,
-                        "file_name": final_filename,
+                        "file_name": internal_name,
                         "message_id": saved_file_id,
                         "channel_id": storage_channel,
                         "status": status,
                         "folder_id": folder_id,
                         "created_at": datetime.datetime.utcnow(),
                         "expires_at": expiry_date,
+                        "tmdb_id": self.tmdb_id,
+                        "poster_url": self.poster_url,
+                        "media_type": self.media_type
                     }
                     await db.files.insert_one(file_data)
             except Exception as e:

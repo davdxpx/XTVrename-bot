@@ -41,6 +41,12 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **Concurrency Control**: Global semaphore system prevents server overload by managing simultaneous downloads/uploads.
 
 ### 🔹 Intelligent Recognition
+*   **V2.0 Endgame Evolution**:
+    *   **Inline Query Search:** Use `@YourBotName [search query]` anywhere to instantly pull up your files and share them via Deep Links!
+    *   **Netflix-Style Visual Dashboard:** When viewing your files in `/myfiles`, the bot dynamically updates the interface to display the beautiful TMDb media poster inline.
+    *   **Smart System Filenames:** Use `{title} ({year})` and other customizable templates to completely automate how your internal media files are saved and displayed.
+    *   **Batch Actions (Multi-Select):** Easily move, send, or delete multiple files at once in your MyFiles dashboard via the new interactive checkmark system.
+    *   **Dynamic Sorting:** Sort files by Newest, Oldest, or A-Z natively inside the MyFiles interface.
 *   **Workflow Modes (Starter Setup)**: The bot greets users with an interactive, beautifully-formatted **Starter Setup Menu** when they join your Force-Sub channel or press `/start`. Users can pick their primary mode of operation:
     *   **🧠 Smart Media Mode**: Best for TV Shows & Movies. Automatically triggers the Auto-Detection Matrix and fetches TMDb metadata/posters natively.
     *   **⚡ Quick Rename Mode**: Best for Personal Videos, Anime, or generic files. Instantly bypasses all auto-detection logic and brings the user straight to the renaming prompt for rapid processing.
@@ -66,7 +72,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 ### 🔹 Professional Metadata Injection
 *   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
 *   **Branding**: Sets "Encoded by @XTVglobal" and custom audio/subtitle track titles.
-*   **Thumbnail Embedding**: Embeds custom or poster-based thumbnails into video files.
+*   **Thumbnail Embedding**: Embeds custom or poster-based thumbnails into video files. Natively toggleable through the interactive settings menu (Auto-detect, Custom, or Deactivated).
 *   **Album Support**: Handles multiple file uploads (albums) concurrently without issues.
 
 ### 🔹 Security & Privacy

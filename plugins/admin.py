@@ -274,7 +274,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -1932,67 +1932,126 @@ async def admin_callback(client, callback_query):
             pass
         return
     if data == "admin_thumb_menu":
+        thumb_mode = await db.get_thumbnail_mode(None)
+        mode_str = "Deactivated (None)"
+        if thumb_mode == "auto":
+            mode_str = "Auto-detect (Preview)"
+        elif thumb_mode == "custom":
+            mode_str = "Custom Thumbnail"
+
+        text = (
+            "🖼 **Manage Global Thumbnail Preferences**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> **Choose how thumbnails should be handled for all processed files.**\n\n"
+            f"**Current Mode:** `{mode_str}`\n\n"
+            "**Options:**\n"
+            "• **Auto-detect:** Uses the automatic preview image from TMDb.\n"
+            "• **Custom:** Uses your uploaded default thumbnail.\n"
+            "• **Deactivated:** Skips applying any thumbnail."
+        )
+
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    "✅ Auto-detect" if thumb_mode == "auto" else "Auto-detect",
+                    callback_data="set_admin_thumb_mode_auto"
+                ),
+                InlineKeyboardButton(
+                    "✅ Custom" if thumb_mode == "custom" else "Custom",
+                    callback_data="set_admin_thumb_mode_custom"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "✅ Deactivated (None)" if thumb_mode == "none" else "Deactivated (None)",
+                    callback_data="set_admin_thumb_mode_none"
+                )
+            ]
+        ]
+
+        if thumb_mode == "custom":
+            buttons.append([
+                InlineKeyboardButton("👀 View Custom Thumbnail", callback_data="admin_thumb_view")
+            ])
+            buttons.append([
+                InlineKeyboardButton("📤 Upload New Thumbnail", callback_data="admin_thumb_set")
+            ])
+            buttons.append([
+                InlineKeyboardButton("🗑 Remove Thumbnail", callback_data="admin_thumb_remove")
+            ])
+
+        buttons.append([InlineKeyboardButton("← Back", callback_data="admin_main")])
+
         try:
             await callback_query.message.edit_text(
-                "🖼 **Manage Thumbnail**\n\n" "Select an action:",
+                text,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("set_admin_thumb_mode_"):
+        new_mode = data.replace("set_admin_thumb_mode_", "")
+        await db.update_thumbnail_mode(new_mode, None)
+        await callback_query.answer(f"Global thumbnail mode set to {new_mode.capitalize()}!", show_alert=True)
+        callback_query.data = "admin_thumb_menu"
+        await admin_callback(client, callback_query)
+        return
+
+    elif data == "admin_thumb_remove":
+        await db.update_thumbnail(None, None, None)
+        await db.update_thumbnail_mode("none", None)
+        try:
+            await callback_query.message.edit_text(
+                "✅ **Thumbnail Removed & Deactivated**\n\nFiles will no longer use a default custom thumbnail and the global thumbnail mode has been set to None.",
                 reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "👀 View Current", callback_data="admin_thumb_view"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "📤 Set Default", callback_data="admin_thumb_set"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back", callback_data="admin_main"
-                            )
-                        ],
-                    ]
+                    [[InlineKeyboardButton("← Back", callback_data="admin_thumb_menu")]]
                 ),
             )
         except MessageNotModified:
             pass
+
     elif data == "admin_thumb_view":
         thumb_bin, _ = await db.get_thumbnail()
         if thumb_bin:
             try:
                 f = io.BytesIO(thumb_bin)
                 f.name = "thumbnail.jpg"
-                await client.send_photo(
-                    user_id, f, caption="**Current Default Thumbnail**"
-                )
-                await callback_query.message.edit_text(
-                    "🖼 **Manage Thumbnail**\n\n" "Thumbnail sent above.",
+
+                sent_msg = await client.send_photo(
+                    user_id,
+                    f,
+                    caption="🖼 **Current Default Thumbnail**\n*(This message will auto-delete to keep the chat clean)*",
                     reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "👀 View Current", callback_data="admin_thumb_view"
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "📤 Set Default", callback_data="admin_thumb_set"
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "🔙 Back", callback_data="admin_main"
-                                )
-                            ],
-                        ]
-                    ),
+                        [[InlineKeyboardButton("✅ OK", callback_data="admin_delete_msg")]]
+                    )
                 )
+
+                import asyncio
+                async def auto_delete():
+                    await asyncio.sleep(30)
+                    try:
+                        await sent_msg.delete()
+                    except Exception:
+                        pass
+
+                asyncio.create_task(auto_delete())
+
+                await callback_query.answer("Thumbnail sent! Check below.", show_alert=False)
+
             except Exception as e:
                 logger.error(f"Failed to send thumbnail: {e}")
                 await callback_query.answer("Error sending thumbnail!", show_alert=True)
         else:
-            await callback_query.answer("No thumbnail set in DB!", show_alert=True)
+            await callback_query.answer("No custom thumbnail currently uploaded!", show_alert=True)
+
+    elif data == "admin_delete_msg":
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
+        return
+
     elif data == "admin_thumb_set":
         try:
             await callback_query.message.edit_text(
@@ -2221,11 +2280,20 @@ async def admin_callback(client, callback_query):
     elif data == "admin_view":
         settings = await db.get_settings()
         templates = settings.get("templates", {}) if settings else {}
+        thumb_mode = settings.get("thumbnail_mode", "none") if settings else "none"
         has_thumb = (
             "✅ Yes" if settings and settings.get("thumbnail_binary") else "❌ No"
         )
+
+        mode_str = "Deactivated (None)"
+        if thumb_mode == "auto":
+            mode_str = "Auto-detect (Preview)"
+        elif thumb_mode == "custom":
+            mode_str = "Custom Thumbnail"
+
         text = f"👀 **Current Settings**\n\n"
-        text += f"**Thumbnail Set:** {has_thumb}\n\n"
+        text += f"**Thumbnail Mode:** `{mode_str}`\n"
+        text += f"**Custom Thumbnail Set:** {has_thumb}\n\n"
         text += "**Metadata Templates:**\n"
         if templates:
             for k, v in templates.items():
@@ -2692,8 +2760,9 @@ async def handle_admin_photo(client, message):
         with open(path, "rb") as f:
             binary_data = f.read()
         await db.update_thumbnail(file_id, binary_data)
+        await db.update_thumbnail_mode("custom", None)
         await msg.edit_text(
-            "✅ Thumbnail updated successfully!",
+            "✅ Global thumbnail updated successfully!\nThe global thumbnail mode has been set to **Custom**.",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [

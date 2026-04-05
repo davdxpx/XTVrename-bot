@@ -110,6 +110,7 @@ class Database:
                     "_id": doc_id,
                     "thumbnail_file_id": None,
                     "thumbnail_binary": None,
+                    "thumbnail_mode": "none",
                     "templates": Config.DEFAULT_TEMPLATES,
                     "filename_templates": Config.DEFAULT_FILENAME_TEMPLATES,
                     "channel": Config.DEFAULT_CHANNEL,
@@ -163,6 +164,23 @@ class Database:
         except Exception as e:
             logger.error(f"Error fetching thumbnail for {doc_id}: {e}")
         return None, None
+
+    async def get_thumbnail_mode(self, user_id=None):
+        settings = await self.get_settings(user_id)
+        if settings:
+            return settings.get("thumbnail_mode", "none")
+        return "none"
+
+    async def update_thumbnail_mode(self, mode: str, user_id=None):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id}, {"$set": {"thumbnail_mode": mode}}, upsert=True
+            )
+        except Exception as e:
+            logger.error(f"Error updating thumbnail mode for {doc_id}: {e}")
 
     async def get_all_templates(self, user_id=None):
         settings = await self.get_settings(user_id)

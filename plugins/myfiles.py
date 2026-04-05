@@ -39,7 +39,7 @@ async def get_myfiles_main_menu(user_id: int):
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
         text = (
-            "📁 **My Files Management**\n\n"
+            "📁 **My Files Management [v2.0]**\n\n"
             f"**Plan:** `{plan.capitalize()}`\n"
             f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage:** `{temp_count}` files\n\n"
@@ -55,7 +55,7 @@ async def get_myfiles_main_menu(user_id: int):
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
         text = (
-            "📁 **Team Files Management**\n\n"
+            "📁 **Team Files Management [v2.0]**\n\n"
             f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage:** `{temp_count}` files\n\n"
             "Select a category to view files:"
@@ -88,16 +88,55 @@ async def get_myfiles_main_menu(user_id: int):
 
 async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int, limit: int = 10, back_data: str = "myfiles_main"):
     skip = page * limit
-    cursor = db.files.find(filter_query).sort("created_at", -1).skip(skip).limit(limit)
+
+    # Check multi-select mode and sorting preference
+    state_dict = await get_myfiles_state(user_id)
+    multi_select = state_dict.get("multi_select", False)
+    selected_files = state_dict.get("selected_files", [])
+    sort_order = state_dict.get("sort_order", "newest")
+
+    if sort_order == "oldest":
+        sort_tuple = [("created_at", 1)]
+    elif sort_order == "a-z":
+        sort_tuple = [("file_name", 1)]
+    else:
+        sort_tuple = [("created_at", -1)]
+
+    cursor = db.files.find(filter_query).sort(sort_tuple).skip(skip).limit(limit)
     files = await cursor.to_list(length=limit)
     total_files = await db.files.count_documents(filter_query)
 
     buttons = []
+
+    # Sort toggle and multi-select toggle
+    sort_label = "↕️ Sort: Newest"
+    if sort_order == "oldest":
+        sort_label = "↕️ Sort: Oldest"
+    elif sort_order == "a-z":
+        sort_label = "↕️ Sort: A-Z"
+
+    ms_label = "✅ Multi-Select: ON" if multi_select else "☑️ Multi-Select: OFF"
+
+    buttons.append([
+        InlineKeyboardButton(sort_label, callback_data=f"myfiles_sort_toggle_{back_data}"),
+        InlineKeyboardButton(ms_label, callback_data=f"myfiles_ms_toggle_{back_data}")
+    ])
+
     for f in files:
+        f_id_str = str(f['_id'])
         name = f.get("file_name", "Unknown File")
         if len(name) > 30: name = name[:27] + "..."
         status_emoji = "📌" if f.get("status") == "permanent" else "⏳"
-        buttons.append([InlineKeyboardButton(f"{status_emoji} {name}", callback_data=f"myfiles_file_{str(f['_id'])}")])
+
+        if multi_select:
+            prefix = "🔘 " if f_id_str in selected_files else "⚪️ "
+            btn_text = f"{prefix}{name}"
+            callback = f"myfiles_ms_select_{f_id_str}_{page}_{back_data}"
+        else:
+            btn_text = f"{status_emoji} {name}"
+            callback = f"myfiles_file_{f_id_str}"
+
+        buttons.append([InlineKeyboardButton(btn_text, callback_data=callback)])
 
     nav_row = []
     total_pages = math.ceil(total_files / limit) if total_files > 0 else 1
@@ -117,6 +156,12 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     buttons.append(nav_row)
 
     # Action buttons for the folder/category itself
+    if multi_select and selected_files:
+        buttons.append([
+            InlineKeyboardButton(f"📂 Move Selected ({len(selected_files)})", callback_data=f"myfiles_ms_move_{back_data}"),
+            InlineKeyboardButton(f"🗑 Delete Selected ({len(selected_files)})", callback_data=f"myfiles_ms_delete_{back_data}")
+        ])
+
     buttons.append([
         InlineKeyboardButton("📤 Send All", callback_data=f"myfiles_sendall_{back_data}")
     ])
@@ -207,10 +252,168 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     # Fast-dismiss loading spinner except where we specifically want an alert.
     # We will answer below if we need a custom text.
     try:
-        if not (data.startswith("myfiles_send_") or data.startswith("myfiles_sendall_") or data.startswith("myfiles_delfile_") or data.startswith("myfiles_del_folder_") or data.startswith("mf_mov_") or data.startswith("mf_df_")):
+        if not (data.startswith("myfiles_send_") or data.startswith("myfiles_sendall_") or data.startswith("myfiles_delfile_") or data.startswith("myfiles_del_folder_") or data.startswith("mf_mov_") or data.startswith("mf_df_") or data.startswith("myfiles_ms_move_") or data.startswith("myfiles_ms_delete_")):
             await callback_query.answer()
     except Exception:
         pass
+
+    if data.startswith("myfiles_sort_toggle_"):
+        back_data = data.replace("myfiles_sort_toggle_", "")
+        state_dict = await get_myfiles_state(user_id)
+
+        current_sort = state_dict.get("sort_order", "newest")
+        if current_sort == "newest":
+            next_sort = "oldest"
+        elif current_sort == "oldest":
+            next_sort = "a-z"
+        else:
+            next_sort = "newest"
+
+        state_dict["sort_order"] = next_sort
+        await set_myfiles_state(user_id, state_dict)
+
+        # Determine the current page, if applicable. Default to 0.
+        # It's better to just refresh the current back_data view.
+        callback_query.data = back_data
+        if "page_" in back_data:
+            callback_query.data = back_data # It will hit page handler
+        else:
+            # Let's just simulate returning to the list view by calling the appropriate list view data
+            if back_data == "myfiles_main":
+                callback_query.data = "myfiles_cat_recent"
+            else:
+                callback_query.data = back_data
+
+        await myfiles_callback(client, callback_query)
+        return
+
+    if data.startswith("myfiles_ms_toggle_"):
+        back_data = data.replace("myfiles_ms_toggle_", "")
+        state_dict = await get_myfiles_state(user_id)
+
+        multi_select = state_dict.get("multi_select", False)
+        state_dict["multi_select"] = not multi_select
+        if not multi_select:
+            state_dict["selected_files"] = [] # Clear selection when turning on/off
+
+        await set_myfiles_state(user_id, state_dict)
+
+        if back_data == "myfiles_main":
+            callback_query.data = "myfiles_cat_recent"
+        else:
+            callback_query.data = back_data
+
+        await myfiles_callback(client, callback_query)
+        return
+
+    if data.startswith("myfiles_ms_select_"):
+        # Format: myfiles_ms_select_{file_id}_{page}_{back_data}
+        parts = data.replace("myfiles_ms_select_", "").split("_", 2)
+        f_id_str = parts[0]
+        page = parts[1]
+        back_data = parts[2]
+
+        state_dict = await get_myfiles_state(user_id)
+        selected_files = state_dict.get("selected_files", [])
+
+        if f_id_str in selected_files:
+            selected_files.remove(f_id_str)
+        else:
+            selected_files.append(f_id_str)
+
+        state_dict["selected_files"] = selected_files
+        await set_myfiles_state(user_id, state_dict)
+
+        # Trigger page refresh
+        callback_query.data = f"myfiles_page_{page}_{back_data}"
+        await myfiles_callback(client, callback_query)
+        return
+
+    if data.startswith("myfiles_ms_delete_"):
+        back_data = data.replace("myfiles_ms_delete_", "")
+        state_dict = await get_myfiles_state(user_id)
+        selected_files = state_dict.get("selected_files", [])
+
+        if not selected_files:
+            await callback_query.answer("No files selected.", show_alert=True)
+            return
+
+        from bson.objectid import ObjectId
+        object_ids = [ObjectId(fid) for fid in selected_files]
+
+        await db.files.delete_many({"_id": {"$in": object_ids}})
+
+        # Clear selection and turn off multi-select
+        state_dict["multi_select"] = False
+        state_dict["selected_files"] = []
+        await set_myfiles_state(user_id, state_dict)
+
+        await callback_query.answer(f"Deleted {len(object_ids)} files.", show_alert=True)
+
+        if back_data == "myfiles_main":
+            callback_query.data = "myfiles_cat_recent"
+        else:
+            callback_query.data = back_data
+
+        await myfiles_callback(client, callback_query)
+        return
+
+    if data.startswith("myfiles_ms_move_"):
+        back_data = data.replace("myfiles_ms_move_", "")
+
+        cursor = db.folders.find({"user_id": user_id, "type": "custom"}).sort("name", 1)
+        folders = await cursor.to_list(length=None)
+
+        text = "📂 **Batch Move Files**\n\nSelect a folder to move the selected files to:"
+        buttons = [
+            [InlineKeyboardButton("🧹 Remove from Folder", callback_data=f"myfiles_ms_domove_None_{back_data}")]
+        ]
+
+        for folder in folders:
+            buttons.append([InlineKeyboardButton(f"📁 {folder['name']}", callback_data=f"myfiles_ms_domove_{str(folder['_id'])}_{back_data}")])
+
+        buttons.append([InlineKeyboardButton("🔙 Cancel", callback_data=back_data)])
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("myfiles_ms_domove_"):
+        parts = data.replace("myfiles_ms_domove_", "").split("_", 1)
+        folder_id = parts[0]
+        back_data = parts[1]
+
+        state_dict = await get_myfiles_state(user_id)
+        selected_files = state_dict.get("selected_files", [])
+
+        if not selected_files:
+            await callback_query.answer("No files selected.", show_alert=True)
+            return
+
+        from bson.objectid import ObjectId
+        object_ids = [ObjectId(fid) for fid in selected_files]
+
+        if folder_id == "None":
+            await db.files.update_many({"_id": {"$in": object_ids}}, {"$set": {"folder_id": None}})
+        else:
+            await db.files.update_many({"_id": {"$in": object_ids}}, {"$set": {"folder_id": ObjectId(folder_id)}})
+
+        # Clear selection and turn off multi-select
+        state_dict["multi_select"] = False
+        state_dict["selected_files"] = []
+        await set_myfiles_state(user_id, state_dict)
+
+        await callback_query.answer(f"Moved {len(object_ids)} files.", show_alert=True)
+
+        if back_data == "myfiles_main":
+            callback_query.data = "myfiles_cat_recent"
+        else:
+            callback_query.data = back_data
+
+        await myfiles_callback(client, callback_query)
+        return
 
     if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
         await callback_query.answer("Access Denied", show_alert=True)
@@ -225,7 +428,14 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data == "myfiles_main":
         text, markup = await get_myfiles_main_menu(user_id)
         try:
-            await callback_query.message.edit_text(text, reply_markup=markup)
+            if callback_query.message.photo:
+                try:
+                    await callback_query.message.delete()
+                except:
+                    pass
+                await client.send_message(user_id, text, reply_markup=markup)
+            else:
+                await callback_query.message.edit_text(text, reply_markup=markup)
         except MessageNotModified:
             pass
         return
@@ -290,7 +500,14 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data="myfiles_main")
         text = f"🕒 **Recent Files** ({total} total)\n\n📌 = Permanent | ⏳ = Temporary"
         try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            if callback_query.message.photo:
+                try:
+                    await callback_query.message.delete()
+                except:
+                    pass
+                await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+            else:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
             pass
         return
@@ -368,7 +585,14 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         text += f" ({total} total)\n\n📌 = Permanent | ⏳ = Temporary"
 
         try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            if callback_query.message.photo:
+                try:
+                    await callback_query.message.delete()
+                except:
+                    pass
+                await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+            else:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
             pass
         return
@@ -383,11 +607,15 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         name = f.get("file_name", "Unknown")
         status = f.get("status", "temporary")
         expires = f.get("expires_at")
+        poster = f.get("poster_url")
+        media_type = f.get("media_type")
 
         text = (
             f"📄 **{name}**\n\n"
             f"**Status:** `{status.capitalize()}`\n"
         )
+        if media_type:
+            text += f"**Type:** `{media_type.capitalize()}`\n"
         if expires and status == "temporary":
             text += f"**Expires:** `{expires.strftime('%Y-%m-%d %H:%M UTC')}`\n"
 
@@ -398,6 +626,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         buttons = [
             [InlineKeyboardButton("📤 Send File", callback_data=f"myfiles_send_{file_id}")],
+            [InlineKeyboardButton("🔗 Generate Share Link", callback_data=f"myfiles_share_{file_id}")],
             [InlineKeyboardButton(perm_btn_text, callback_data=f"myfiles_toggle_perm_{file_id}")],
             [InlineKeyboardButton("✏️ Rename", callback_data=f"myfiles_rename_{file_id}"),
              InlineKeyboardButton("📂 Move", callback_data=f"myfiles_move_{file_id}")],
@@ -405,8 +634,40 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             [InlineKeyboardButton("🔙 Back", callback_data=last_menu)]
         ]
 
+        reply_markup = InlineKeyboardMarkup(buttons)
+
         try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            if poster:
+                from pyrogram.types import InputMediaPhoto
+                try:
+                    await callback_query.message.edit_media(
+                        media=InputMediaPhoto(poster, caption=text),
+                        reply_markup=reply_markup
+                    )
+                except Exception:
+                    try:
+                        await callback_query.message.delete()
+                    except:
+                        pass
+                    await client.send_photo(
+                        chat_id=user_id,
+                        photo=poster,
+                        caption=text,
+                        reply_markup=reply_markup
+                    )
+            else:
+                if callback_query.message.photo:
+                    try:
+                        await callback_query.message.delete()
+                    except:
+                        pass
+                    await client.send_message(
+                        chat_id=user_id,
+                        text=text,
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await callback_query.message.edit_text(text, reply_markup=reply_markup)
         except MessageNotModified:
             pass
         return
@@ -539,6 +800,36 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             )
         except Exception as e:
             await client.send_message(user_id, f"❌ Failed to send file. It might have been deleted from the database channel. Error: `{e}`")
+        return
+
+    if data.startswith("myfiles_share_"):
+        file_id = data.replace("myfiles_share_", "")
+        bot_me = await client.get_me()
+        bot_username = bot_me.username
+
+        deep_link = f"https://t.me/{bot_username}?start=file_{file_id}"
+
+        try:
+            f = await db.files.find_one({"_id": ObjectId(file_id)})
+            name = f.get("file_name", "Unknown File") if f else "Unknown File"
+        except Exception:
+            await callback_query.answer("Invalid File ID", show_alert=True)
+            return
+
+        text = (
+            f"🔗 **Share Link Generated**\n\n"
+            f"**File:** `{name}`\n\n"
+            f"**Link:**\n`{deep_link}`\n\n"
+            f"Anyone with this link can start the bot and receive this file."
+        )
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to File", callback_data=f"myfiles_file_{file_id}")]])
+            )
+        except MessageNotModified:
+            pass
         return
 
     if data.startswith("myfiles_delfile_"):
