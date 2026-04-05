@@ -71,6 +71,7 @@ if __name__ == "__main__":
         from database import db
         logger.info("Running DB migrations...")
         app.loop.run_until_complete(db.migrate_old_db_to_new())
+        app.loop.run_until_complete(db.migrate_global_dumb_channels_to_ceo())
     except Exception as e:
         logger.warning(f"Error during DB migration: {e}")
 

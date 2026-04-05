@@ -98,6 +98,50 @@ class Database:
         await self.settings.update_one({"_id": "global_settings"}, {"$set": {"migration_to_users_done": True}}, upsert=True)
         logger.info("Migration completed.")
 
+    async def migrate_global_dumb_channels_to_ceo(self):
+        if not Config.PUBLIC_MODE or self.settings is None:
+            return
+
+        global_doc = await self.settings.find_one({"_id": "global_settings"})
+        if not global_doc:
+            return
+
+        if global_doc.get("dumb_channels_migrated_to_ceo"):
+            return
+
+        global_channels = global_doc.get("dumb_channels", {})
+        if not global_channels:
+            await self.settings.update_one({"_id": "global_settings"}, {"$set": {"dumb_channels_migrated_to_ceo": True}})
+            return
+
+        ceo_doc_id = f"user_{Config.CEO_ID}"
+        ceo_doc = await self.settings.find_one({"_id": ceo_doc_id})
+
+        update_data = {}
+
+        ceo_channels = ceo_doc.get("dumb_channels", {}) if ceo_doc else {}
+        merged_channels = {**global_channels, **ceo_channels}
+        update_data["dumb_channels"] = merged_channels
+
+        global_links = global_doc.get("dumb_channel_links", {})
+        ceo_links = ceo_doc.get("dumb_channel_links", {}) if ceo_doc else {}
+        merged_links = {**global_links, **ceo_links}
+        if merged_links:
+            update_data["dumb_channel_links"] = merged_links
+
+        if ceo_doc and not ceo_doc.get("default_dumb_channel") and global_doc.get("default_dumb_channel"):
+            update_data["default_dumb_channel"] = global_doc.get("default_dumb_channel")
+
+        if ceo_doc and not ceo_doc.get("movie_dumb_channel") and global_doc.get("movie_dumb_channel"):
+            update_data["movie_dumb_channel"] = global_doc.get("movie_dumb_channel")
+
+        if ceo_doc and not ceo_doc.get("series_dumb_channel") and global_doc.get("series_dumb_channel"):
+            update_data["series_dumb_channel"] = global_doc.get("series_dumb_channel")
+
+        await self.settings.update_one({"_id": ceo_doc_id}, {"$set": update_data}, upsert=True)
+        await self.settings.update_one({"_id": "global_settings"}, {"$set": {"dumb_channels_migrated_to_ceo": True}})
+        logger.info(f"Migrated {len(global_channels)} dumb channels from global to CEO.")
+
     async def get_settings(self, user_id=None):
         if self.settings is None:
             return None
