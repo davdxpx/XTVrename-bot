@@ -44,6 +44,12 @@ async def handle_premium_command(client, message):
         plan_display = "⭐ Premium Standard" if current_plan == "standard" else "💎 Premium Deluxe"
         status_emoji = "⭐" if current_plan == "standard" else "💎"
 
+        myfiles_limits = config.get("myfiles_limits", {}).get(current_plan, {})
+        perm_limit = myfiles_limits.get("permanent_limit", 50)
+        perm_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
+        folder_limit = myfiles_limits.get("folder_limit", 5)
+        folder_str = str(folder_limit) if folder_limit != -1 else "Unlimited"
+
         dash_text = (
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"{status_emoji} **YOUR PREMIUM DASHBOARD**\n"
@@ -51,12 +57,16 @@ async def handle_premium_command(client, message):
             f"> **Plan:** `{plan_display}`\n"
             f"> **Status:** `Active ✅`\n"
             f"> **Expiry:** `{exp_text}`\n\n"
+            f"**MyFiles Limits:**\n"
+            f"> **Permanent Files:** `Up to {perm_str}`\n"
+            f"> **Custom Folders:** `Up to {folder_str}`\n\n"
             f"✨ *Thank you for supporting 𝕏TV! Enjoy your exclusive benefits, priority processing, and enhanced limits.*\n\n"
             f"━━━━━━━━━━━━━━━━━━━━"
         )
 
         buttons = [
             [InlineKeyboardButton("⚙️ Custom Defaults", callback_data="premium_settings")],
+            [InlineKeyboardButton("📁 MyFiles Storage", callback_data="myfiles_main")],
             [InlineKeyboardButton("🚀 Priority Queue", callback_data="premium_priority")],
             [InlineKeyboardButton("🔄 Refresh Status", callback_data="user_premium_menu")]
         ]
@@ -95,10 +105,26 @@ async def handle_premium_command(client, message):
         f"Unlock the full power of 𝕏TV. Say goodbye to limits and hello to exclusive features!\n\n"
     )
 
+    myfiles_limits = config.get("myfiles_limits", {})
+    std_limits = myfiles_limits.get("standard", {})
+    dlx_limits = myfiles_limits.get("deluxe", {})
+
+    std_perm_limit = std_limits.get("permanent_limit", 50)
+    std_perm_str = str(std_perm_limit) if std_perm_limit != -1 else "Unlimited"
+    std_folder_limit = std_limits.get("folder_limit", 5)
+    std_folder_str = str(std_folder_limit) if std_folder_limit != -1 else "Unlimited"
+
+    dlx_perm_limit = dlx_limits.get("permanent_limit", -1)
+    dlx_perm_str = str(dlx_perm_limit) if dlx_perm_limit != -1 else "Unlimited"
+    dlx_folder_limit = dlx_limits.get("folder_limit", -1)
+    dlx_folder_str = str(dlx_folder_limit) if dlx_folder_limit != -1 else "Unlimited"
+
     text += (
         f"**⭐ Premium Standard**\n"
         f"> 📂 **Daily Egress Limit:** `{std_egress}`\n"
         f"> 📑 **Daily File Limit:** `{std_files}`\n"
+        f"> 🗂 **MyFiles Folders:** `{std_folder_str}`\n"
+        f"> 📦 **Perm Storage:** `{std_perm_str}`\n"
     )
     if standard_settings.get("features", {}).get("priority_queue"):
         text += f"> 🚀 **Priority Queue:** `Enabled`\n"
@@ -119,6 +145,8 @@ async def handle_premium_command(client, message):
             f"**💎 Premium Deluxe**\n"
             f"> 📂 **Daily Egress Limit:** `{dlx_egress}`\n"
             f"> 📑 **Daily File Limit:** `{dlx_files}`\n"
+            f"> 🗂 **MyFiles Folders:** `{dlx_folder_str}`\n"
+            f"> 📦 **Perm Storage:** `{dlx_perm_str}`\n"
         )
         if deluxe_settings.get("features", {}).get("priority_queue"):
             text += f"> 🚀 **Priority Queue:** `Enabled`\n"
@@ -183,12 +211,16 @@ async def handle_user_premium_menu(client, callback_query):
             f"> **Plan:** `{plan_display}`\n"
             f"> **Status:** `Active ✅`\n"
             f"> **Expiry:** `{exp_text}`\n\n"
+            f"**MyFiles Limits:**\n"
+            f"> **Permanent Files:** `Up to {perm_str}`\n"
+            f"> **Custom Folders:** `Up to {folder_str}`\n\n"
             f"✨ *Thank you for supporting 𝕏TV! Enjoy your exclusive benefits, priority processing, and enhanced limits.*\n\n"
             f"━━━━━━━━━━━━━━━━━━━━"
         )
 
         buttons = [
             [InlineKeyboardButton("⚙️ Custom Defaults", callback_data="premium_settings")],
+            [InlineKeyboardButton("📁 MyFiles Storage", callback_data="myfiles_main")],
             [InlineKeyboardButton("🚀 Priority Queue", callback_data="premium_priority")],
             [InlineKeyboardButton("🔄 Refresh Status", callback_data="user_premium_menu")]
         ]
@@ -227,10 +259,26 @@ async def handle_user_premium_menu(client, callback_query):
         f"Unlock the full power of 𝕏TV. Say goodbye to limits and hello to exclusive features!\n\n"
     )
 
+    myfiles_limits = config.get("myfiles_limits", {})
+    std_limits = myfiles_limits.get("standard", {})
+    dlx_limits = myfiles_limits.get("deluxe", {})
+
+    std_perm_limit = std_limits.get("permanent_limit", 50)
+    std_perm_str = str(std_perm_limit) if std_perm_limit != -1 else "Unlimited"
+    std_folder_limit = std_limits.get("folder_limit", 5)
+    std_folder_str = str(std_folder_limit) if std_folder_limit != -1 else "Unlimited"
+
+    dlx_perm_limit = dlx_limits.get("permanent_limit", -1)
+    dlx_perm_str = str(dlx_perm_limit) if dlx_perm_limit != -1 else "Unlimited"
+    dlx_folder_limit = dlx_limits.get("folder_limit", -1)
+    dlx_folder_str = str(dlx_folder_limit) if dlx_folder_limit != -1 else "Unlimited"
+
     text += (
         f"**⭐ Premium Standard**\n"
         f"> 📂 **Daily Egress Limit:** `{std_egress}`\n"
         f"> 📑 **Daily File Limit:** `{std_files}`\n"
+        f"> 🗂 **MyFiles Folders:** `{std_folder_str}`\n"
+        f"> 📦 **Perm Storage:** `{std_perm_str}`\n"
     )
     if standard_settings.get("features", {}).get("priority_queue"):
         text += f"> 🚀 **Priority Queue:** `Enabled`\n"
@@ -251,6 +299,8 @@ async def handle_user_premium_menu(client, callback_query):
             f"**💎 Premium Deluxe**\n"
             f"> 📂 **Daily Egress Limit:** `{dlx_egress}`\n"
             f"> 📑 **Daily File Limit:** `{dlx_files}`\n"
+            f"> 🗂 **MyFiles Folders:** `{dlx_folder_str}`\n"
+            f"> 📦 **Perm Storage:** `{dlx_perm_str}`\n"
         )
         if deluxe_settings.get("features", {}).get("priority_queue"):
             text += f"> 🚀 **Priority Queue:** `Enabled`\n"
