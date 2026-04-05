@@ -189,7 +189,7 @@ async def get_admin_limits_menu():
         buttons.append(
             [
                 InlineKeyboardButton(
-                    "📁 Per-User /myfiles Settings", callback_data="admin_myfiles_settings"
+                    "📁 /myfiles Settings", callback_data="admin_myfiles_settings"
                 )
             ]
         )

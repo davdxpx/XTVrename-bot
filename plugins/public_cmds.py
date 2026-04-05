@@ -124,6 +124,7 @@ async def info_command(client, message):
 
     await message.reply_text(text, disable_web_page_preview=True)
 
+@Client.on_message(filters.command("settings") & filters.private)
 async def settings_panel(client, message):
     if not is_public_mode():
         return

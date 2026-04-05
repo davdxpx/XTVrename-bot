@@ -289,6 +289,43 @@ async def handle_watermark_command(client, message):
     mock_cb.message = msg
     await handle_watermarker_menu(client, mock_cb)
 
+@Client.on_message(filters.command(["s", "subtitle"]) & filters.private, group=0)
+async def handle_subtitle_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("subtitle_extractor", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("subtitle_extractor", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from plugins.flow import handle_subtitle_extractor_menu
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "subtitle_extractor_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading subtitle extractor...")
+    mock_cb.message = msg
+    await handle_subtitle_extractor_menu(client, mock_cb)
+
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
     user_id = message.from_user.id
@@ -452,10 +489,14 @@ async def handle_help_callbacks(client, callback_query):
                 "> The core feature of the bot.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**How to Use:**\n"
-                "Simply send any file to the bot. It will automatically scan the name and look up metadata.\n\n"
-                "• **Auto-Detect:** Finds Series, Episode, Year, and Movie Posters.\n"
-                "• **Custom Name:** Bypasses auto-detect for a custom filename.\n"
-                "• **Shortcuts:** `/r` or `/rename`."
+                "Simply send any file to the bot. I will automatically scan the name and extract metadata!\n\n"
+                "**🧠 Smart Media Mode vs ⚡ Quick Rename Mode:**\n"
+                "• **Smart Media Mode:** The bot attempts to parse Movie/Series details and fetches official TMDb posters and metadata. Ideal for TV shows and Movies.\n"
+                "• **Quick Rename Mode:** Bypasses auto-detection completely, jumping straight into renaming without pulling metadata. Best for personal files or general media.\n\n"
+                "**Shortcuts:**\n"
+                "• `/r` or `/rename` - Start the manual rename wizard.\n"
+                "• `/g` or `/general` - Open General (Quick Rename) mode directly.\n"
+                "• `/p` or `/personal` - Open Personal Files mode."
             )
         elif tool == "audio":
             text = (
@@ -463,9 +504,12 @@ async def handle_help_callbacks(client, callback_query):
                 "> Perfect for your music collection.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
-                "Allows you to modify the ID3 tags of MP3, FLAC, and other audio files.\n\n"
-                "• You can change the Title, Artist, Album, and embedded Cover Art.\n"
-                "• **Shortcut:** `/a` or `/audio`."
+                "Allows you to modify the internal ID3 tags of MP3, FLAC, and other audio formats.\n\n"
+                "**Features:**\n"
+                "• Edit the Title, Artist, and Album.\n"
+                "• Upload and embed custom Cover Art.\n"
+                "• Keeps your music library looking pristine on any device.\n\n"
+                "**Shortcut:** `/a` or `/audio`."
             )
         elif tool == "convert":
             text = (
@@ -473,9 +517,12 @@ async def handle_help_callbacks(client, callback_query):
                 "> Change formats instantly.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
-                "Converts media files from one format to another (e.g., MKV to MP4, WEBM to MP4).\n\n"
-                "• Just send the file and select the format.\n"
-                "• **Shortcut:** `/c` or `/convert`."
+                "Converts media files from one container format to another.\n\n"
+                "**Examples:**\n"
+                "• Convert an unsupported `.mkv` into a universally compatible `.mp4`.\n"
+                "• Transcode heavy `.webm` files.\n"
+                "• Fast stream-copying to ensure quality isn't lost.\n\n"
+                "**Shortcut:** `/c` or `/convert`."
             )
         elif tool == "watermark":
             text = (
@@ -484,8 +531,11 @@ async def handle_help_callbacks(client, callback_query):
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
                 "Adds a custom image watermark (like a logo) to your videos or images.\n\n"
-                "• You can set the position and size.\n"
-                "• **Shortcut:** `/w` or `/watermark`."
+                "**Features:**\n"
+                "• Fully customize the position (Top Left, Bottom Right, Center, etc.).\n"
+                "• Adjust the size of the watermark relative to the video.\n"
+                "• Protect your original content from being stolen.\n\n"
+                "**Shortcut:** `/w` or `/watermark`."
             )
         elif tool == "subtitle":
             text = (
@@ -493,8 +543,12 @@ async def handle_help_callbacks(client, callback_query):
                 "> Pull subs from MKV files.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
-                "Extracts embedded subtitle tracks from video files and gives them to you as `.srt` or `.ass` files.\n\n"
-                "• **No Shortcut yet**, use the Other Features menu."
+                "Extracts embedded subtitle tracks from video files and gives them to you as standalone text files.\n\n"
+                "**Features:**\n"
+                "• Supports multi-track videos (select which language track you want to extract).\n"
+                "• Outputs in standard formats like `.srt` or `.ass`.\n"
+                "• Perfect for downloading subtitles to use on a different video release.\n\n"
+                "**Shortcut:** `/s` or `/subtitle`."
             )
 
         try:
