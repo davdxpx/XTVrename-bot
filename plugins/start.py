@@ -451,6 +451,10 @@ async def handle_help_callbacks(client, callback_query):
                         [InlineKeyboardButton("🤖 Auto-Detect Magic", callback_data="help_auto_detect")],
                         [InlineKeyboardButton("📄 Personal & General Mode", callback_data="help_general")],
                         [InlineKeyboardButton("⚙️ Settings & Info", callback_data="help_settings")],
+                        [InlineKeyboardButton("🎞️ Formats & Codecs", callback_data="help_formats")],
+                        [InlineKeyboardButton("📈 Quotas & Limits", callback_data="help_quotas")],
+                        [InlineKeyboardButton("💎 Premium Plans", callback_data="help_premium")],
+                        [InlineKeyboardButton("🔧 Troubleshooting", callback_data="help_troubleshooting")],
                         [InlineKeyboardButton("❌ Close", callback_data="help_close")],
                     ]
                 ),
@@ -486,79 +490,52 @@ async def handle_help_callbacks(client, callback_query):
         if tool == "rename":
             text = (
                 "**📁 Rename & Tag Media**\n\n"
-                "> The core intelligent media processor.\n"
+                "> The core feature of the bot.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "The Renamer isn't just about changing a filename; it's a full-fledged metadata tagging engine.\n\n"
-                "**🚀 How to Start:**\n"
-                "Simply send, forward, or reply to any file to trigger the Auto-Detector. Or, use `/r` or `/rename` to manually start the wizard.\n\n"
-                "**🧠 Smart Media Mode (Default):**\n"
-                "When you upload a file, the bot uses a complex Regex Matrix to tear apart the filename. It looks for:\n"
-                "• **Title & Year:** E.g., 'Inception 1999'.\n"
-                "• **Seasons & Episodes:** E.g., 'S01E05' or '1x05'.\n"
-                "• **Quality:** E.g., '1080p', '4K', 'HDR'.\n"
-                "• **Language/Codec:** E.g., 'HEVC', 'Dual Audio'.\n\n"
-                "It then queries **The Movie Database (TMDb)** to fetch the official poster, plot summary, and correct capitalization, giving your file a highly professional look.\n\n"
-                "**⚡ Quick Rename Mode:**\n"
-                "If you are uploading random files, courses, or home videos, you can switch your default workflow to Quick Rename Mode via `/settings`. This instantly skips TMDb lookups and applies your custom template.\n\n"
-                "**💡 Pro Tip:**\n"
-                "If the bot guesses the wrong movie/series, you can always hit **'Skip / Manual'** during the prompt to override it with your own name."
+                "**How to Use:**\n"
+                "Simply send any file to the bot. It will automatically scan the name and look up metadata.\n\n"
+                "• **Auto-Detect:** Finds Series, Episode, Year, and Movie Posters.\n"
+                "• **Custom Name:** Bypasses auto-detect for a custom filename.\n"
+                "• **Shortcuts:** `/r` or `/rename`."
             )
         elif tool == "audio":
             text = (
                 "**🎵 Audio Metadata Editor**\n\n"
-                "> Perfect for audiophiles and music collectors.\n"
+                "> Perfect for your music collection.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
-                "The Audio Editor allows you to permanently embed or modify the internal ID3 tags of audio files (like MP3, FLAC, M4A, etc.). This ensures that music players display the correct information instead of 'Unknown Artist'.\n\n"
-                "**🎛️ Features:**\n"
-                "• **Title & Artist:** Correct track names and artist attributions.\n"
-                "• **Album:** Group your songs together flawlessly.\n"
-                "• **Cover Art:** Upload any image to embed it directly inside the audio file. It will show up on your car stereo, phone, or Spotify player.\n\n"
-                "**How to Use:**\n"
-                "Use the shortcut `/a` or `/audio`, then send the bot an audio file to begin the process. You will be prompted step-by-step for the Title, Artist, and Thumbnail."
+                "Allows you to modify the ID3 tags of MP3, FLAC, and other audio files.\n\n"
+                "• You can change the Title, Artist, Album, and embedded Cover Art.\n"
+                "• **Shortcut:** `/a` or `/audio`."
             )
         elif tool == "convert":
             text = (
                 "**🔀 File Converter**\n\n"
-                "> Ultimate format flexibility at blazing speeds.\n"
+                "> Change formats instantly.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
-                "The File Converter utilizes advanced FFmpeg parameters to seamlessly convert media files from one container format to another without needing third-party software on your phone.\n\n"
-                "**🚀 Conversion Modes:**\n"
-                "• **Stream Copy (Lightning Fast):** If the video/audio codecs are compatible, the bot simply changes the 'box' (e.g., from `.mkv` to `.mp4`). This takes seconds and results in **ZERO quality loss**.\n"
-                "• **Transcoding:** If the codecs are completely incompatible (e.g., trying to put a VP9 video into an AVI container), the bot will carefully re-encode the file. *(Note: This can take time depending on file size).* \n\n"
-                "**How to Use:**\n"
-                "Type `/c` or `/convert`, send your media file, and click the button for your desired output format."
+                "Converts media files from one format to another (e.g., MKV to MP4, WEBM to MP4).\n\n"
+                "• Just send the file and select the format.\n"
+                "• **Shortcut:** `/c` or `/convert`."
             )
         elif tool == "watermark":
             text = (
                 "**© Image Watermarker**\n\n"
-                "> Brand, protect, and claim your media.\n"
+                "> Brand your media.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
-                "The Watermarker allows you to overlay a permanent, transparent image (like your channel logo or a custom icon) on top of your video and image files.\n\n"
-                "**🎛️ Detailed Customization:**\n"
-                "• **Positioning Grid:** Place your logo perfectly in the Top Left, Top Right, Center, Bottom Left, or Bottom Right corner.\n"
-                "• **Relative Sizing:** You can adjust how large the watermark appears! Choose from 5% (tiny logo) up to 20% (large overlay) of the video's width.\n"
-                "• **Transparency:** The bot automatically blends the image smoothly so it doesn't ruin the viewing experience.\n\n"
-                "**How to Use:**\n"
-                "Type `/w` or `/watermark`. The bot will ask you to send the video, followed by the image you want to use as the logo."
+                "Adds a custom image watermark (like a logo) to your videos or images.\n\n"
+                "• You can set the position and size.\n"
+                "• **Shortcut:** `/w` or `/watermark`."
             )
         elif tool == "subtitle":
             text = (
                 "**📝 Subtitle Extractor**\n\n"
-                "> Extract hidden text tracks instantly.\n"
+                "> Pull subs from MKV files.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
-                "Many `.mkv` files have soft-coded subtitle tracks embedded deep inside them. The Subtitle Extractor allows you to rip these tracks out and save them as standalone text files (`.srt`, `.ass`, `.vtt`).\n\n"
-                "**🌟 Why use this?**\n"
-                "• If you downloaded a movie but the built-in subtitles don't work on your TV.\n"
-                "• If you want to translate a subtitle track and re-mux it later.\n"
-                "• If you need to share just the subtitle file with a friend.\n\n"
-                "**Features:**\n"
-                "• **Multi-Track Support:** If a movie has English, Spanish, and French tracks, the bot will list them all. You just click the button for the one you want!\n\n"
-                "**How to Use:**\n"
-                "Type `/s` or `/subtitle` and send an MKV file."
+                "Extracts embedded subtitle tracks from video files and gives them to you as `.srt` or `.ass` files.\n\n"
+                "• **Shortcut:** `/s` or `/subtitle`."
             )
 
         try:
@@ -570,17 +547,12 @@ async def handle_help_callbacks(client, callback_query):
         try:
             await callback_query.message.edit_text(
                 "**📁 File Management (/myfiles)**\n\n"
-                "> Welcome to your advanced digital storage locker.\n"
+                "> Your personal cloud storage.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "By using the `/myfiles` command, you enter an interactive dashboard that keeps track of everything you've ever processed through the bot.\n\n"
-                "**⏳ Temporary Storage:**\n"
-                "Every file you rename or convert is saved here temporarily. Depending on your Tier (Free, Standard, Deluxe), files will expire after a set number of days to save space.\n\n"
-                "**📌 Permanent Slots:**\n"
-                "Got a file you NEVER want to lose? You can 'Pin' files to a Permanent Slot. Pinned files bypass the expiration timer and stay safe in your cloud forever.\n\n"
-                "**📁 Custom Folders:**\n"
-                "Tired of a messy list? You can create virtual Folders (e.g., 'Marvel Movies', 'Homework', 'Music') and move your pinned files into them for ultimate organization.\n\n"
-                "**🔄 Restoring Files:**\n"
-                "At any time, you can browse your `/myfiles` list and click 'Resend' to have the bot instantly drop the file back into your chat. Perfect for forwarding things to friends months later!",
+                "Use the `/myfiles` command to access your digital storage locker.\n\n"
+                "• **Temporary Files:** Files you have recently processed are saved here temporarily (based on your plan's expiry limits).\n"
+                "• **Permanent Slots:** You can pin important files to keep them forever! (Limit depends on plan).\n"
+                "• **Custom Folders:** Organize your permanent files into categories.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
@@ -589,18 +561,13 @@ async def handle_help_callbacks(client, callback_query):
     elif data == "help_auto_detect":
         try:
             await callback_query.message.edit_text(
-                "**🤖 Auto-Detect Magic (The Matrix)**\n\n"
-                "> How the bot thinks and sees your files.\n"
+                "**🤖 Auto-Detect Magic**\n\n"
+                "> Automatic Metadata Lookup.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "When you forward a file to the bot, it doesn't just read the text; it analyzes it using a powerful Regex engine called 'Guessit'.\n\n"
-                "**🔍 The Scanning Process:**\n"
-                "1. **Normalization:** It strips out dots `.`, underscores `_`, and garbage text like `[10bit]` or `www.website.com`.\n"
-                "2. **Pattern Matching:** It isolates the Year (e.g., 2023) to definitively split the 'Title' from the 'Quality' tags.\n"
-                "3. **TMDb Query:** It securely contacts The Movie Database API using your isolated Title and Year.\n\n"
-                "**🎭 Smart Handling:**\n"
-                "• **Multi-Episode Files:** If a file is named `S01E01-E02`, the bot knows it contains two episodes and will properly format the final output.\n"
-                "• **Anime & Absolute Numbering:** It supports weird absolute episode numbers often used in Anime releases.\n\n"
-                "**💡 Tip:** If the Auto-Detector fails to find the right movie, rename the file on your device to just `Movie Title (Year).mkv` and send it again. A cleaner filename guarantees a 100% TMDb match!",
+                "When you send a file directly, my Auto-Detection Matrix scans the filename.\n\n"
+                "• **Series/Movies:** I look for the title, year, season, episode, and quality.\n"
+                "• **Smart Metadata:** If it's a known movie or series, I pull official posters and metadata from TMDb!\n\n"
+                "You always get a chance to confirm or correct the details before processing begins.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
@@ -610,22 +577,86 @@ async def handle_help_callbacks(client, callback_query):
         try:
             await callback_query.message.edit_text(
                 "**📄 Personal & General Mode**\n\n"
-                "> For everything that isn't a blockbuster movie.\n"
+                "> Bypass the smart scanners.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "Not everyone uses the bot for TV shows. If you are uploading courses, tutorials, family home videos, or PDF documents, you need to bypass the smart scanners.\n\n"
-                "**📁 Personal Mode (`/p`)**\n"
-                "1. Use `/p` to enter Personal Mode.\n"
-                "2. Send your file. The bot immediately asks you: *'What do you want to name this?'*\n"
-                "3. It completely skips TMDb searches and just applies your exact text. You can also attach your own custom image to serve as the video thumbnail!\n\n"
-                "**📄 General Mode (`/g`) & Variables**\n"
-                "General Mode behaves like a coding template. You can set a Master Template in your `/settings`, and the bot will automatically inject variables into it.\n\n"
-                "**Available Variables:**\n"
-                "• `{filename}` - The original name of the file.\n"
-                "• `{Season_Episode}` - Output: S01E05.\n"
-                "• `{Quality}` - Output: 1080p, HDR.\n"
-                "• `{Year}` - Output: 2024.\n"
-                "• `{Title}` - The base title.\n\n"
-                "*(Note: You never need to type the extension like `.pdf` or `.mp4`. The bot ALWAYS adds the correct extension automatically!)*",
+                "**📁 Personal Files & Home Videos**\n"
+                "1. Send your personal video.\n"
+                "2. When prompted with TMDb results, select **'Skip / Manual'**.\n"
+                "3. Set custom names and thumbnails for things not on TMDb.\n\n"
+                "**📄 General Mode & Variables**\n"
+                "General mode bypasses metadata completely. Use `/g`.\n"
+                "• `{filename}` - Original filename\n"
+                "• `{Season_Episode}` - Ex: S01E01\n"
+                "• `{Quality}` - Ex: 1080p\n"
+                "• `{Year}`, `{Title}`\n"
+                "*(Extensions are always added automatically)*",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
+
+    elif data == "help_formats":
+        try:
+            await callback_query.message.edit_text(
+                "**🎞️ Formats & Codecs**\n\n"
+                "> Supported media formats.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Supported Video Formats:**\n"
+                "• `.mp4`, `.mkv`, `.avi`, `.webm`, `.flv`\n\n"
+                "**Supported Audio Formats:**\n"
+                "• `.mp3`, `.flac`, `.m4a`, `.wav`, `.aac`\n\n"
+                "**Supported Image Formats:**\n"
+                "• `.jpg`, `.png`, `.webp`, `.jpeg`\n\n"
+                "*(The bot can process any extension, but specific tools like the Converter or Audio Editor only work with media files!)*",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
+
+    elif data == "help_quotas":
+        try:
+            await callback_query.message.edit_text(
+                "**📈 Quotas & Limits**\n\n"
+                "> Fair usage system.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "To keep the bot fast and stable, daily limits are applied. These reset every 24 hours.\n\n"
+                "• **Daily Files:** The maximum number of files you can process per day.\n"
+                "• **Daily Egress:** The maximum total bandwidth (in MB or GB) you can process per day.\n"
+                "• **MyFiles Expiry:** Temporary files are deleted from your storage locker after a set number of days to free up space.\n\n"
+                "Check your profile or use `/myfiles` to view your current usage.",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
+
+    elif data == "help_premium":
+        try:
+            await callback_query.message.edit_text(
+                "**💎 Premium Plans**\n\n"
+                "> Upgrade your experience.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Premium users unlock a completely different tier of processing power.\n\n"
+                "**Benefits:**\n"
+                "• **Priority Queue:** Skip the wait times when the bot is under heavy load.\n"
+                "• **Bigger Limits:** Huge increases to Daily Egress and Daily File limits.\n"
+                "• **Permanent Storage:** Store significantly more files in your `/myfiles` locker forever.\n"
+                "• **Access to Heavy Tools:** Exclusive access to CPU-intensive tools like the Subtitle Extractor or Video Converter (if restricted by the Admin).\n\n"
+                "Use the Premium Dashboard on the `/start` menu to view available plans.",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
+
+    elif data == "help_troubleshooting":
+        try:
+            await callback_query.message.edit_text(
+                "**🔧 Troubleshooting**\n\n"
+                "> Common issues and solutions.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• **Bot isn't responding:** Ensure you aren't sending files too quickly. Wait a few seconds and try again.\n"
+                "• **Wrong Metadata:** If the auto-detect grabs the wrong movie, try renaming your file slightly before sending it (e.g., `Movie.Name.2023.mkv`).\n"
+                "• **File too large:** Telegram limits bot uploads to 2GB (or 4GB for Premium users). If your file is larger, it cannot be processed.\n"
+                "• **Stuck processing:** Use the `/end` command to cancel your current session and start over.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
@@ -635,36 +666,23 @@ async def handle_help_callbacks(client, callback_query):
         if Config.PUBLIC_MODE:
             text = (
                 "**⚙️ Settings & Info**\n\n"
-                "> Total control over your renaming experience.\n"
+                "> Customize your experience.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "By typing the `/settings` command, you open up your Personal Configuration dashboard. These settings apply globally to everything you upload.\n\n"
-                "**📝 Template Management:**\n"
-                "• **Filename Templates:** You can create different output structures for Movies, Series, and Subtitles. \n"
-                "  *(Example: `[MyChannel] {Title} ({Year}) - {Quality}`)*\n"
-                "• **Caption Templates:** Customize the text that appears *under* the video when it's sent. You can inject `{size}`, `{duration}`, and `{filename}` dynamically!\n\n"
-                "**🖼️ Default Thumbnail:**\n"
-                "Upload a universal thumbnail (like your channel logo). If you upload a video that doesn't have a poster, the bot will instantly stamp your Default Thumbnail onto it.\n\n"
-                "**🔤 Preferred Separator:**\n"
-                "Choose if you want spaces (` `), dots (`.`), or underscores (`_`) to separate words in your final filenames.\n\n"
-                "**🌍 Language & Workflow:**\n"
-                "Change the language TMDb uses to fetch plots (e.g., Spanish, German, Hindi), and toggle between Smart Mode and Quick Mode."
+                "• Use the `/settings` command to access your personal settings.\n"
+                "• Configure custom **Filename Templates** (e.g., `{Title} ({Year}) [{Quality}]`).\n"
+                "• Set your own **Default Thumbnail** or disable it.\n"
+                "• Customize **Caption Templates** and Metadata.\n"
+                "• Use `/info` to see details about this bot and support contact."
             )
         else:
             text = (
                 "**⚙️ Settings & Admin**\n\n"
-                "> Total control over the global renaming experience.\n"
+                "> Customize your experience.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "By typing the `/admin` command, you open up the CEO Configuration dashboard. These settings affect ALL files processed by the bot.\n\n"
-                "**📝 Template Management:**\n"
-                "• **Filename Templates:** You can create different output structures for Movies, Series, and Subtitles. \n"
-                "  *(Example: `[MyChannel] {Title} ({Year}) - {Quality}`)*\n"
-                "• **Caption Templates:** Customize the text that appears *under* the video when it's sent. You can inject `{size}`, `{duration}`, and `{filename}` dynamically!\n\n"
-                "**🖼️ Default Thumbnail:**\n"
-                "Upload a universal thumbnail (like your channel logo). If you upload a video that doesn't have a poster, the bot will instantly stamp your Default Thumbnail onto it.\n\n"
-                "**🔤 Preferred Separator:**\n"
-                "Choose if you want spaces (` `), dots (`.`), or underscores (`_`) to separate words in your final filenames.\n\n"
-                "**🌍 Language & Workflow:**\n"
-                "Change the language TMDb uses to fetch plots (e.g., Spanish, German, Hindi), and toggle between Smart Mode and Quick Mode."
+                "• Use the `/admin` command to access advanced settings.\n"
+                "• Configure custom **Filename Templates** (e.g., `{Title} ({Year}) [{Quality}]`).\n"
+                "• Set a **Default Thumbnail** for all your uploads.\n"
+                "• Customize **Caption Templates** and more!"
             )
         try:
             await callback_query.message.edit_text(

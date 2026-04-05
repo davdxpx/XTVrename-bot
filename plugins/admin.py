@@ -500,13 +500,15 @@ async def admin_callback(client, callback_query):
         }
         name = display_names.get(field, field.capitalize())
 
+        cancel_cb = "admin_myfiles_edit_limits_global" if plan == "global" else f"admin_edit_plan_{plan}"
+
         try:
             await callback_query.message.edit_text(
                 f"⚙️ **Set {name}**\n"
                 f"For the **{plan.capitalize()}** Tier.\n\n"
                 f"Please send a number in the chat (e.g. `50` or `30`).\n"
                 f"> 💡 *Tip: Send `-1` to set this limit to UNLIMITED.*",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan}")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]])
             )
         except MessageNotModified:
             pass
@@ -2743,11 +2745,13 @@ async def handle_admin_text(client, message):
 
         from pyrogram.errors import StopPropagation
 
+        cancel_cb = "admin_myfiles_edit_limits_global" if plan == "global" else f"admin_edit_plan_{plan}"
+
         try:
             val_int = int(val)
         except ValueError:
             await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]])
             )
             raise StopPropagation
 
@@ -2769,7 +2773,7 @@ async def handle_admin_text(client, message):
             await db.settings.update_one({"_id": "global_settings"}, {"$set": {"myfiles_limits": limits}}, upsert=True)
 
         await edit_or_reply(client, message, msg_id, f"✅ {plan.capitalize()} {field} limit updated to `{val_int}`.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan}")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=cancel_cb)]])
         )
         admin_sessions.pop(user_id, None)
         raise StopPropagation
@@ -3062,7 +3066,7 @@ async def handle_admin_text(client, message):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "❌ Cancel", callback_data="admin_edit_plan_free"
+                                    "❌ Cancel", callback_data="admin_main"
                                 )
                             ]
                         ]
