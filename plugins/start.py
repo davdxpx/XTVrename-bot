@@ -650,15 +650,81 @@ async def handle_help_callbacks(client, callback_query):
     elif data == "help_troubleshooting":
         try:
             await callback_query.message.edit_text(
-                "**🔧 Troubleshooting**\n\n"
+                "**🔧 Troubleshooting & FAQ**\n\n"
                 "> Common issues and solutions.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "• **Bot isn't responding:** Ensure you aren't sending files too quickly. Wait a few seconds and try again.\n"
-                "• **Wrong Metadata:** If the auto-detect grabs the wrong movie, try renaming your file slightly before sending it (e.g., `Movie.Name.2023.mkv`).\n"
-                "• **File too large:** Telegram limits bot uploads to 2GB (or 4GB for Premium users). If your file is larger, it cannot be processed.\n"
-                "• **Stuck processing:** Use the `/end` command to cancel your current session and start over.",
-                reply_markup=InlineKeyboardMarkup(back_button),
+                "Select the issue you are experiencing below to see how to fix it:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("🤖 Bot Not Responding", callback_data="help_ts_no_response"),
+                         InlineKeyboardButton("❌ Wrong Metadata", callback_data="help_ts_wrong_meta")],
+                        [InlineKeyboardButton("📦 File Too Large", callback_data="help_ts_file_size"),
+                         InlineKeyboardButton("⏳ Stuck Processing", callback_data="help_ts_stuck")],
+                        [InlineKeyboardButton("🎵 Missing Audio/Subs", callback_data="help_ts_missing_tracks"),
+                         InlineKeyboardButton("📝 Subtitles Won't Extract", callback_data="help_ts_subs_fail")],
+                        [InlineKeyboardButton("🔙 Back to Help Menu", callback_data="help_guide")]
+                    ]
+                )
             )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_ts_"):
+        issue = data.replace("help_ts_", "")
+        back_to_ts = [[InlineKeyboardButton("🔙 Back to Troubleshooting", callback_data="help_troubleshooting")]]
+
+        if issue == "no_response":
+            text = (
+                "**🤖 Bot Not Responding**\n\n"
+                "If the bot is completely ignoring your files or commands, it could be due to a few reasons:\n\n"
+                "**1. Rate Limiting:** You might be sending files too quickly. The bot has an internal anti-spam system. Wait 10-15 seconds and try sending one file.\n"
+                "**2. Active Session:** The bot might be stuck waiting for your input on a previous task. Type `/end` to completely reset your session and try again.\n"
+                "**3. Global Maintenance:** Occasionally, the bot undergoes maintenance or restarts. Give it a couple of minutes."
+            )
+        elif issue == "wrong_meta":
+            text = (
+                "**❌ Wrong Metadata / Bad TMDb Match**\n\n"
+                "Sometimes, the Auto-Detector grabs the wrong poster or movie name because the original filename was too messy.\n\n"
+                "**How to fix it:**\n"
+                "1. **Clean the Filename:** Rename the file on your phone/PC *before* sending it. Format it like `Movie Title (Year).mp4`. This gives the bot a 99% success rate.\n"
+                "2. **Use Quick Rename:** If it's not a real movie, go to `/settings` and enable **Quick Rename Mode**. This skips TMDb entirely!\n"
+                "3. **Manual Override:** When the bot asks you to confirm the TMDb details, just hit **Skip / Manual**."
+            )
+        elif issue == "file_size":
+            text = (
+                "**📦 File Too Large (2GB Limit)**\n\n"
+                "Telegram enforces strict limits on bot uploads.\n\n"
+                "**The Limits:**\n"
+                "• **Free Users:** 2.0 GB maximum per file.\n"
+                "• **Premium Users:** 4.0 GB maximum (if enabled by the Admin).\n\n"
+                "**Workarounds:**\n"
+                "If your file is 2.5GB, you must either compress it on your computer before sending it, or upgrade to a Premium Plan to unlock the 4GB bot capacity."
+            )
+        elif issue == "stuck":
+            text = (
+                "**⏳ Stuck Processing**\n\n"
+                "If the progress bar seems completely frozen at a specific percentage for several minutes:\n\n"
+                "**1. Cancel the Task:** Type the `/end` command. This forces the bot to abort whatever it is doing and clears your active state.\n"
+                "**2. Corrupt File:** The file you uploaded might be broken or incomplete. Try playing it on your device to ensure it's not corrupted.\n"
+                "**3. Telegram Server Lag:** Sometimes Telegram's upload servers experience severe delays. Cancel it and try again later."
+            )
+        elif issue == "missing_tracks":
+            text = (
+                "**🎵 Missing Audio or Subtitle Tracks**\n\n"
+                "If you converted a file or extracted a track and something is missing:\n\n"
+                "**1. Not Supported by Format:** If you converted an MKV to MP4, remember that MP4 does *not* support certain subtitle formats natively. The bot strips them to prevent file corruption.\n"
+                "**2. Hardcoded Subs:** If the subtitles are 'burned in' (part of the actual video picture), the bot cannot extract them."
+            )
+        elif issue == "subs_fail":
+            text = (
+                "**📝 Subtitles Won't Extract**\n\n"
+                "If the Subtitle Extractor fails to rip the `.srt` or `.ass` file:\n\n"
+                "**1. Image-Based Subs:** Some subtitles (like PGS or VobSub/PGS) are actually *images*, not text. The bot cannot extract image-based subtitles yet.\n"
+                "**2. No Embedded Tracks:** The video might not actually have embedded subtitle files; you might have just been playing it alongside a separate file on your PC."
+            )
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_ts))
         except MessageNotModified:
             pass
 

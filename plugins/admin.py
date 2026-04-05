@@ -2672,11 +2672,6 @@ async def handle_admin_photo(client, message):
         except MessageNotModified:
             pass
 
-@Client.on_message(
-    (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
-    group=1,
-)
-
 async def edit_or_reply(client, message, msg_id, text, reply_markup=None):
     # Try to edit the original bot prompt to reduce spam
     try:
@@ -2698,6 +2693,10 @@ async def edit_or_reply(client, message, msg_id, text, reply_markup=None):
     # Fallback if editing fails
     return await message.reply_text(text, reply_markup=reply_markup)
 
+@Client.on_message(
+    (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
+    group=1,
+)
 async def handle_admin_text(client, message):
     user_id = message.from_user.id
     if not is_admin(user_id):
@@ -3703,7 +3702,7 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
         [InlineKeyboardButton("← Back", callback_data="admin_usage_dashboard")]
     )
 
-    await edit_or_reply(client, message, msg_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 debug("✅ Loaded handler: admin_block_user_cb")
 
@@ -3787,7 +3786,7 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
                 user = await client.get_users(val)
                 user_id = user.id
             except Exception:
-                await edit_or_reply(client, message, msg_id, "❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
+                await message.reply_text("❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
