@@ -36,6 +36,14 @@ async def handle_premium_command(client, message):
             is_prem = True
             current_plan = user.get("premium_plan", "standard")
 
+    limits = config.get("myfiles_limits", {}).get(current_plan, {})
+    perm_limit = limits.get("permanent_limit", 50)
+    folder_limit = limits.get("folder_limit", 5)
+
+    perm_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
+    folder_str = str(folder_limit) if folder_limit != -1 else "Unlimited"
+
+
     if is_prem:
         exp_text = "Lifetime"
         if user.get("premium_expiry"):
@@ -43,12 +51,6 @@ async def handle_premium_command(client, message):
 
         plan_display = "⭐ Premium Standard" if current_plan == "standard" else "💎 Premium Deluxe"
         status_emoji = "⭐" if current_plan == "standard" else "💎"
-
-        myfiles_limits = config.get("myfiles_limits", {}).get(current_plan, {})
-        perm_limit = myfiles_limits.get("permanent_limit", 50)
-        perm_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
-        folder_limit = myfiles_limits.get("folder_limit", 5)
-        folder_str = str(folder_limit) if folder_limit != -1 else "Unlimited"
 
         dash_text = (
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -195,6 +197,13 @@ async def handle_user_premium_menu(client, callback_query):
         if user.get("is_premium") and (exp is None or exp > time.time()):
             is_prem = True
             current_plan = user.get("premium_plan", "standard")
+
+    limits = config.get("myfiles_limits", {}).get(current_plan, {})
+    perm_limit = limits.get("permanent_limit", 50)
+    folder_limit = limits.get("folder_limit", 5)
+
+    perm_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
+    folder_str = str(folder_limit) if folder_limit != -1 else "Unlimited"
 
     if is_prem:
         exp_text = "Lifetime"

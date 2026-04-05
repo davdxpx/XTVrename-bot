@@ -21,23 +21,6 @@ async def handle_start_command_unique(client, message):
     user_id = message.from_user.id
     logger.debug(f"CMD received: {message.text} from {user_id}")
 
-    if not Config.PUBLIC_MODE:
-        if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
-            logger.warning(f"Unauthorized access by {user_id}")
-            return
-        bot_name = "**𝕏TV MediaStudio™**"
-        community_name = "official XTV"
-    else:
-        config = await db.get_public_config()
-        if not await check_force_sub(client, user_id):
-            await send_force_sub_gate(client, message, config)
-            return
-
-        await check_and_send_welcome(client, message, config)
-
-        bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
-        community_name = config.get("community_name", "Our Community")
-
     if message.command and len(message.command) > 1:
         param = message.command[1]
 
@@ -51,6 +34,11 @@ async def handle_start_command_unique(client, message):
                     if not Config.PUBLIC_MODE:
                         if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
                             await message.reply_text("❌ Access Denied.")
+                            raise StopPropagation
+                    else:
+                        config = await db.get_public_config()
+                        if not await check_force_sub(client, user_id):
+                            await send_force_sub_gate(client, message, config)
                             raise StopPropagation
 
                     await client.copy_message(
@@ -83,6 +71,23 @@ async def handle_start_command_unique(client, message):
                 return
             except Exception as e:
                 pass
+
+    if not Config.PUBLIC_MODE:
+        if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
+            logger.warning(f"Unauthorized access by {user_id}")
+            return
+        bot_name = "**𝕏TV MediaStudio™**"
+        community_name = "official XTV"
+    else:
+        config = await db.get_public_config()
+        if not await check_force_sub(client, user_id):
+            await send_force_sub_gate(client, message, config)
+            return
+
+        await check_and_send_welcome(client, message, config)
+
+        bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
+        community_name = config.get("community_name", "Our Community")
 
     is_new_user = False
     user_usage = await db.get_user_usage(user_id)
