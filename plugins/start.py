@@ -64,11 +64,26 @@ async def handle_start_command_unique(client, message):
 
                     await message.reply_text(f"📁 **File Received**\n\n{share_text}")
 
-                    await client.copy_message(
-                        chat_id=user_id,
-                        from_chat_id=f["channel_id"],
-                        message_id=f["message_id"]
-                    )
+                    from pyrogram.errors import PeerIdInvalid
+                    try:
+                        await client.copy_message(
+                            chat_id=user_id,
+                            from_chat_id=f["channel_id"],
+                            message_id=f["message_id"]
+                        )
+                    except PeerIdInvalid:
+                        try:
+                            await client.get_chat(f["channel_id"])
+                            await client.copy_message(
+                                chat_id=user_id,
+                                from_chat_id=f["channel_id"],
+                                message_id=f["message_id"]
+                            )
+                        except Exception as inner_e:
+                            logger.error(f"Error serving shared file (Peer fallback failed): {inner_e}")
+                            await message.reply_text("❌ The file is currently unavailable because the database channel is not accessible.")
+                            raise StopPropagation
+
                     await client.send_sticker(chat_id=user_id, sticker="CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
 
                     if not is_owner_premium:
@@ -76,7 +91,6 @@ async def handle_start_command_unique(client, message):
                             "> **Rename. Convert. Organize.**\n"
                             "> Process your own media with 𝕏TV MediaStudio™ today!"
                         )
-                        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
                         await message.reply_text(
                             ad_text,
                             reply_markup=InlineKeyboardMarkup(
@@ -268,7 +282,7 @@ async def handle_audio_command(client, message):
         await message.reply_text("❌ This feature is currently disabled by the Admin.")
         return
 
-    from plugins.flow import handle_audio_editor_menu
+    from tools.AudioMetadataEditor import handle_audio_editor_menu
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -324,7 +338,7 @@ async def handle_convert_command(client, message):
         await message.reply_text("❌ This feature is currently disabled by the Admin.")
         return
 
-    from plugins.flow import handle_file_converter_menu
+    from tools.FileConverter import handle_file_converter_menu
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -361,7 +375,7 @@ async def handle_watermark_command(client, message):
         await message.reply_text("❌ This feature is currently disabled by the Admin.")
         return
 
-    from plugins.flow import handle_watermarker_menu
+    from tools.ImageWatermarker import handle_watermarker_menu
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -398,7 +412,7 @@ async def handle_subtitle_command(client, message):
         await message.reply_text("❌ This feature is currently disabled by the Admin.")
         return
 
-    from plugins.flow import handle_subtitle_extractor_menu
+    from tools.SubtitleExtractor import handle_subtitle_extractor_menu
 
     class MockCallbackQuery:
         def __init__(self, message):
