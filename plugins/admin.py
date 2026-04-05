@@ -342,7 +342,7 @@ async def admin_callback(client, callback_query):
 
     if data.startswith("prompt_myfiles_db_"):
         plan = data.replace("prompt_myfiles_db_", "")
-        admin_sessions[user_id] = f"awaiting_myfiles_db_{plan}"
+        admin_sessions[user_id] = {"state": f"awaiting_myfiles_db_{plan}", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 f"🗄️ **Set DB Channel for {plan.capitalize()}**\n\n"
@@ -491,7 +491,7 @@ async def admin_callback(client, callback_query):
         parts = data.replace("prompt_myfiles_lim_", "").split("_")
         plan = parts[0]
         field = parts[1]
-        admin_sessions[user_id] = f"awaiting_myfiles_lim_{plan}_{field}"
+        admin_sessions[user_id] = {"state": f"awaiting_myfiles_lim_{plan}_{field}", "msg_id": callback_query.message.id}
 
         display_names = {
             "permanent": "📌 Permanent Storage Slots",
@@ -706,7 +706,7 @@ async def admin_callback(client, callback_query):
 
     if data.startswith("prompt_pay_"):
         method = data.replace("prompt_pay_", "")
-        admin_sessions[user_id] = f"awaiting_pay_{method}"
+        admin_sessions[user_id] = {"state": f"awaiting_pay_{method}", "msg_id": callback_query.message.id}
 
         cancel_data = "admin_pay_settings"
         if method.startswith("crypto_"):
@@ -749,7 +749,7 @@ async def admin_callback(client, callback_query):
 
     if data.startswith("prompt_pay_disc_"):
         months = data.replace("prompt_pay_disc_", "")
-        admin_sessions[user_id] = f"awaiting_pay_disc_{months}"
+        admin_sessions[user_id] = {"state": f"awaiting_pay_disc_{months}", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 f"📉 **Edit {months}-Month Discount**\n\nPlease send the new discount percentage (e.g. `10` or `15`):",
@@ -1181,7 +1181,7 @@ async def admin_callback(client, callback_query):
                         pass
                     return
 
-                admin_sessions[user_id] = f"awaiting_premium_{plan_name}_{field}"
+                admin_sessions[user_id] = {"state": f"awaiting_premium_{plan_name}_{field}", "msg_id": callback_query.message.id}
 
                 prompts = {
                     "files": "📄 **Send the new daily file limit.**\nSend `0` to disable.",
@@ -1220,7 +1220,7 @@ async def admin_callback(client, callback_query):
 
     if data.startswith("prompt_prem_egress_custom_"):
         plan_name = data.replace("prompt_prem_egress_custom_", "")
-        admin_sessions[user_id] = f"awaiting_premium_{plan_name}_egress"
+        admin_sessions[user_id] = {"state": f"awaiting_premium_{plan_name}_egress", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "📦 **Send the new daily egress limit.**\n\nYou can send the value in MB (e.g., `2048`) or use `GB` format (e.g., `2 GB` or `5.5 GB`).\nSend `0` to disable.",
@@ -1252,10 +1252,8 @@ async def admin_callback(client, callback_query):
         plan_name = parts[0]
         currency = parts[1]
 
-        admin_sessions[user_id] = {
-            "state": f"awaiting_premium_{plan_name}_price",
-            "currency": currency
-        }
+        admin_sessions[user_id] = {"state": f"awaiting_premium_{plan_name}_price", "currency": currency
+        , "msg_id": callback_query.message.id}
 
         try:
             await callback_query.message.edit_text(
@@ -1267,7 +1265,7 @@ async def admin_callback(client, callback_query):
         return
 
     if data == "prompt_trial_days":
-        admin_sessions[user_id] = "awaiting_trial_days"
+        admin_sessions[user_id] = {"state": "awaiting_trial_days", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "⏱ **Send the new PREMIUM TRIAL duration in days (e.g., 7).**\nSend `0` to disable.",
@@ -1278,7 +1276,7 @@ async def admin_callback(client, callback_query):
         return
 
     if data == "prompt_global_daily_egress":
-        admin_sessions[user_id] = "awaiting_global_daily_egress"
+        admin_sessions[user_id] = {"state": "awaiting_global_daily_egress", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "🌍 **Send the new global daily egress limit in MB (e.g., 102400 for 100GB).**\nSend `0` to disable.",
@@ -1291,7 +1289,7 @@ async def admin_callback(client, callback_query):
         return
 
     if data == "dumb_add":
-        admin_sessions[user_id] = "awaiting_dumb_add"
+        admin_sessions[user_id] = {"state": "awaiting_dumb_add", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "➕ **Add Dumb Channel**\n\n"
@@ -1398,7 +1396,7 @@ async def admin_callback(client, callback_query):
         return
 
     if data == "prompt_admin_dumb_timeout":
-        admin_sessions[user_id] = "awaiting_dumb_timeout"
+        admin_sessions[user_id] = {"state": "awaiting_dumb_timeout", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "⏱ **Send the new timeout in seconds (e.g., 3600 for 1 hour):**",
@@ -1577,7 +1575,7 @@ async def admin_callback(client, callback_query):
             return
 
         elif data == "admin_fs_add_channel":
-            admin_sessions[user_id] = "awaiting_fs_add_channel"
+            admin_sessions[user_id] = {"state": "awaiting_fs_add_channel", "msg_id": callback_query.message.id}
             try:
                 await callback_query.message.edit_text(
                     "📢 **Add Force-Sub Channel**\n\n"
@@ -1672,7 +1670,7 @@ async def admin_callback(client, callback_query):
             return
 
         elif data == "admin_fs_set_banner":
-            admin_sessions[user_id] = "awaiting_fs_banner"
+            admin_sessions[user_id] = {"state": "awaiting_fs_banner", "msg_id": callback_query.message.id}
             try:
                 await callback_query.message.edit_text(
                     "🖼 **Send me a photo** to use as the Force-Sub gate banner.\n\nSend /cancel to keep the current one.",
@@ -1701,7 +1699,7 @@ async def admin_callback(client, callback_query):
 
             text += "Send your new gate message. You can use `{channel}`, `{bot_name}`, `{community}`.\nSend /cancel to keep the current one."
 
-            admin_sessions[user_id] = "awaiting_fs_msg"
+            admin_sessions[user_id] = {"state": "awaiting_fs_msg", "msg_id": callback_query.message.id}
             try:
                 await callback_query.message.edit_text(
                     text,
@@ -1734,7 +1732,7 @@ async def admin_callback(client, callback_query):
             return
 
         elif data == "admin_fs_btn_label":
-            admin_sessions[user_id] = "awaiting_fs_btn_label"
+            admin_sessions[user_id] = {"state": "awaiting_fs_btn_label", "msg_id": callback_query.message.id}
             try:
                 await callback_query.message.edit_text(
                     "🔘 **Edit Button Label**\n\nSend the new label text (without emoji):",
@@ -1745,7 +1743,7 @@ async def admin_callback(client, callback_query):
             return
 
         elif data == "admin_fs_btn_emoji":
-            admin_sessions[user_id] = "awaiting_fs_btn_emoji"
+            admin_sessions[user_id] = {"state": "awaiting_fs_btn_emoji", "msg_id": callback_query.message.id}
             try:
                 await callback_query.message.edit_text(
                     "😀 **Edit Button Emoji**\n\nSend a single emoji character:",
@@ -1764,7 +1762,7 @@ async def admin_callback(client, callback_query):
             return
 
         elif data == "admin_fs_edit_welcome":
-            admin_sessions[user_id] = "awaiting_fs_welcome"
+            admin_sessions[user_id] = {"state": "awaiting_fs_welcome", "msg_id": callback_query.message.id}
             config = await db.get_public_config()
             current_msg = config.get("force_sub_welcome_text", "✅ Welcome aboard! You're all set. Send your file and let's go.")
             try:
@@ -1848,7 +1846,7 @@ async def admin_callback(client, callback_query):
         data.startswith("prompt_public_") or data.startswith("prompt_daily_")
     ):
         field = data.replace("prompt_public_", "").replace("prompt_daily_", "daily_")
-        admin_sessions[user_id] = f"awaiting_public_{field}"
+        admin_sessions[user_id] = {"state": f"awaiting_public_{field}", "msg_id": callback_query.message.id}
 
         if field == "bot_name":
             text = "🤖 **Send the new bot name:**"
@@ -1977,7 +1975,7 @@ async def admin_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "prompt_admin_thumb_set":
-        admin_sessions[user_id] = "awaiting_thumb"
+        admin_sessions[user_id] = {"state": "awaiting_thumb", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "🖼 **Send the new photo** to set as the default thumbnail:",
@@ -2162,7 +2160,7 @@ async def admin_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "prompt_admin_caption":
-        admin_sessions[user_id] = "awaiting_template_caption"
+        admin_sessions[user_id] = {"state": "awaiting_template_caption", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
@@ -2347,7 +2345,7 @@ async def admin_callback(client, callback_query):
             pass
     elif data.startswith("prompt_fn_template_"):
         field = data.replace("prompt_fn_template_", "")
-        admin_sessions[user_id] = f"awaiting_fn_template_{field}"
+        admin_sessions[user_id] = {"state": f"awaiting_fn_template_{field}", "msg_id": callback_query.message.id}
         try:
             vars_text = ""
             if field.lower() in ["series", "subtitles_series"]:
@@ -2460,7 +2458,7 @@ async def admin_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "prompt_admin_channel":
-        admin_sessions[user_id] = "awaiting_admin_channel"
+        admin_sessions[user_id] = {"state": "awaiting_admin_channel", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "⚙️ **Send the new Global Channel name variable to use in templates (e.g. `@MyChannel`):**",
@@ -2600,7 +2598,7 @@ async def admin_callback(client, callback_query):
             pass
     elif data.startswith("prompt_template_"):
         field = data.replace("prompt_template_", "")
-        admin_sessions[user_id] = f"awaiting_template_{field}"
+        admin_sessions[user_id] = {"state": f"awaiting_template_{field}", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 f"✏️ **Send the new template text for {field.capitalize()}:**",
@@ -2625,7 +2623,8 @@ async def handle_admin_photo(client, message):
     if not is_admin(user_id):
         raise ContinuePropagation
 
-    state = admin_sessions.get(user_id)
+    state_obj = admin_sessions.get(user_id)
+    state = state_obj if isinstance(state_obj, str) else (state_obj.get("state") if state_obj else None)
     if state == "awaiting_fs_banner":
         try:
             file_id = message.photo.file_id
@@ -2675,14 +2674,39 @@ async def handle_admin_photo(client, message):
     (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
     group=1,
 )
+
+async def edit_or_reply(client, message, msg_id, text, reply_markup=None):
+    # Try to edit the original bot prompt to reduce spam
+    try:
+        await message.delete() # delete user's input
+    except Exception:
+        pass
+
+    if msg_id:
+        try:
+            return await client.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=msg_id,
+                text=text,
+                reply_markup=reply_markup
+            )
+        except Exception:
+            pass
+
+    # Fallback if editing fails
+    return await message.reply_text(text, reply_markup=reply_markup)
+
 async def handle_admin_text(client, message):
     user_id = message.from_user.id
     if not is_admin(user_id):
         raise ContinuePropagation
 
-    state = admin_sessions.get(user_id)
-    if not state:
+    state_obj = admin_sessions.get(user_id)
+    if not state_obj:
         raise ContinuePropagation
+
+    state = state_obj if isinstance(state_obj, str) else state_obj.get("state")
+    msg_id = None if isinstance(state_obj, str) else state_obj.get("msg_id")
 
     if isinstance(state, str) and state.startswith("awaiting_myfiles_db_"):
         plan = state.replace("awaiting_myfiles_db_", "")
@@ -2696,16 +2720,14 @@ async def handle_admin_text(client, message):
                 chat = await client.get_chat(val)
                 ch_id = chat.id
             except Exception as e:
-                await message.reply_text(
-                    f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
+                await edit_or_reply(client, message, msg_id, f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_myfiles_db_channels")]])
                 )
                 return
 
         if ch_id:
             await db.update_db_channel(plan, ch_id)
-            await message.reply_text(
-                f"✅ {plan.capitalize()} DB Channel updated to `{ch_id}`.",
+            await edit_or_reply(client, message, msg_id, f"✅ {plan.capitalize()} DB Channel updated to `{ch_id}`.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_myfiles_db_channels")]])
             )
             admin_sessions.pop(user_id, None)
@@ -2724,8 +2746,7 @@ async def handle_admin_text(client, message):
         try:
             val_int = int(val)
         except ValueError:
-            await message.reply_text(
-                "❌ Invalid number. Try again.",
+            await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_myfiles_edit_limits_{plan}")]])
             )
             raise StopPropagation
@@ -2747,8 +2768,7 @@ async def handle_admin_text(client, message):
         else:
             await db.settings.update_one({"_id": "global_settings"}, {"$set": {"myfiles_limits": limits}}, upsert=True)
 
-        await message.reply_text(
-            f"✅ {plan.capitalize()} {field} limit updated to `{val_int}`.",
+        await edit_or_reply(client, message, msg_id, f"✅ {plan.capitalize()} {field} limit updated to `{val_int}`.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan}")]])
         )
         admin_sessions.pop(user_id, None)
@@ -2757,16 +2777,14 @@ async def handle_admin_text(client, message):
     if state == "awaiting_global_daily_egress":
         val = message.text.strip() if message.text else ""
         if not val.isdigit():
-            await message.reply_text(
-                "❌ Invalid number. Try again.",
+            await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("❌ Cancel", callback_data="admin_limits_menu")]]
                 ),
             )
             return
         await db.update_global_daily_egress_limit(float(val))
-        await message.reply_text(
-            f"✅ Global daily egress limit updated to `{val}` MB.",
+        await edit_or_reply(client, message, msg_id, f"✅ Global daily egress limit updated to `{val}` MB.",
             reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back", callback_data="admin_limits_menu")]]
             ),
@@ -2825,8 +2843,7 @@ async def handle_admin_text(client, message):
                 user = await client.get_users(val)
                 user_id = user.id
             except Exception:
-                await message.reply_text(
-                    "❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
+                await edit_or_reply(client, message, msg_id, "❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
@@ -2847,8 +2864,7 @@ async def handle_admin_text(client, message):
     if state == "awaiting_dumb_timeout":
         val = message.text.strip() if message.text else ""
         if not val.isdigit():
-            await message.reply_text(
-                "❌ Invalid number. Try again.",
+            await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -2861,8 +2877,7 @@ async def handle_admin_text(client, message):
             )
             return
         await db.update_dumb_channel_timeout(int(val))
-        await message.reply_text(
-            f"✅ Dumb channel timeout updated to `{val}` seconds.",
+        await edit_or_reply(client, message, msg_id, f"✅ Dumb channel timeout updated to `{val}` seconds.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("← Back", callback_data="admin_templates_menu")]]
             ),
@@ -2874,8 +2889,7 @@ async def handle_admin_text(client, message):
         val = message.text.strip() if message.text else ""
         if val.lower() == "disable":
             admin_sessions.pop(user_id, None)
-            await message.reply_text(
-                "Cancelled.",
+            await edit_or_reply(client, message, msg_id, "Cancelled.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -2899,8 +2913,7 @@ async def handle_admin_text(client, message):
                 ch_id = chat.id
                 ch_name = chat.title or "Channel"
             except Exception as e:
-                await message.reply_text(
-                    f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
+                await edit_or_reply(client, message, msg_id, f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]]
                     ),
@@ -2915,8 +2928,7 @@ async def handle_admin_text(client, message):
                 logger.warning(f"Could not export invite link for {ch_id}: {e}")
 
             await db.add_dumb_channel(ch_id, ch_name, invite_link=invite_link)
-            await message.reply_text(
-                f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)",
+            await edit_or_reply(client, message, msg_id, f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -2938,8 +2950,7 @@ async def handle_admin_text(client, message):
         if state.startswith("awaiting_pay_disc_"):
             months = state.replace("awaiting_pay_disc_", "")
             if not val.isdigit() or not (0 <= int(val) <= 99):
-                await message.reply_text(
-                    "❌ Invalid discount percentage. Must be a number between 0 and 99.",
+                await edit_or_reply(client, message, msg_id, "❌ Invalid discount percentage. Must be a number between 0 and 99.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_pay_discounts")]])
                 )
                 return
@@ -2949,8 +2960,7 @@ async def handle_admin_text(client, message):
             disc[f"months_{months}"] = int(val)
             await db.update_public_config("discounts", disc)
 
-            await message.reply_text(
-                f"✅ {months}-Month discount updated to `{val}%`.",
+            await edit_or_reply(client, message, msg_id, f"✅ {months}-Month discount updated to `{val}%`.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_pay_discounts")]])
             )
             admin_sessions.pop(user_id, None)
@@ -2978,8 +2988,7 @@ async def handle_admin_text(client, message):
             if method.startswith("crypto_"):
                 back_data = "admin_pay_crypto_menu"
 
-            await message.reply_text(
-                f"✅ {method.replace('_', ' ').upper()} details updated to `{val}`.",
+            await edit_or_reply(client, message, msg_id, f"✅ {method.replace('_', ' ').upper()} details updated to `{val}`.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=back_data)]])
             )
             admin_sessions.pop(user_id, None)
@@ -2994,8 +3003,7 @@ async def handle_admin_text(client, message):
 
         if field == "bot_name":
             await db.update_public_config("bot_name", val)
-            await message.reply_text(
-                f"✅ Bot Name updated to `{val}`",
+            await edit_or_reply(client, message, msg_id, f"✅ Bot Name updated to `{val}`",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3008,8 +3016,7 @@ async def handle_admin_text(client, message):
             )
         elif field == "community_name":
             await db.update_public_config("community_name", val)
-            await message.reply_text(
-                f"✅ Community Name updated to `{val}`",
+            await edit_or_reply(client, message, msg_id, f"✅ Community Name updated to `{val}`",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3022,8 +3029,7 @@ async def handle_admin_text(client, message):
             )
         elif field == "support_contact":
             await db.update_public_config("support_contact", val)
-            await message.reply_text(
-                f"✅ Support Contact updated to `{val}`",
+            await edit_or_reply(client, message, msg_id, f"✅ Support Contact updated to `{val}`",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3037,15 +3043,13 @@ async def handle_admin_text(client, message):
         elif field == "force_sub":
             if val.lower() == "/cancel":
                 admin_sessions.pop(user_id, None)
-                await message.reply_text(
-                    "Cancelled.",
+                await edit_or_reply(client, message, msg_id, "Cancelled.",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("🔙 Back to Config", callback_data="admin_force_sub_menu")]]
                     )
                 )
             else:
-                await message.reply_text(
-                    "⏳ **Still Waiting...**\n\nPlease add me as an Admin to the channel, or type `/cancel` to abort.",
+                await edit_or_reply(client, message, msg_id, "⏳ **Still Waiting...**\n\nPlease add me as an Admin to the channel, or type `/cancel` to abort.",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("❌ Cancel", callback_data="admin_force_sub_menu")]]
                     )
@@ -3053,8 +3057,7 @@ async def handle_admin_text(client, message):
             return
         elif field == "rate_limit":
             if not val.isdigit():
-                await message.reply_text(
-                    "❌ Invalid number. Try again.",
+                await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
@@ -3067,8 +3070,7 @@ async def handle_admin_text(client, message):
                 )
                 return
             await db.update_public_config("rate_limit_delay", int(val))
-            await message.reply_text(
-                f"✅ Rate limit updated to `{val}` seconds.",
+            await edit_or_reply(client, message, msg_id, f"✅ Rate limit updated to `{val}` seconds.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3088,8 +3090,7 @@ async def handle_admin_text(client, message):
                     gb_val = float(val_lower.replace("gb", "").strip())
                     val_num = int(gb_val * 1024)
                 except ValueError:
-                    await message.reply_text(
-                        "❌ Invalid GB format. Please use something like `2 GB`.",
+                    await edit_or_reply(client, message, msg_id, "❌ Invalid GB format. Please use something like `2 GB`.",
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_edit_plan_free")]])
                     )
                     return
@@ -3097,15 +3098,13 @@ async def handle_admin_text(client, message):
                 try:
                     val_num = int(float(val_lower.replace("mb", "").strip()))
                 except ValueError:
-                    await message.reply_text(
-                        "❌ Invalid number format. Try again.",
+                    await edit_or_reply(client, message, msg_id, "❌ Invalid number format. Try again.",
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_edit_plan_free")]])
                     )
                     return
 
             await db.update_public_config("daily_egress_mb", val_num)
-            await message.reply_text(
-                f"✅ Free plan egress limit updated to `{val_num}` MB.",
+            await edit_or_reply(client, message, msg_id, f"✅ **Success!**\n\nThe Daily Egress Limit for the **Free Plan** has been updated to **{val_num} MB**.\n\nChanges have been saved and applied globally.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3118,8 +3117,7 @@ async def handle_admin_text(client, message):
             )
         elif field == "daily_files":
             if not val.isdigit():
-                await message.reply_text(
-                    "❌ Invalid number. Try again.",
+                await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
@@ -3132,8 +3130,7 @@ async def handle_admin_text(client, message):
                 )
                 return
             await db.update_public_config("daily_file_count", int(val))
-            await message.reply_text(
-                f"✅ Free plan files limit updated to `{val}` files.",
+            await edit_or_reply(client, message, msg_id, f"✅ **Success!**\n\nThe Daily File Limit for the **Free Plan** has been updated to **{val} files**.\n\nChanges have been saved and applied globally.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -3160,13 +3157,7 @@ async def handle_admin_text(client, message):
             plan_settings = config.get(plan_key, {})
 
             if field in ["egress", "files", "stars"]:
-                if not val.isdigit():
-                    await message.reply_text(
-                        "❌ Invalid number. Try again.",
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
-                    )
-                    return
-                val_num = int(val)
+                val_num = 0
                 if field == "egress":
                     val_lower = val.lower().strip()
                     if "gb" in val_lower:
@@ -3174,8 +3165,7 @@ async def handle_admin_text(client, message):
                             gb_val = float(val_lower.replace("gb", "").strip())
                             val_num = int(gb_val * 1024)
                         except ValueError:
-                            await message.reply_text(
-                                "❌ Invalid GB format. Please use something like `2 GB`.",
+                            await edit_or_reply(client, message, msg_id, "❌ Invalid GB format. Please use something like `2 GB`.",
                                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
                             )
                             return
@@ -3183,24 +3173,34 @@ async def handle_admin_text(client, message):
                         try:
                             val_num = int(float(val_lower.replace("mb", "").strip()))
                         except ValueError:
-                            await message.reply_text(
-                                "❌ Invalid number format. Try again.",
+                            await edit_or_reply(client, message, msg_id, "❌ Invalid number format. Try again.",
                                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
                             )
                             return
 
                     plan_settings["daily_egress_mb"] = val_num
                 elif field == "files":
-                    plan_settings["daily_file_count"] = int(val)
+                    if not val.isdigit():
+                        await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
+                        )
+                        return
+                    val_num = int(val)
+                    plan_settings["daily_file_count"] = val_num
                 elif field == "stars":
+                    if not val.isdigit():
+                        await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
+                        )
+                        return
+                    val_num = int(val)
                     plan_settings["stars_price"] = val_num
 
             await db.update_public_config(plan_key, plan_settings)
 
             back_btn_cb = f"admin_edit_plan_{plan_name}" if field in ["egress", "files"] else f"admin_premium_plan_{plan_name}"
 
-            await message.reply_text(
-                f"✅ {plan_name.capitalize()} {field} updated to `{val_num}`.",
+            await edit_or_reply(client, message, msg_id, f"✅ **Success!**\n\nThe {field.capitalize()} Limit for the **{plan_name.capitalize()} Plan** has been successfully updated to **{val_num}**.\n\nChanges have been saved and applied globally.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=back_btn_cb)]])
             )
             admin_sessions.pop(user_id, None)
@@ -3219,8 +3219,7 @@ async def handle_admin_text(client, message):
                 try:
                     float_val = float(val.replace(",", "."))
                 except ValueError:
-                    await message.reply_text(
-                        "❌ Invalid number. Try again.",
+                    await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
                     )
                     return
@@ -3235,8 +3234,7 @@ async def handle_admin_text(client, message):
 
                 await db.update_public_config(plan_key, plan_settings)
 
-                await message.reply_text(
-                    f"✅ {plan_name.capitalize()} fiat price updated to `{formatted_price}`.",
+                await edit_or_reply(client, message, msg_id, f"✅ {plan_name.capitalize()} fiat price updated to `{formatted_price}`.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_premium_plan_{plan_name}")]])
                 )
                 admin_sessions.pop(user_id, None)
@@ -3245,14 +3243,12 @@ async def handle_admin_text(client, message):
     if state == "awaiting_trial_days":
         val = message.text.strip() if message.text else ""
         if not val.isdigit():
-            await message.reply_text(
-                "❌ Invalid number. Try again.",
+            await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
             )
             return
         await db.update_public_config("premium_trial_days", int(val))
-        await message.reply_text(
-            f"✅ Premium trial duration updated to `{val}` days.",
+        await edit_or_reply(client, message, msg_id, f"✅ Premium trial duration updated to `{val}` days.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_premium_settings")]])
         )
         admin_sessions.pop(user_id, None)
@@ -3262,35 +3258,31 @@ async def handle_admin_text(client, message):
         val = message.text.strip() if message.text else ""
         if val == "/cancel":
             admin_sessions.pop(user_id, None)
-            await message.reply_text("Cancelled.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_force_sub_menu")]]))
+            await edit_or_reply(client, message, msg_id, "Cancelled.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_force_sub_menu")]]))
             return
 
         field = state.replace("awaiting_fs_", "")
 
         if field == "msg":
             await db.update_public_config("force_sub_message_text", val)
-            await message.reply_text(
-                "✅ Gate message updated successfully.",
+            await edit_or_reply(client, message, msg_id, "✅ Gate message updated successfully.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_force_sub_menu")]])
             )
         elif field == "btn_label":
             await db.update_public_config("force_sub_button_label", val)
-            await message.reply_text(
-                f"✅ Button label updated to `{val}`.",
+            await edit_or_reply(client, message, msg_id, f"✅ Button label updated to `{val}`.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_fs_edit_btn")]])
             )
         elif field == "btn_emoji":
 
             emoji = val[0] if val else "📢"
             await db.update_public_config("force_sub_button_emoji", emoji)
-            await message.reply_text(
-                f"✅ Button emoji updated to {emoji}.",
+            await edit_or_reply(client, message, msg_id, f"✅ Button emoji updated to {emoji}.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_fs_edit_btn")]])
             )
         elif field == "welcome":
             await db.update_public_config("force_sub_welcome_text", val)
-            await message.reply_text(
-                "✅ Welcome message updated successfully.",
+            await edit_or_reply(client, message, msg_id, "✅ Welcome message updated successfully.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_force_sub_menu")]])
             )
 
@@ -3315,8 +3307,7 @@ async def handle_admin_text(client, message):
                     ]
                 ]
             )
-        await message.reply_text(
-            f"✅ Template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        await edit_or_reply(client, message, msg_id, f"✅ Template for **{field.capitalize()}** updated to:\n`{new_template}`",
             reply_markup=reply_markup,
         )
         admin_sessions.pop(user_id, None)
@@ -3334,8 +3325,7 @@ async def handle_admin_text(client, message):
                 ]
             ]
         )
-        await message.reply_text(
-            f"✅ Filename template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        await edit_or_reply(client, message, msg_id, f"✅ Filename template for **{field.capitalize()}** updated to:\n`{new_template}`",
             reply_markup=reply_markup,
         )
         admin_sessions.pop(user_id, None)
@@ -3346,8 +3336,7 @@ async def handle_admin_text(client, message):
         reply_markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton("← Back", callback_data="admin_general_channel")]]
         )
-        await message.reply_text(
-            f"✅ Global channel variable updated to:\n`{new_channel}`",
+        await edit_or_reply(client, message, msg_id, f"✅ Global channel variable updated to:\n`{new_channel}`",
             reply_markup=reply_markup,
         )
         admin_sessions.pop(user_id, None)
@@ -3710,7 +3699,7 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
         [InlineKeyboardButton("← Back", callback_data="admin_usage_dashboard")]
     )
 
-    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    await edit_or_reply(client, message, msg_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
 debug("✅ Loaded handler: admin_block_user_cb")
 
@@ -3794,8 +3783,7 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
                 user = await client.get_users(val)
                 user_id = user.id
             except Exception:
-                await message.reply_text(
-                    "❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
+                await edit_or_reply(client, message, msg_id, "❌ Could not find a user with that ID or username. Please make sure the ID is correct.",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
