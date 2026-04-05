@@ -334,6 +334,9 @@ async def user_settings_callback(client, callback_query):
             buttons.append([
                 InlineKeyboardButton("📤 Upload New Thumbnail", callback_data="user_thumb_set")
             ])
+            buttons.append([
+                InlineKeyboardButton("🗑 Remove Thumbnail", callback_data="user_thumb_remove")
+            ])
 
         buttons.append([InlineKeyboardButton("← Back", callback_data="user_main")])
 
