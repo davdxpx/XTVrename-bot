@@ -249,7 +249,7 @@ async def user_settings_callback(client, callback_query):
             await db.remove_dumb_channel(ch_id, user_id)
             await callback_query.answer("Channel removed.", show_alert=True)
             callback_query.data = "dumb_user_menu"
-            await user_settings_callback(client, callback_query)
+            await globals()["user_settings_callback"](client, callback_query)
             return
         elif data == "dumb_user_set_default":
             channels = await db.get_dumb_channels(user_id)
@@ -281,12 +281,12 @@ async def user_settings_callback(client, callback_query):
             await db.set_default_dumb_channel(ch_id, user_id)
             await callback_query.answer("Default channel set.", show_alert=True)
             callback_query.data = "dumb_user_menu"
-            await user_settings_callback(client, callback_query)
+            await globals()["user_settings_callback"](client, callback_query)
             return
 
     if data == "user_dumb_channels":
         callback_query.data = "dumb_user_menu"
-        await user_settings_callback(client, callback_query)
+        await globals()["user_settings_callback"](client, callback_query)
         return
 
     if data == "user_thumb_menu":
@@ -353,7 +353,7 @@ async def user_settings_callback(client, callback_query):
         await db.update_thumbnail_mode(new_mode, user_id)
         await callback_query.answer(f"Thumbnail mode set to {new_mode.capitalize()}!", show_alert=True)
         callback_query.data = "user_thumb_menu"
-        await user_settings_callback(client, callback_query)
+        await globals()["user_settings_callback"](client, callback_query)
         return
 
     elif data == "user_thumb_view":
@@ -861,14 +861,13 @@ async def user_settings_callback(client, callback_query):
         await db.update_workflow_mode(new_mode, user_id)
         await callback_query.answer("Workflow Mode updated!", show_alert=True)
 
-        from plugins.public_cmds import user_settings_callback
         class MockQuery:
             def __init__(self, msg, usr):
                 self.message = msg
                 self.from_user = usr
                 self.data = "user_general_workflow"
             async def answer(self, *args, **kwargs): pass
-        await user_settings_callback(client, MockQuery(callback_query.message, callback_query.from_user))
+        await globals()["user_settings_callback"](client, MockQuery(callback_query.message, callback_query.from_user))
     elif data == "user_general_channel":
         current_channel = await db.get_channel(user_id)
         try:
@@ -966,12 +965,12 @@ async def user_settings_callback(client, callback_query):
         new_language = data.replace("set_lang_", "")
         await db.update_preferred_language(new_language, user_id)
         callback_query.data = "user_general_language"
-        await user_settings_callback(client, callback_query)
+        await globals()["user_settings_callback"](client, callback_query)
         return
     elif data == "user_cancel_language":
         user_sessions.pop(user_id, None)
         callback_query.data = "user_general_settings_menu"
-        await user_settings_callback(client, callback_query)
+        await globals()["user_settings_callback"](client, callback_query)
         return
     elif data == "user_cancel":
         user_sessions.pop(user_id, None)
