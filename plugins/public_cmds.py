@@ -1115,7 +1115,7 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
 
-@Client.on_message(filters.photo & filters.private, group=1)
+@Client.on_message(filters.photo & filters.private, group=2)
 async def handle_user_photo(client, message):
     if not is_public_mode():
         raise ContinuePropagation
@@ -1171,7 +1171,7 @@ async def edit_or_reply(client, message, msg_id, text, reply_markup=None, disabl
 
 @Client.on_message(
     (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
-    group=1,
+    group=2,
 )
 async def handle_user_text(client, message):
     if not is_public_mode():

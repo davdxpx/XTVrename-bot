@@ -321,7 +321,7 @@ async def search_handler(client, message, media_type):
     except MessageNotModified:
         pass
 
-@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=2)
+@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=5)
 async def handle_text_input(client, message):
     user_id = message.from_user.id
 
@@ -1203,7 +1203,7 @@ import random
 @Client.on_message(
     (filters.document | filters.video | filters.photo | filters.audio | filters.voice)
     & filters.private,
-    group=2,
+    group=5,
 )
 async def handle_file_upload(client, message):
     user_id = message.from_user.id
@@ -1762,7 +1762,7 @@ async def handle_archive_upload(client, message, user_id, file_name, state):
         except:
             pass
 
-@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=1)
+@Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=4)
 async def handle_password_input(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)

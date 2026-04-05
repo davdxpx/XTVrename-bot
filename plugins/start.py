@@ -21,8 +21,9 @@ async def handle_start_command_unique(client, message):
     user_id = message.from_user.id
     logger.debug(f"CMD received: {message.text} from {user_id}")
 
-    if message.command and len(message.command) > 1:
-        param = message.command[1]
+    command_parts = message.text.split() if message.text else []
+    if len(command_parts) > 1:
+        param = command_parts[1]
 
         if param.startswith("file_"):
             from pyrogram import StopPropagation

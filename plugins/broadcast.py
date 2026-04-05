@@ -140,7 +140,7 @@ async def broadcast_callback(client, callback_query):
         except MessageNotModified:
             pass
 
-@Client.on_message(filters.private, group=1)
+@Client.on_message(filters.private, group=3)
 async def broadcast_message_handler(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
