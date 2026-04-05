@@ -414,6 +414,13 @@ async def handle_text_input(client, message):
         await search_handler(client, message, "series")
     elif state == "awaiting_manual_title":
         await manual_title_handler(client, message)
+    elif state == "awaiting_system_filename":
+        template = message.text.strip()
+        await db.update_template("system_filename", template, user_id=user_id)
+        set_state(user_id, None)
+        await message.reply_text(f"✅ System Filename template updated to:\n`{template}`")
+        return
+
     elif state == "awaiting_general_name":
         user_id = message.from_user.id
         session_data = get_data(user_id)
@@ -2700,6 +2707,33 @@ async def handle_clear_specials(client, callback_query):
     file_sessions[msg_id]["specials"] = []
 
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
+
+@Client.on_callback_query(filters.regex(r"^edit_system_filename$"))
+async def edit_system_filename_template(client, callback_query):
+    await callback_query.answer()
+    user_id = callback_query.from_user.id
+
+    set_state(user_id, "awaiting_system_filename")
+    try:
+        await callback_query.message.edit_text(
+            "⚙️ **System Filename Template**\n\n"
+            "How should the bot save files internally to your MyFiles database?\n"
+            "You can use these variables:\n"
+            "`{title}` - The movie or series name\n"
+            "`{year}` - The release year\n"
+            "`{season}` - The season number (e.g. 01)\n"
+            "`{episode}` - The episode number (e.g. 01)\n"
+            "`{series_name}` - Alias for title, useful for series.\n\n"
+            "**Examples:**\n"
+            "`{title} ({year})` -> Inception (2010)\n"
+            "`{series_name} S{season}E{episode}` -> The Rookie S01E01\n\n"
+            "Please type your new template below:",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            )
+        )
+    except MessageNotModified:
+        pass
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

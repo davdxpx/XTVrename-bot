@@ -61,6 +61,11 @@ def get_user_templates_menu():
             ],
             [
                 InlineKeyboardButton(
+                    "⚙️ Edit System Filename", callback_data="edit_system_filename"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     "🔤 Preferred Separator", callback_data="user_pref_separator"
                 )
             ],
