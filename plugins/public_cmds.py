@@ -199,7 +199,7 @@ async def user_settings_callback(client, callback_query):
                 pass
             return
         elif data == "dumb_user_add":
-            user_sessions[user_id] = "awaiting_dumb_user_add"
+            user_sessions[user_id] = {"state": "awaiting_dumb_user_add", "msg_id": callback_query.message.id}
             try:
                 await callback_query.message.edit_text(
                     "➕ **Add Dumb Channel**\n\n"
@@ -378,7 +378,7 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "prompt_user_thumb_set":
-        user_sessions[user_id] = "awaiting_user_thumb"
+        user_sessions[user_id] = {"state": "awaiting_user_thumb", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "🖼 **Send the new photo** to set as your personal thumbnail:",
@@ -539,7 +539,7 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "prompt_user_caption":
-        user_sessions[user_id] = "awaiting_user_template_caption"
+        user_sessions[user_id] = {"state": "awaiting_user_template_caption", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
@@ -727,7 +727,7 @@ async def user_settings_callback(client, callback_query):
             pass
     elif data.startswith("prompt_user_fn_template_"):
         field = data.replace("prompt_user_fn_template_", "")
-        user_sessions[user_id] = f"awaiting_user_fn_template_{field}"
+        user_sessions[user_id] = {"state": f"awaiting_user_fn_template_{field}", "msg_id": callback_query.message.id}
         try:
             vars_text = ""
             if field.lower() in ["series", "subtitles_series"]:
@@ -841,7 +841,7 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "prompt_user_channel":
-        user_sessions[user_id] = "awaiting_user_channel"
+        user_sessions[user_id] = {"state": "awaiting_user_channel", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 "⚙️ **Send the new Channel name variable to use in templates (e.g. `@MyChannel`):**",
@@ -969,7 +969,7 @@ async def user_settings_callback(client, callback_query):
             pass
     elif data.startswith("prompt_user_template_"):
         field = data.replace("prompt_user_template_", "")
-        user_sessions[user_id] = f"awaiting_user_template_{field}"
+        user_sessions[user_id] = {"state": f"awaiting_user_template_{field}", "msg_id": callback_query.message.id}
         try:
             await callback_query.message.edit_text(
                 f"✏️ **Send the new template text for {field.capitalize()}:**",
@@ -1025,21 +1025,42 @@ async def handle_user_photo(client, message):
     (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
     group=1,
 )
+
+async def edit_or_reply(client, message, msg_id, text, reply_markup=None, disable_web_page_preview=False):
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    if msg_id:
+        try:
+            return await client.edit_message_text(
+                chat_id=message.chat.id,
+                message_id=msg_id,
+                text=text,
+                reply_markup=reply_markup,
+                disable_web_page_preview=disable_web_page_preview
+            )
+        except Exception:
+            pass
+    return await message.reply_text(text, reply_markup=reply_markup, disable_web_page_preview=disable_web_page_preview)
+
 async def handle_user_text(client, message):
     if not is_public_mode():
         raise ContinuePropagation
 
     user_id = message.from_user.id
-    state = user_sessions.get(user_id)
-    if not state:
+    state_obj = user_sessions.get(user_id)
+    if not state_obj:
         raise ContinuePropagation
+
+    state = state_obj if isinstance(state_obj, str) else state_obj.get("state")
+    msg_id = None if isinstance(state_obj, str) else state_obj.get("msg_id")
 
     if state == "awaiting_dumb_user_add":
         val = message.text.strip() if message.text else ""
         if val.lower() == "disable":
             user_sessions.pop(user_id, None)
-            await message.reply_text(
-                "Cancelled.",
+            await edit_or_reply(client, message, msg_id, "Cancelled.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back", callback_data="dumb_user_menu")]]
                 ),
@@ -1057,8 +1078,7 @@ async def handle_user_text(client, message):
                 ch_id = chat.id
                 ch_name = chat.title or "Channel"
             except Exception as e:
-                await message.reply_text(
-                    f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
+                await edit_or_reply(client, message, msg_id, f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
@@ -1081,8 +1101,7 @@ async def handle_user_text(client, message):
             await db.add_dumb_channel(
                 ch_id, ch_name, invite_link=invite_link, user_id=user_id
             )
-            await message.reply_text(
-                f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)",
+            await edit_or_reply(client, message, msg_id, f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back", callback_data="dumb_user_menu")]]
                 ),
@@ -1110,8 +1129,7 @@ async def handle_user_text(client, message):
                 ]
             )
 
-        await message.reply_text(
-            f"✅ Your template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        await edit_or_reply(client, message, msg_id, f"✅ Your template for **{field.capitalize()}** updated to:\n`{new_template}`",
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)
@@ -1132,8 +1150,7 @@ async def handle_user_text(client, message):
                 ]
             ]
         )
-        await message.reply_text(
-            f"✅ Your filename template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        await edit_or_reply(client, message, msg_id, f"✅ Your filename template for **{field.capitalize()}** updated to:\n`{new_template}`",
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)
@@ -1146,8 +1163,7 @@ async def handle_user_text(client, message):
         reply_markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton("← Back", callback_data="user_main")]]
         )
-        await message.reply_text(
-            f"✅ Your channel variable updated to:\n`{new_channel}`",
+        await edit_or_reply(client, message, msg_id, f"✅ Your channel variable updated to:\n`{new_channel}`",
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)
