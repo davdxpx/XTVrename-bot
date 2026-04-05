@@ -930,7 +930,8 @@ class TaskProcessor:
                 thumbnail_path=(
                     self.thumb_path
                     if (
-                        os.path.exists(self.thumb_path)
+                        self.thumb_path
+                        and os.path.exists(self.thumb_path)
                         and not self.is_subtitle
                         and self.media_type != "convert"
                     )

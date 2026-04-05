@@ -129,13 +129,13 @@ class Database:
         if merged_links:
             update_data["dumb_channel_links"] = merged_links
 
-        if ceo_doc and not ceo_doc.get("default_dumb_channel") and global_doc.get("default_dumb_channel"):
+        if (not ceo_doc or not ceo_doc.get("default_dumb_channel")) and global_doc.get("default_dumb_channel"):
             update_data["default_dumb_channel"] = global_doc.get("default_dumb_channel")
 
-        if ceo_doc and not ceo_doc.get("movie_dumb_channel") and global_doc.get("movie_dumb_channel"):
+        if (not ceo_doc or not ceo_doc.get("movie_dumb_channel")) and global_doc.get("movie_dumb_channel"):
             update_data["movie_dumb_channel"] = global_doc.get("movie_dumb_channel")
 
-        if ceo_doc and not ceo_doc.get("series_dumb_channel") and global_doc.get("series_dumb_channel"):
+        if (not ceo_doc or not ceo_doc.get("series_dumb_channel")) and global_doc.get("series_dumb_channel"):
             update_data["series_dumb_channel"] = global_doc.get("series_dumb_channel")
 
         await self.settings.update_one({"_id": ceo_doc_id}, {"$set": update_data}, upsert=True)
