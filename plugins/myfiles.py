@@ -252,7 +252,7 @@ async def myfiles_command(client: Client, message: Message):
     text, markup = await get_myfiles_main_menu(user_id)
     await message.reply_text(text, reply_markup=markup)
 
-@Client.on_callback_query(filters.regex(r"^(myfiles_|mf_mov_|mf_df_|mf_pg_|mf_st_|mf_ms_|mf_sea_|mf_sa_)"))
+@Client.on_callback_query(filters.regex(r"^(myfiles_|mf_mov_|mf_df_|mf_pg_|mf_st|mf_ms|mf_sea_|mf_sa)"))
 async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     data = callback_query.data
     user_id = callback_query.from_user.id
@@ -375,7 +375,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             plan = "global"
             config = await db.settings.find_one({"_id": "global_settings"})
 
-        group_id = f"batch_{user_id}_{int(datetime.datetime.utcnow().timestamp())}"
+        import uuid
+        group_id = f"batch_{uuid.uuid4().hex[:12]}"
 
         await db.db.file_groups.insert_one({
             "group_id": group_id,
@@ -546,6 +547,14 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data == "myfiles_privacy_settings":
         user_doc = await db.get_user(user_id)
         is_premium = user_doc.get("is_premium", False) if user_doc else False
+        plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+
+        if not plan_features.get("privacy_settings", False) and plan != "global":
+            await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
+            return
 
         user_settings = await db.get_settings(user_id)
 
@@ -556,14 +565,21 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             # Default to False for premium users
             share_name = False
 
-        emoji = "✅ ON" if share_name else "❌ OFF"
+        hide_forward = False
+        if user_settings and "hide_forward_tags" in user_settings:
+            hide_forward = user_settings["hide_forward_tags"]
+
+        emoji_name = "✅ ON" if share_name else "❌ OFF"
+        emoji_fwd = "✅ ON" if hide_forward else "❌ OFF"
+
         text = (
             "🔒 **Privacy Settings**\n\n"
             "**Share Display Name:** When enabled, your name will be displayed when sharing your files with others via deep links.\n\n"
-            "*Note: For Premium users, this is disabled by default to protect your privacy when batch sharing.*"
+            "**Hide Forwarding Tags:** When enabled, forwarded files will not have 'Forwarded from' tags when shared via deep links.\n\n"
         )
         buttons = [
-            [InlineKeyboardButton(f"Display Name on Shares: {emoji}", callback_data="myfiles_toggle_share_name")],
+            [InlineKeyboardButton(f"Display Name on Shares: {emoji_name}", callback_data="myfiles_toggle_share_name")],
+            [InlineKeyboardButton(f"Hide Forward Tags: {emoji_fwd}", callback_data="myfiles_toggle_hide_fwd")],
             [InlineKeyboardButton("🔙 Back", callback_data="myfiles_settings")]
         ]
         try:
@@ -575,6 +591,13 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data == "myfiles_toggle_share_name":
         user_doc = await db.get_user(user_id)
         is_premium = user_doc.get("is_premium", False) if user_doc else False
+        plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+        if not plan_features.get("privacy_settings", False) and plan != "global":
+            await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
+            return
 
         user_settings = await db.get_settings(user_id)
         share_name = True
@@ -584,6 +607,28 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             share_name = False
 
         await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"share_display_name": not share_name}}, upsert=True)
+        await callback_query.answer("Privacy setting updated", show_alert=False)
+        callback_query.data = "myfiles_privacy_settings"
+        await myfiles_callback(client, callback_query)
+        return
+
+    if data == "myfiles_toggle_hide_fwd":
+        user_doc = await db.get_user(user_id)
+        is_premium = user_doc.get("is_premium", False) if user_doc else False
+        plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+        if not plan_features.get("privacy_settings", False) and plan != "global":
+            await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
+            return
+
+        user_settings = await db.get_settings(user_id)
+        hide_forward = False
+        if user_settings and "hide_forward_tags" in user_settings:
+            hide_forward = user_settings["hide_forward_tags"]
+
+        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"hide_forward_tags": not hide_forward}}, upsert=True)
         await callback_query.answer("Privacy setting updated", show_alert=False)
         callback_query.data = "myfiles_privacy_settings"
         await myfiles_callback(client, callback_query)
@@ -783,7 +828,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
                 {"file_name": {"$not": {"$regex": r"[sS]\d{1,2}"}}}
             ]
 
-        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"myfiles_folder_{folder_id}")
+        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"mf_sea_{folder_id}_{season}")
 
         text = f"📁 **{folder['name']} - Season {season}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary"
         try:
@@ -1159,20 +1204,13 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         await myfiles_callback(client, callback_query)
         return
 
-    if data.startswith("mf_sa_"):
-        back_data = data.replace("mf_sa_", "")
+    if data == "mf_sa":
+        state_dict = await get_myfiles_state(user_id)
+        back_data = state_dict.get("current_view", "myfiles_cat_recent")
 
         filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
 
-        # When paginating, back_data is wrapped like mf_pg_{page}_myfiles_folder_{id}
-        # The true back_data is passed, so we need to extract the real context if it's nested
-
         real_back_data = back_data
-        parts = back_data.split("_", 3)
-        if len(parts) >= 4 and parts[0] == "mf" and parts[1] == "pg":
-            # Extract the actual back data
-            real_back_data = back_data.replace(f"mf_pg_{parts[2]}_", "")
-
         if real_back_data.startswith("myfiles_folder_"):
             folder_id = real_back_data.replace("myfiles_folder_", "")
             filter_query["folder_id"] = ObjectId(folder_id)

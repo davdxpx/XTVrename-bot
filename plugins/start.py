@@ -64,8 +64,12 @@ async def handle_start_command_unique(client, message):
                         if share_display_name and owner_doc:
                             owner_name = owner_doc.get("first_name", "A user")
 
-                    # If premium, hide forwarding tags
-                    protect = not is_owner_premium
+                        protect = False
+                        if owner_settings and "hide_forward_tags" in owner_settings:
+                            protect = owner_settings["hide_forward_tags"]
+
+                    else:
+                        protect = not is_owner_premium
 
                     await message.reply_text(f"📦 **Batch File Delivery**\n\nReceiving {len(file_ids)} files shared by: `{owner_name if share_display_name else 'Anonymous'}`")
 
