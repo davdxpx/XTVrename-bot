@@ -119,8 +119,8 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     ms_label = "✅ Multi-Select: ON" if multi_select else "☑️ Multi-Select: OFF"
 
     buttons.append([
-        InlineKeyboardButton(sort_label, callback_data=f"myfiles_sort_toggle_{back_data}"),
-        InlineKeyboardButton(ms_label, callback_data=f"myfiles_ms_toggle_{back_data}")
+        InlineKeyboardButton(sort_label, callback_data=f"mf_srt_{back_data}"),
+        InlineKeyboardButton(ms_label, callback_data=f"mf_ms_{back_data}")
     ])
 
     for f in files:
@@ -132,7 +132,7 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         if multi_select:
             prefix = "🔘 " if f_id_str in selected_files else "⚪️ "
             btn_text = f"{prefix}{name}"
-            callback = f"myfiles_ms_select_{f_id_str}_{page}_{back_data}"
+            callback = f"mf_sel_{f_id_str}_{page}_{back_data}"
         else:
             btn_text = f"{status_emoji} {name}"
             callback = f"myfiles_file_{f_id_str}"
@@ -143,14 +143,14 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     total_pages = math.ceil(total_files / limit) if total_files > 0 else 1
 
     if page > 0:
-        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"myfiles_page_{page-1}_{back_data}"))
+        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"mf_pg_{page-1}_{back_data}"))
     else:
         nav_row.append(InlineKeyboardButton(" ", callback_data="noop"))
 
     nav_row.append(InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data="noop"))
 
     if skip + limit < total_files:
-        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"myfiles_page_{page+1}_{back_data}"))
+        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"mf_pg_{page+1}_{back_data}"))
     else:
         nav_row.append(InlineKeyboardButton(" ", callback_data="noop"))
 
@@ -159,18 +159,18 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     # Action buttons for the folder/category itself
     if multi_select and selected_files:
         buttons.append([
-            InlineKeyboardButton(f"📂 Move Selected ({len(selected_files)})", callback_data=f"myfiles_ms_move_{back_data}"),
-            InlineKeyboardButton(f"🗑 Delete Selected ({len(selected_files)})", callback_data=f"myfiles_ms_delete_{back_data}")
+            InlineKeyboardButton(f"📂 Move Selected ({len(selected_files)})", callback_data=f"mf_mov_{back_data}"),
+            InlineKeyboardButton(f"🗑 Delete Selected ({len(selected_files)})", callback_data=f"mf_del_{back_data}")
         ])
         buttons.append([
-            InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"myfiles_ms_share_{back_data}")
+            InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"mf_sh_{back_data}")
         ])
 
     buttons.append([
-        InlineKeyboardButton("📤 Send All", callback_data=f"myfiles_sendall_{back_data}")
+        InlineKeyboardButton("📤 Send All", callback_data=f"mf_sa_{back_data}")
     ])
 
-    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"myfiles_leave_{back_data}")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"mf_lv_{back_data}")])
     return buttons, total_files
 
 @Client.on_message(filters.text & filters.private, group=-2)
@@ -256,26 +256,26 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     # Fast-dismiss loading spinner except where we specifically want an alert.
     # We will answer below if we need a custom text.
     try:
-        if not (data.startswith("myfiles_send_") or data.startswith("myfiles_sendall_") or data.startswith("myfiles_delfile_") or data.startswith("myfiles_del_folder_") or data.startswith("mf_mov_") or data.startswith("mf_df_") or data.startswith("myfiles_ms_move_") or data.startswith("myfiles_ms_delete_")):
+        if not (data.startswith("myfiles_send_") or data.startswith("mf_sa_") or data.startswith("myfiles_delfile_") or data.startswith("myfiles_del_folder_") or data.startswith("mf_mov_") or data.startswith("mf_df_") or data.startswith("mf_mov_") or data.startswith("mf_del_")):
             await callback_query.answer()
     except Exception:
         pass
 
-    if data.startswith("myfiles_sort_toggle_"):
+    if data.startswith("mf_srt_"):
         # The back_data here actually represents the menu we are currently in
-        # (e.g. myfiles_cat_custom, myfiles_folder_<id>)
+        # (e.g. myfiles_cat_custom, mf_fd_<id>)
         # We need to re-render the page view.
         # Usually, when user hits sort toggle, they are on page 0 or a specific page.
         # However, the callback_data for sort toggle only contains back_data which is the *parent* menu.
         # To truly reload the current page, we need to know the current folder context.
         parts = data.split("_", 3)
         if len(parts) >= 4 and parts[3].startswith("page_"):
-            # New format: myfiles_sort_toggle_{page}_{back_data}
+            # New format: mf_srt_{page}_{back_data}
             page = int(parts[3].replace("page_", "").split("_")[0])
-            back_data = data.replace(f"myfiles_sort_toggle_page_{page}_", "")
+            back_data = data.replace(f"mf_srt_page_{page}_", "")
         else:
             page = 0
-            back_data = data.replace("myfiles_sort_toggle_", "")
+            back_data = data.replace("mf_srt_", "")
 
         state_dict = await get_myfiles_state(user_id)
 
@@ -290,20 +290,20 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         state_dict["sort_order"] = next_sort
         await set_myfiles_state(user_id, state_dict)
 
-        # We simulate myfiles_page_ call which properly renders the file list using back_data as context
-        callback_query.data = f"myfiles_page_{page}_{back_data}"
+        # We simulate mf_pg_ call which properly renders the file list using back_data as context
+        callback_query.data = f"mf_pg_{page}_{back_data}"
         await myfiles_callback(client, callback_query)
         return
 
-    if data.startswith("myfiles_ms_toggle_"):
+    if data.startswith("mf_ms_"):
         parts = data.split("_", 3)
         if len(parts) >= 4 and parts[3].startswith("page_"):
-            # New format: myfiles_ms_toggle_{page}_{back_data}
+            # New format: mf_ms_{page}_{back_data}
             page = int(parts[3].replace("page_", "").split("_")[0])
-            back_data = data.replace(f"myfiles_ms_toggle_page_{page}_", "")
+            back_data = data.replace(f"mf_ms_page_{page}_", "")
         else:
             page = 0
-            back_data = data.replace("myfiles_ms_toggle_", "")
+            back_data = data.replace("mf_ms_", "")
 
         state_dict = await get_myfiles_state(user_id)
 
@@ -314,13 +314,13 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         await set_myfiles_state(user_id, state_dict)
 
-        callback_query.data = f"myfiles_page_{page}_{back_data}"
+        callback_query.data = f"mf_pg_{page}_{back_data}"
         await myfiles_callback(client, callback_query)
         return
 
-    if data.startswith("myfiles_ms_select_"):
-        # Format: myfiles_ms_select_{file_id}_{page}_{back_data}
-        parts = data.replace("myfiles_ms_select_", "").split("_", 2)
+    if data.startswith("mf_sel_"):
+        # Format: mf_sel_{file_id}_{page}_{back_data}
+        parts = data.replace("mf_sel_", "").split("_", 2)
         f_id_str = parts[0]
         page = parts[1]
         back_data = parts[2]
@@ -337,12 +337,12 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         await set_myfiles_state(user_id, state_dict)
 
         # Trigger page refresh
-        callback_query.data = f"myfiles_page_{page}_{back_data}"
+        callback_query.data = f"mf_pg_{page}_{back_data}"
         await myfiles_callback(client, callback_query)
         return
 
-    if data.startswith("myfiles_ms_delete_"):
-        back_data = data.replace("myfiles_ms_delete_", "")
+    if data.startswith("mf_del_"):
+        back_data = data.replace("mf_del_", "")
         state_dict = await get_myfiles_state(user_id)
         selected_files = state_dict.get("selected_files", [])
 
@@ -369,9 +369,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         await myfiles_callback(client, callback_query)
         return
 
-    if data.startswith("myfiles_leave_"):
+    if data.startswith("mf_lv_"):
         # Automatically deactivate multi-select on leaving
-        back_data = data.replace("myfiles_leave_", "")
+        back_data = data.replace("mf_lv_", "")
         state_dict = await get_myfiles_state(user_id)
         if state_dict.get("multi_select", False):
             state_dict["multi_select"] = False
@@ -379,18 +379,18 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             await set_myfiles_state(user_id, state_dict)
 
         # If the context is a season view, leaving means going back up to the folder (season selection)
-        if back_data.startswith("myfiles_season_"):
-            parts = back_data.replace("myfiles_season_", "").split("_")
+        if back_data.startswith("mf_sea_"):
+            parts = back_data.replace("mf_sea_", "").split("_")
             folder_id = parts[0]
-            callback_query.data = f"myfiles_folder_{folder_id}"
+            callback_query.data = f"mf_fd_{folder_id}"
         else:
             callback_query.data = back_data
 
         await myfiles_callback(client, callback_query)
         return
 
-    if data.startswith("myfiles_ms_share_"):
-        back_data = data.replace("myfiles_ms_share_", "")
+    if data.startswith("mf_sh_"):
+        back_data = data.replace("mf_sh_", "")
         state_dict = await get_myfiles_state(user_id)
         selected_files = state_dict.get("selected_files", [])
 
@@ -457,8 +457,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         await set_myfiles_state(user_id, state_dict)
         return
 
-    if data.startswith("myfiles_ms_move_"):
-        back_data = data.replace("myfiles_ms_move_", "")
+    if data.startswith("mf_mov_"):
+        back_data = data.replace("mf_mov_", "")
 
         cursor = db.folders.find({"user_id": user_id, "type": "custom"}).sort("name", 1)
         folders = await cursor.to_list(length=None)
@@ -518,7 +518,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     # Only update last_menu if it's a structural navigation callback
-    if data in ["myfiles_main", "myfiles_cat_recent", "myfiles_cat_movies", "myfiles_cat_series", "myfiles_cat_custom"] or data.startswith("myfiles_folder_") or data.startswith("myfiles_page_"):
+    if data in ["myfiles_main", "myfiles_cat_recent", "myfiles_cat_movies", "myfiles_cat_series", "myfiles_cat_custom"] or data.startswith("mf_fd_") or data.startswith("mf_pg_"):
         state_dict = await get_myfiles_state(user_id)
         state_dict["last_menu"] = data
         await set_myfiles_state(user_id, state_dict)
@@ -702,7 +702,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         else:
             for folder in folders:
                 count = await db.files.count_documents({"user_id": user_id, "folder_id": folder["_id"]})
-                buttons.append([InlineKeyboardButton(f"📁 {folder['name']} ({count})", callback_data=f"myfiles_folder_{str(folder['_id'])}")])
+                buttons.append([InlineKeyboardButton(f"📁 {folder['name']} ({count})", callback_data=f"mf_fd_{str(folder['_id'])}")])
 
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")])
 
@@ -712,8 +712,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             pass
         return
 
-    if data.startswith("myfiles_folder_"):
-        folder_id = data.replace("myfiles_folder_", "")
+    if data.startswith("mf_fd_"):
+        folder_id = data.replace("mf_fd_", "")
         folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
         if not folder:
             await callback_query.answer("Folder not found.", show_alert=True)
@@ -754,7 +754,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
             buttons = []
             for season in sorted(season_counts.keys(), key=lambda x: int(x) if x.isdigit() else 9999):
-                buttons.append([InlineKeyboardButton(f"📁 Season {season} ({season_counts[season]})", callback_data=f"myfiles_season_{folder_id}_{season}")])
+                buttons.append([InlineKeyboardButton(f"📁 Season {season} ({season_counts[season]})", callback_data=f"mf_sea_{folder_id}_{season}")])
 
             buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"myfiles_cat_{folder.get('type', 'custom')}")])
             total = sum(season_counts.values())
@@ -767,7 +767,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             return
 
         # Normal list
-        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"myfiles_cat_{folder.get('type', 'custom')}")
+        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"mf_fd_{folder_id}")
 
         if folder.get('type') == 'custom':
             buttons.insert(-2, [InlineKeyboardButton("🗑️ Delete Folder", callback_data=f"myfiles_del_folder_{folder_id}")])
@@ -779,8 +779,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             pass
         return
 
-    if data.startswith("myfiles_season_"):
-        parts = data.replace("myfiles_season_", "").split("_")
+    if data.startswith("mf_sea_"):
+        parts = data.replace("mf_sea_", "").split("_")
         folder_id = parts[0]
         season = parts[1]
 
@@ -811,7 +811,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
                 {"tmdb_data.season": {"$exists": False}}
             ]
 
-        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"myfiles_season_{folder_id}_{season}")
+        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"mf_sea_{folder_id}_{season}")
 
         text = f"📁 **{folder['name']} - Season {season}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary"
         try:
@@ -820,8 +820,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             pass
         return
 
-    if data.startswith("myfiles_page_"):
-        parts = data.replace("myfiles_page_", "").split("_")
+    if data.startswith("mf_pg_"):
+        parts = data.replace("mf_pg_", "").split("_")
         page = max(0, int(parts[0]))
         back_data = "_".join(parts[1:])
 
@@ -832,11 +832,31 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             folder_type = back_data.replace("myfiles_cat_", "")
             filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
             text = f"📁 **{folder_type.capitalize()} Folders**"
-        elif back_data.startswith("myfiles_folder_"):
-            folder_id = back_data.replace("myfiles_folder_", "")
+        elif back_data.startswith("mf_fd_"):
+            folder_id = back_data.replace("mf_fd_", "")
             filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
             folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
             text = f"📁 **{folder['name'] if folder else 'Folder'}**"
+        elif back_data.startswith("mf_sea_"):
+            parts_season = back_data.replace("mf_sea_", "").split("_")
+            folder_id = parts_season[0]
+            season = parts_season[1]
+            filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
+
+            if season.isdigit():
+                season_val = int(season)
+                filter_query["$or"] = [
+                    {"guess_data.season": season_val},
+                    {"guess_data.season": {"$in": [season_val]}},
+                    {"tmdb_data.season": season_val}
+                ]
+            else:
+                filter_query["$and"] = [
+                    {"guess_data.season": {"$exists": False}},
+                    {"tmdb_data.season": {"$exists": False}}
+                ]
+            folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
+            text = f"📁 **{folder['name'] if folder else 'Folder'} - Season {season}**"
         else:
             filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
             text = "🕒 **Files**"
@@ -966,7 +986,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("📁 Keep Files", callback_data=f"mf_df_keep_{folder_id}")],
                     [InlineKeyboardButton("🗑️ Delete Files Too", callback_data=f"mf_df_del_{folder_id}")],
-                    [InlineKeyboardButton("❌ Cancel", callback_data=f"myfiles_folder_{folder_id}")]
+                    [InlineKeyboardButton("❌ Cancel", callback_data=f"mf_fd_{folder_id}")]
                 ])
             )
             await callback_query.answer()
@@ -1159,25 +1179,25 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         await myfiles_callback(client, callback_query)
         return
 
-    if data.startswith("myfiles_sendall_"):
-        back_data = data.replace("myfiles_sendall_", "")
+    if data.startswith("mf_sa_"):
+        back_data = data.replace("mf_sa_", "")
 
         filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
 
-        # When paginating, back_data is wrapped like myfiles_page_{page}_myfiles_folder_{id}
+        # When paginating, back_data is wrapped like mf_pg_{page}_mf_fd_{id}
         # The true back_data is passed, so we need to extract the real context if it's nested
 
         real_back_data = back_data
         parts = back_data.split("_", 3)
-        if len(parts) >= 4 and parts[0] == "myfiles" and parts[1] == "page":
+        if len(parts) >= 4 and parts[0] == "mf" and parts[1] == "pg":
             # Extract the actual back data
-            real_back_data = back_data.replace(f"myfiles_page_{parts[2]}_", "")
+            real_back_data = back_data.replace(f"mf_pg_{parts[2]}_", "")
 
-        if real_back_data.startswith("myfiles_folder_"):
-            folder_id = real_back_data.replace("myfiles_folder_", "")
+        if real_back_data.startswith("mf_fd_"):
+            folder_id = real_back_data.replace("mf_fd_", "")
             filter_query["folder_id"] = ObjectId(folder_id)
-        elif real_back_data.startswith("myfiles_season_"):
-            parts = real_back_data.replace("myfiles_season_", "").split("_")
+        elif real_back_data.startswith("mf_sea_"):
+            parts = real_back_data.replace("mf_sea_", "").split("_")
             folder_id = parts[0]
             season = parts[1]
             filter_query["folder_id"] = ObjectId(folder_id)
