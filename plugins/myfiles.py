@@ -582,15 +582,23 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     if data == "myfiles_privacy_settings":
+        user_doc = await db.get_user(user_id)
+        is_premium = user_doc.get("is_premium", False) if user_doc else False
+
         user_settings = await db.get_settings(user_id)
+
         share_name = True
         if user_settings and "share_display_name" in user_settings:
             share_name = user_settings["share_display_name"]
+        elif is_premium:
+            # Default to False for premium users
+            share_name = False
 
         emoji = "✅ ON" if share_name else "❌ OFF"
         text = (
             "🔒 **Privacy Settings**\n\n"
-            "**Share Display Name:** When enabled, your name will be displayed when sharing your files with others via deep links."
+            "**Share Display Name:** When enabled, your name will be displayed when sharing your files with others via deep links.\n\n"
+            "*Note: For Premium users, this is disabled by default to protect your privacy when batch sharing.*"
         )
         buttons = [
             [InlineKeyboardButton(f"Display Name on Shares: {emoji}", callback_data="myfiles_toggle_share_name")],
@@ -603,10 +611,15 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     if data == "myfiles_toggle_share_name":
+        user_doc = await db.get_user(user_id)
+        is_premium = user_doc.get("is_premium", False) if user_doc else False
+
         user_settings = await db.get_settings(user_id)
         share_name = True
         if user_settings and "share_display_name" in user_settings:
             share_name = user_settings["share_display_name"]
+        elif is_premium:
+            share_name = False
 
         await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"share_display_name": not share_name}}, upsert=True)
         await callback_query.answer("Privacy setting updated", show_alert=False)
@@ -1143,14 +1156,20 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
 
-        # When paginating, back_data is wrapped. We can ignore "myfiles_page_..." but we need context
-        # But wait, sendall back_data is just the parent menu like "myfiles_folder_id" or "myfiles_season_id_season"
+        # When paginating, back_data is wrapped like myfiles_page_{page}_myfiles_folder_{id}
+        # The true back_data is passed, so we need to extract the real context if it's nested
 
-        if back_data.startswith("myfiles_folder_"):
-            folder_id = back_data.replace("myfiles_folder_", "")
+        real_back_data = back_data
+        parts = back_data.split("_", 3)
+        if len(parts) >= 4 and parts[0] == "myfiles" and parts[1] == "page":
+            # Extract the actual back data
+            real_back_data = back_data.replace(f"myfiles_page_{parts[2]}_", "")
+
+        if real_back_data.startswith("myfiles_folder_"):
+            folder_id = real_back_data.replace("myfiles_folder_", "")
             filter_query["folder_id"] = ObjectId(folder_id)
-        elif back_data.startswith("myfiles_season_"):
-            parts = back_data.replace("myfiles_season_", "").split("_")
+        elif real_back_data.startswith("myfiles_season_"):
+            parts = real_back_data.replace("myfiles_season_", "").split("_")
             folder_id = parts[0]
             season = parts[1]
             filter_query["folder_id"] = ObjectId(folder_id)

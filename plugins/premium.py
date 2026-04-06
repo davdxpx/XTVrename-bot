@@ -121,6 +121,27 @@ async def handle_premium_command(client, message):
     dlx_folder_limit = dlx_limits.get("folder_limit", -1)
     dlx_folder_str = str(dlx_folder_limit) if dlx_folder_limit != -1 else "Unlimited"
 
+    global_toggles = await db.get_feature_toggles()
+
+    def get_features_display(settings):
+        features = settings.get("features", {})
+        display = ""
+        if features.get("priority_queue"):
+            display += f"> 🚀 **Priority Queue:** `Enabled`\n"
+        if global_toggles.get("file_converter", True) or features.get("file_converter"):
+            display += f"> 🛠️ **File Converter:** `Included`\n"
+        if global_toggles.get("audio_editor", True) or features.get("audio_editor"):
+            display += f"> 🎵 **Audio Editor:** `Included`\n"
+        if global_toggles.get("watermarker", True) or features.get("watermarker"):
+            display += f"> 🎨 **Image Watermarker:** `Included`\n"
+        if global_toggles.get("subtitle_extractor", True) or features.get("subtitle_extractor"):
+            display += f"> 💬 **Subtitle Extractor:** `Included`\n"
+        if features.get("batch_sharing"):
+            display += f"> 🔗 **Batch Sharing:** `Enabled`\n"
+        if features.get("xtv_pro_4gb"):
+            display += f"> ⚡ **XTV Pro 4GB Bypass:** `Enabled`\n"
+        return display
+
     text += (
         f"**⭐ Premium Standard**\n"
         f"> 📂 **Daily Egress Limit:** `{std_egress}`\n"
@@ -128,13 +149,8 @@ async def handle_premium_command(client, message):
         f"> 🗂 **MyFiles Folders:** `{std_folder_str}`\n"
         f"> 📦 **Perm Storage:** `{std_perm_str}`\n"
     )
-    if standard_settings.get("features", {}).get("priority_queue"):
-        text += f"> 🚀 **Priority Queue:** `Enabled`\n"
-    if standard_settings.get("features", {}).get("xtv_pro_4gb"):
-        text += f"> ⚡ **XTV Pro 4GB Bypass:** `Enabled`\n"
+    text += get_features_display(standard_settings)
 
-    text += f"> 🛠️ **File Converter:** `Included`\n"
-    text += f"> 🎨 **Image Watermarker:** `Included`\n"
     text += f"\n**Price:** `{std_usd}`\n"
     text += f"━━━━━━━━━━━━━━━━━━━━\n\n"
 
@@ -150,14 +166,8 @@ async def handle_premium_command(client, message):
             f"> 🗂 **MyFiles Folders:** `{dlx_folder_str}`\n"
             f"> 📦 **Perm Storage:** `{dlx_perm_str}`\n"
         )
-        if deluxe_settings.get("features", {}).get("priority_queue"):
-            text += f"> 🚀 **Priority Queue:** `Enabled`\n"
-        if deluxe_settings.get("features", {}).get("xtv_pro_4gb"):
-            text += f"> ⚡ **XTV Pro 4GB Bypass:** `Enabled`\n"
+        text += get_features_display(deluxe_settings)
 
-        text += f"> 🛠️ **File Converter:** `Included`\n"
-        text += f"> 🎨 **Image Watermarker:** `Included`\n"
-        text += f"> 📽️ **4K Upscaling/Enhancement:** `Exclusive`\n"
         text += f"\n**Price:** `{dlx_usd}`\n"
         text += f"━━━━━━━━━━━━━━━━━━━━\n"
 

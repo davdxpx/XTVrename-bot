@@ -50,14 +50,19 @@ async def handle_start_command_unique(client, message):
                     share_display_name = True
 
                     if owner_id:
-                        owner_settings = await db.get_settings(owner_id)
-                        if owner_settings and "share_display_name" in owner_settings:
-                            share_display_name = owner_settings["share_display_name"]
                         owner_doc = await db.get_user(owner_id)
                         if owner_doc:
                             is_owner_premium = owner_doc.get("is_premium", False)
-                            if share_display_name:
-                                owner_name = owner_doc.get("first_name", "A user")
+
+                        owner_settings = await db.get_settings(owner_id)
+                        if owner_settings and "share_display_name" in owner_settings:
+                            share_display_name = owner_settings["share_display_name"]
+                        elif is_owner_premium:
+                            # For premium users, disabled by default for privacy reasons
+                            share_display_name = False
+
+                        if share_display_name and owner_doc:
+                            owner_name = owner_doc.get("first_name", "A user")
 
                     # If premium, hide forwarding tags
                     protect = not is_owner_premium
@@ -82,9 +87,15 @@ async def handle_start_command_unique(client, message):
                             except Exception as e:
                                 logger.error(f"Failed to copy group file {fid_str}: {e}")
 
-                    await message.reply_text(f"✅ Delivered {count} files successfully.")
+                    try:
+                        await client.send_sticker(user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+                    except Exception:
+                        await message.reply_text(f"✅ Delivered {count} files successfully.")
+
                     raise StopPropagation
             except Exception as e:
+                if isinstance(e, StopPropagation):
+                    raise
                 logger.error(f"Error handling group deep link: {e}")
                 pass
 

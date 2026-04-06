@@ -393,8 +393,8 @@ async def admin_callback(client, callback_query):
                 feat_list.append("Audio Editor")
             if features.get("priority_queue", False):
                 feat_list.append("Priority Queue")
-
-            feat_list.append("Batch Sharing")
+            if features.get("batch_sharing", False):
+                feat_list.append("Batch Sharing")
 
             # Formatting as bullet points
             return "\n".join([f"  • {feat}" for feat in feat_list]) if feat_list else "  • None"
@@ -472,7 +472,12 @@ async def admin_callback(client, callback_query):
 
         buttons.append([InlineKeyboardButton("← Back", callback_data="admin_per_plan_limits")])
 
-        text = f"⚙️ **Edit {plan_name.capitalize()} Plan Limits**\n\nSelect a limit to modify:"
+        text = (
+            f"⚙️ **Edit {plan_name.capitalize()} Plan Settings**\n\n"
+            f"> Configure the quotas, features, and prices for this tier.\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"Select a setting to modify:"
+        )
 
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -1172,8 +1177,11 @@ async def admin_callback(client, callback_query):
 
             pq = features.get("priority_queue", False)
 
+            bs = features.get("batch_sharing", False)
+
             buttons = [
-                [InlineKeyboardButton(f"{emoji(pq)} Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue")]
+                [InlineKeyboardButton(f"{emoji(pq)} Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue")],
+                [InlineKeyboardButton(f"{emoji(bs)} Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")]
             ]
 
             # Only show these if they are disabled globally, since if they are enabled globally, everyone gets them anyway.
