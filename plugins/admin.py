@@ -468,8 +468,8 @@ async def admin_callback(client, callback_query):
                 InlineKeyboardButton("💵 Edit Fiat Price", callback_data=f"prompt_premium_{plan_name}_price"),
                 InlineKeyboardButton("⭐ Edit Stars Price", callback_data=f"prompt_premium_{plan_name}_stars")
             ])
-            buttons.append([InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")])
 
+        buttons.append([InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")])
         buttons.append([InlineKeyboardButton("← Back", callback_data="admin_per_plan_limits")])
 
         text = (
@@ -1179,9 +1179,12 @@ async def admin_callback(client, callback_query):
 
             bs = features.get("batch_sharing", False)
 
+            ps = features.get("privacy_settings", False)
+
             buttons = [
                 [InlineKeyboardButton(f"{emoji(pq)} Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue")],
-                [InlineKeyboardButton(f"{emoji(bs)} Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")]
+                [InlineKeyboardButton(f"{emoji(bs)} Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")],
+                [InlineKeyboardButton(f"{emoji(ps)} Privacy Settings", callback_data=f"admin_premium_feat_{plan_name}_privacy_settings")]
             ]
 
             # Only show these if they are disabled globally, since if they are enabled globally, everyone gets them anyway.
