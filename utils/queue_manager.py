@@ -89,8 +89,10 @@ class QueueManager:
             return self.batches[batch_id].is_batch_complete()
         return True
 
-    def get_batch_summary(self, batch_id: str, usage_text: str) -> str:
+    def get_batch_summary(self, batch_id: str, usage_text: str, group_link: str = None) -> str:
         if batch_id not in self.batches:
+            if group_link:
+                return f"✅ **Batch Processing Complete!**\n\n🔗 **Group Link:** `{group_link}`\n\n📊 **Usage:** {usage_text}"
             return f"✅ **Batch Processing Complete!**\n\n📊 **Usage:** {usage_text}"
 
         batch = self.batches[batch_id]
@@ -120,6 +122,9 @@ class QueueManager:
 
         if failed_items:
             text += f"**Failed:** `{failed_count}` files.\n"
+
+        if group_link:
+            text += f"\n🔗 **Share Link:**\n`{group_link}`\n"
 
         text += f"\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
         return text

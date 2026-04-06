@@ -1444,6 +1444,14 @@ class TaskProcessor:
             except Exception as e:
                 logger.error(f"Failed to save file to DB Channel {storage_channel}: {e}")
 
+            # Attach the inserted file to the queue item
+            if batch_id and item_id and 'file_data' in locals():
+                q_item = queue_manager.batches.get(batch_id).get_item(item_id) if queue_manager.batches.get(batch_id) else None
+                if q_item:
+                    file_doc = await db.files.find_one({"file_name": file_data["file_name"], "user_id": self.user_id}, sort=[("created_at", -1)])
+                    if file_doc:
+                        q_item.db_file_id = str(file_doc["_id"])
+
             if batch_id and item_id:
                 if not dumb_channel:
                     queue_manager.update_status(batch_id, item_id, "done_dumb")
@@ -1453,9 +1461,48 @@ class TaskProcessor:
                 if queue_manager.is_batch_complete(batch_id):
                     if not getattr(queue_manager.batches.get(batch_id), "summary_sent", False):
                         try:
-                            summary_msg = queue_manager.get_batch_summary(batch_id, usage_text)
+                            deep_link = None
+
+                            # Gather all successfully processed file IDs from the queue
+                            batch_obj = queue_manager.batches.get(batch_id)
+                            if batch_obj:
+                                success_ids = [getattr(i, "db_file_id", None) for i in batch_obj.items.values() if i.status in ["done", "done_dumb", "done_user"] and getattr(i, "db_file_id", None)]
+
+                                if success_ids:
+                                    import uuid
+                                    config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+                                    user_doc = await db.get_user(self.user_id)
+                                    is_premium = user_doc.get("is_premium", False) if user_doc else False
+                                    plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
+
+                                    plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+                                    privacy_feat = plan_features.get("privacy", {})
+                                    allow_anon = privacy_feat.get("link_anonymity", False)
+
+                                    user_settings = await db.get_settings(self.user_id)
+                                    use_anon = False
+                                    if user_settings and "link_anonymity" in user_settings:
+                                        use_anon = user_settings["link_anonymity"]
+
+                                    if allow_anon and use_anon:
+                                        group_id = f"{uuid.uuid4().hex[:16]}"
+                                    else:
+                                        group_id = f"{self.user_id}_{int(datetime.datetime.utcnow().timestamp())}"
+
+                                    await db.db.file_groups.insert_one({
+                                        "group_id": group_id,
+                                        "user_id": self.user_id,
+                                        "files": success_ids,
+                                        "created_at": datetime.datetime.utcnow()
+                                    })
+
+                                    bot_me = await self.client.get_me()
+                                    bot_username = bot_me.username
+                                    deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
+
+                            summary_msg = queue_manager.get_batch_summary(batch_id, usage_text, deep_link)
                             await self.client.send_message(
-                                self.user_id, summary_msg
+                                self.user_id, summary_msg, disable_web_page_preview=True
                             )
                             try:
                                 await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")

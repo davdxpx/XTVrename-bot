@@ -376,7 +376,20 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             config = await db.settings.find_one({"_id": "global_settings"})
 
         import uuid
-        group_id = f"batch_{uuid.uuid4().hex[:12]}"
+
+        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+        privacy_feat = plan_features.get("privacy", {})
+        allow_anon = privacy_feat.get("link_anonymity", False)
+
+        user_settings = await db.get_settings(user_id)
+        use_anon = False
+        if user_settings and "link_anonymity" in user_settings:
+            use_anon = user_settings["link_anonymity"]
+
+        if allow_anon and use_anon:
+            group_id = f"{uuid.uuid4().hex[:16]}"
+        else:
+            group_id = f"{user_id}_{int(datetime.datetime.utcnow().timestamp())}"
 
         await db.db.file_groups.insert_one({
             "group_id": group_id,
@@ -387,23 +400,22 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
 
-        perm_count = await db.files.count_documents({"user_id": user_id, "status": "permanent"} if Config.PUBLIC_MODE else {"status": "permanent"})
-        limits = config.get("myfiles_limits", {}).get(plan, {})
-        perm_limit = limits.get("permanent_limit", 50)
-        limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
-
         text = (
-            f"✅ **Batch Processing Complete!**\n\n"
-            f"Processed: {len(selected_files)}/{len(selected_files)} files successfully.\n\n"
-            f"Share Link: `{deep_link}`\n\n"
-            f"📊 Usage: {perm_count} files used of {limit_str} (Permanent slots)\n"
+            f"📦 **Batch Share Link Generated**\n\n"
+            f"**Files Included:** `{len(selected_files)}` files\n"
+            f"**Link:**\n`{deep_link}`\n\n"
+            f"> Anyone with this link can start the bot and receive these files."
         )
 
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
+
         try:
             await callback_query.message.edit_text(
                 text,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=back_data)]])
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔗 Copy Link", copy_text=deep_link)],
+                    [InlineKeyboardButton("🔙 Back", callback_data=back_data)]
+                ])
             )
         except MessageNotModified:
             pass
@@ -420,11 +432,11 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         text = "📂 **Batch Move Files**\n\nSelect a folder to move the selected files to:"
         buttons = [
-            [InlineKeyboardButton("🧹 Remove from Folder", callback_data=f"mf_ms_domov_None_{back_data}")]
+            [InlineKeyboardButton("🧹 Remove from Folder", callback_data=f"mf_ms_domov_None")]
         ]
 
         for folder in folders:
-            buttons.append([InlineKeyboardButton(f"📁 {folder['name']}", callback_data=f"mf_ms_domov_{str(folder['_id'])}_{back_data}")])
+            buttons.append([InlineKeyboardButton(f"📁 {folder['name']}", callback_data=f"mf_ms_domov_{str(folder['_id'])}")])
 
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
         buttons.append([InlineKeyboardButton("🔙 Cancel", callback_data=back_data)])
@@ -518,11 +530,23 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         )
         buttons = [
             [InlineKeyboardButton(f"Auto-Permanent: {emoji}", callback_data="myfiles_toggle_auto")],
-            [InlineKeyboardButton(f"Group Series by Season: {group_emoji}", callback_data="myfiles_toggle_grouping")],
-            [InlineKeyboardButton("🔒 Privacy Settings", callback_data="myfiles_privacy_settings")],
-            [InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")],
-            [InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")]
+            [InlineKeyboardButton(f"Group Series by Season: {group_emoji}", callback_data="myfiles_toggle_grouping")]
         ]
+
+        # Check if user has privacy settings
+        user_doc = await db.get_user(user_id)
+        is_premium = user_doc.get("is_premium", False) if user_doc else False
+        plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+
+        if plan_features.get("privacy_settings", False) or plan == "global":
+            buttons.append([InlineKeyboardButton("🔒 Privacy Settings", callback_data="myfiles_privacy_settings")])
+
+        buttons.append([InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")])
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")])
+
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
@@ -551,6 +575,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+        privacy_feat = plan_features.get("privacy", {})
 
         if not plan_features.get("privacy_settings", False) and plan != "global":
             await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
@@ -569,23 +594,60 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "hide_forward_tags" in user_settings:
             hide_forward = user_settings["hide_forward_tags"]
 
+        link_anon = False
+        if user_settings and "link_anonymity" in user_settings:
+            link_anon = user_settings["link_anonymity"]
+
         emoji_name = "✅ ON" if share_name else "❌ OFF"
         emoji_fwd = "✅ ON" if hide_forward else "❌ OFF"
+        emoji_anon = "✅ ON" if link_anon else "❌ OFF"
 
         text = (
             "🔒 **Privacy Settings**\n\n"
-            "**Share Display Name:** When enabled, your name will be displayed when sharing your files with others via deep links.\n\n"
-            "**Hide Forwarding Tags:** When enabled, forwarded files will not have 'Forwarded from' tags when shared via deep links.\n\n"
         )
-        buttons = [
-            [InlineKeyboardButton(f"Display Name on Shares: {emoji_name}", callback_data="myfiles_toggle_share_name")],
-            [InlineKeyboardButton(f"Hide Forward Tags: {emoji_fwd}", callback_data="myfiles_toggle_hide_fwd")],
-            [InlineKeyboardButton("🔙 Back", callback_data="myfiles_settings")]
-        ]
+
+        buttons = []
+
+        if privacy_feat.get("hide_display_name", False) or plan == "global":
+            text += "**Share Display Name:** When enabled, your name will be displayed when sharing your files with others via deep links.\n\n"
+            buttons.append([InlineKeyboardButton(f"Display Name on Shares: {emoji_name}", callback_data="myfiles_toggle_share_name")])
+
+        if privacy_feat.get("hide_forward_tags", False) or plan == "global":
+            text += "**Hide Forwarding Tags:** When enabled, forwarded files will not have 'Forwarded from' tags when shared via deep links.\n\n"
+            buttons.append([InlineKeyboardButton(f"Hide Forward Tags: {emoji_fwd}", callback_data="myfiles_toggle_hide_fwd")])
+
+        if privacy_feat.get("link_anonymity", False) or plan == "global":
+            text += "**Link Anonymity:** When enabled, batch share links use a secure, anonymous hash rather than embedding your account ID.\n\n"
+            buttons.append([InlineKeyboardButton(f"Link Anonymity: {emoji_anon}", callback_data="myfiles_toggle_link_anon")])
+
+        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_settings")])
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
             pass
+        return
+
+    if data == "myfiles_toggle_link_anon":
+        user_doc = await db.get_user(user_id)
+        is_premium = user_doc.get("is_premium", False) if user_doc else False
+        plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+        privacy_feat = plan_features.get("privacy", {})
+        if not privacy_feat.get("link_anonymity", False) and plan != "global":
+            await callback_query.answer("Your current plan does not have access to this setting.", show_alert=True)
+            return
+
+        user_settings = await db.get_settings(user_id)
+        link_anon = False
+        if user_settings and "link_anonymity" in user_settings:
+            link_anon = user_settings["link_anonymity"]
+
+        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"link_anonymity": not link_anon}}, upsert=True)
+        await callback_query.answer("Privacy setting updated", show_alert=False)
+        callback_query.data = "myfiles_privacy_settings"
+        await myfiles_callback(client, callback_query)
         return
 
     if data == "myfiles_toggle_share_name":

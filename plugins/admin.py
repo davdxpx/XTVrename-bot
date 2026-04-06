@@ -29,7 +29,7 @@ def get_admin_main_menu(pro_session, public_mode):
                     "🌐 Public Mode Settings", callback_data="admin_public_settings"
                 ),
                 InlineKeyboardButton(
-                    "🔒 Access & Limits", callback_data="admin_access_limits"
+                    "🔒 Settings", callback_data="admin_access_limits"
                 ),
             ]
         )
@@ -140,16 +140,11 @@ def get_admin_templates_menu():
     )
 
 async def get_admin_access_limits_menu():
-    buttons = [
-        [InlineKeyboardButton("🔑 Access", callback_data="admin_access_menu"),
-         InlineKeyboardButton("📈 Limits", callback_data="admin_limits_menu")],
-        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]
-    ]
-    return InlineKeyboardMarkup(buttons)
-
-async def get_admin_access_menu():
     buttons = []
+
     if Config.PUBLIC_MODE:
+        buttons.append([InlineKeyboardButton("📋 Per-Plan Settings", callback_data="admin_per_plan_limits")])
+        buttons.append([InlineKeyboardButton("🌍 Global Daily Egress Limit", callback_data="admin_global_limit")])
         pro_session = await db.get_pro_session()
         if pro_session:
             buttons.append(
@@ -159,40 +154,6 @@ async def get_admin_access_menu():
                     )
                 ]
             )
-    buttons.append(
-        [
-            InlineKeyboardButton(
-                "⚙️ Feature Toggles", callback_data="admin_feature_toggles"
-            )
-        ]
-    )
-    buttons.append([InlineKeyboardButton("← Back", callback_data="admin_access_limits")])
-    return InlineKeyboardMarkup(buttons)
-
-async def get_admin_limits_menu():
-    buttons = []
-    if Config.PUBLIC_MODE:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    "💎 Premium Settings", callback_data="admin_premium_settings"
-                )
-            ]
-        )
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    "⚙️ Per Plan Settings", callback_data="admin_per_plan_limits"
-                )
-            ]
-        )
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    "📁 /myfiles Settings", callback_data="admin_myfiles_settings"
-                )
-            ]
-        )
     else:
         buttons.append(
             [
@@ -1040,7 +1001,7 @@ async def admin_callback(client, callback_query):
                     [InlineKeyboardButton(f"{'✅ ' if current_val == 'all' else ''}Everyone", callback_data="set_4gb_access_all")],
                     [InlineKeyboardButton(f"{'✅ ' if current_val == 'premium_all' else ''}All Premium Users", callback_data="set_4gb_access_premium_all")],
                     [InlineKeyboardButton(f"{'✅ ' if current_val == 'premium_deluxe' else ''}Premium Deluxe Only", callback_data="set_4gb_access_premium_deluxe")],
-                    [InlineKeyboardButton("← Back", callback_data="admin_access_menu")]
+                    [InlineKeyboardButton("← Back", callback_data="admin_access_limits")]
                 ])
             )
         except MessageNotModified:
@@ -1056,14 +1017,17 @@ async def admin_callback(client, callback_query):
         return
 
     if data.startswith("admin_toggle_"):
-        feature = data.replace("admin_toggle_", "")
+        parts = data.replace("admin_toggle_", "").rsplit("_", 1)
+        feature = parts[0]
+        plan_name = parts[1] if len(parts) > 1 else "free"
+
         toggles = await db.get_feature_toggles()
         current_state = toggles.get(feature, True)
         new_state = not current_state
         await db.update_feature_toggle(feature, new_state)
         await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} feature.", show_alert=True)
         # Re-render the menu
-        callback_query.data = "admin_feature_toggles"
+        callback_query.data = f"admin_premium_features_{plan_name}"
         await admin_callback(client, callback_query)
         return
 
@@ -1176,9 +1140,7 @@ async def admin_callback(client, callback_query):
             def emoji(state): return "✅" if state else "❌"
 
             pq = features.get("priority_queue", False)
-
             bs = features.get("batch_sharing", False)
-
             ps = features.get("privacy_settings", False)
 
             buttons = [
@@ -1187,26 +1149,41 @@ async def admin_callback(client, callback_query):
                 [InlineKeyboardButton(f"{emoji(ps)} Privacy Settings", callback_data=f"admin_premium_feat_{plan_name}_privacy_settings")]
             ]
 
-            # Only show these if they are disabled globally, since if they are enabled globally, everyone gets them anyway.
-            if not global_toggles.get("file_converter", True):
-                fc = features.get("file_converter", False)
-                buttons.append([InlineKeyboardButton(f"{emoji(fc)} File Converter", callback_data=f"admin_premium_feat_{plan_name}_file_converter")])
+            if plan_name == "free":
+                fc = global_toggles.get("file_converter", True)
+                buttons.append([InlineKeyboardButton(f"{emoji(fc)} File Converter", callback_data=f"admin_toggle_file_converter_{plan_name}")])
 
-            if not global_toggles.get("audio_editor", True):
-                ae = features.get("audio_editor", False)
-                buttons.append([InlineKeyboardButton(f"{emoji(ae)} Audio Editor", callback_data=f"admin_premium_feat_{plan_name}_audio_editor")])
+                ae = global_toggles.get("audio_editor", True)
+                buttons.append([InlineKeyboardButton(f"{emoji(ae)} Audio Editor", callback_data=f"admin_toggle_audio_editor_{plan_name}")])
 
-            if not global_toggles.get("watermarker", True):
-                wm = features.get("watermarker", False)
-                buttons.append([InlineKeyboardButton(f"{emoji(wm)} Watermarker", callback_data=f"admin_premium_feat_{plan_name}_watermarker")])
+                wm = global_toggles.get("watermarker", True)
+                buttons.append([InlineKeyboardButton(f"{emoji(wm)} Watermarker", callback_data=f"admin_toggle_watermarker_{plan_name}")])
 
-            if not global_toggles.get("subtitle_extractor", True):
-                se = features.get("subtitle_extractor", False)
-                buttons.append([InlineKeyboardButton(f"{emoji(se)} Subtitle Extractor", callback_data=f"admin_premium_feat_{plan_name}_subtitle_extractor")])
+                se = global_toggles.get("subtitle_extractor", True)
+                buttons.append([InlineKeyboardButton(f"{emoji(se)} Subtitle Extractor", callback_data=f"admin_toggle_subtitle_extractor_{plan_name}")])
+            else:
+                if not global_toggles.get("file_converter", True):
+                    fc = features.get("file_converter", False)
+                    buttons.append([InlineKeyboardButton(f"{emoji(fc)} File Converter", callback_data=f"admin_premium_feat_{plan_name}_file_converter")])
+
+                if not global_toggles.get("audio_editor", True):
+                    ae = features.get("audio_editor", False)
+                    buttons.append([InlineKeyboardButton(f"{emoji(ae)} Audio Editor", callback_data=f"admin_premium_feat_{plan_name}_audio_editor")])
+
+                if not global_toggles.get("watermarker", True):
+                    wm = features.get("watermarker", False)
+                    buttons.append([InlineKeyboardButton(f"{emoji(wm)} Watermarker", callback_data=f"admin_premium_feat_{plan_name}_watermarker")])
+
+                if not global_toggles.get("subtitle_extractor", True):
+                    se = features.get("subtitle_extractor", False)
+                    buttons.append([InlineKeyboardButton(f"{emoji(se)} Subtitle Extractor", callback_data=f"admin_premium_feat_{plan_name}_subtitle_extractor")])
 
             buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")])
 
-            text = f"⚙️ **{plan_name.capitalize()} Plan Features**\n\nToggle which features users on this plan can access (overrides global toggles):"
+            if plan_name == "free":
+                text = f"⚙️ **Free Plan Features**\n\nToggle features. Note: Free Plan media features (Converter, Editor, etc.) apply globally by default. If you disable them here, you can re-enable them individually on Premium plans."
+            else:
+                text = f"⚙️ **{plan_name.capitalize()} Plan Features**\n\nToggle which features users on this plan can access (overrides global limits):"
 
             try:
                 await callback_query.message.edit_text(
@@ -1222,6 +1199,12 @@ async def admin_callback(client, callback_query):
             plan_name = parts[0]
             feature_name = parts[1]
 
+            if feature_name == "privacy_settings":
+                # Expand into a new menu
+                callback_query.data = f"admin_privacy_menu_{plan_name}"
+                await admin_callback(client, callback_query)
+                return
+
             config = await db.get_public_config()
             plan_key = f"premium_{plan_name}"
             plan_settings = config.get(plan_key, {})
@@ -1236,6 +1219,54 @@ async def admin_callback(client, callback_query):
             callback_query.data = f"admin_premium_features_{plan_name}"
             await admin_callback(client, callback_query)
             return
+
+        elif data.startswith("admin_privacy_menu_"):
+            plan_name = data.replace("admin_privacy_menu_", "")
+            config = await db.get_public_config()
+            plan_key = f"premium_{plan_name}"
+            plan_settings = config.get(plan_key, {})
+            features = plan_settings.get("features", {})
+            privacy = features.get("privacy", {})
+
+            def emoji(state): return "✅" if state else "❌"
+
+            buttons = [
+                [InlineKeyboardButton(f"{emoji(privacy.get('hide_display_name', False))} Hide Display Name", callback_data=f"admin_privacy_toggle_{plan_name}_hide_display_name")],
+                [InlineKeyboardButton(f"{emoji(privacy.get('hide_forward_tags', False))} Hide Forward Tags", callback_data=f"admin_privacy_toggle_{plan_name}_hide_forward_tags")],
+                [InlineKeyboardButton(f"{emoji(privacy.get('link_anonymity', False))} Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")],
+                [InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")]
+            ]
+
+            text = f"🔒 **Privacy Feature Access ({plan_name.capitalize()})**\n\nToggle which privacy controls are **available** for users on this plan to configure in their /settings:"
+
+            try:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except MessageNotModified:
+                pass
+            return
+
+        elif data.startswith("admin_privacy_toggle_"):
+            parts = data.replace("admin_privacy_toggle_", "").split("_", 1)
+            plan_name = parts[0]
+            feature_name = parts[1]
+
+            config = await db.get_public_config()
+            plan_key = f"premium_{plan_name}"
+            plan_settings = config.get(plan_key, {})
+            features = plan_settings.get("features", {})
+            privacy = features.get("privacy", {})
+
+            current = privacy.get(feature_name, False)
+            privacy[feature_name] = not current
+            features["privacy"] = privacy
+            plan_settings["features"] = features
+
+            await db.update_public_config(plan_key, plan_settings)
+
+            callback_query.data = f"admin_privacy_menu_{plan_name}"
+            await admin_callback(client, callback_query)
+            return
+
 
         elif data.startswith("prompt_premium_"):
             parts = data.replace("prompt_premium_", "").split("_")
@@ -2117,25 +2148,7 @@ async def admin_callback(client, callback_query):
         try:
             reply_markup = await get_admin_access_limits_menu()
             await callback_query.message.edit_text(
-                "🔒 **Access & Limits Menu**\n\n" "Select a category:",
-                reply_markup=reply_markup,
-            )
-        except MessageNotModified:
-            pass
-    elif data == "admin_access_menu":
-        try:
-            reply_markup = await get_admin_access_menu()
-            await callback_query.message.edit_text(
-                "🔑 **Access Settings**\n\n" "Manage global access and toggles:",
-                reply_markup=reply_markup,
-            )
-        except MessageNotModified:
-            pass
-    elif data == "admin_limits_menu":
-        try:
-            reply_markup = await get_admin_limits_menu()
-            await callback_query.message.edit_text(
-                "📈 **Limits Settings**\n\n" "Manage user quotas and file limits:",
+                "🔒 **Settings Menu**\n\n" "Select a category:",
                 reply_markup=reply_markup,
             )
         except MessageNotModified:
