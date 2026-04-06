@@ -1344,7 +1344,7 @@ class TaskProcessor:
                     except:
                         pass
 
-                if not dest_folder and not skip_myfiles:
+                if (not dest_folder or dest_folder == "auto") and not skip_myfiles:
                     if self.tmdb_id:
                         folder_type = "series" if self.media_type == "series" else "movies"
                         folder = await db.folders.find_one({"user_id": self.user_id, "tmdb_id": self.tmdb_id})

@@ -749,6 +749,9 @@ async def prompt_destination_folder(client, user_id, message_obj, is_edit=False,
 
     # Options for non-specific folders
     buttons.append([
+        InlineKeyboardButton("🤖 Auto-Assign Folder", callback_data="sel_dest_auto"),
+    ])
+    buttons.append([
         InlineKeyboardButton("📁 Save to MyFiles (Root)", callback_data="sel_dest_root"),
     ])
     buttons.append([
@@ -904,6 +907,8 @@ async def handle_dest_selection(client, callback_query):
         dest = "root"
     elif action == "none":
         dest = "none"
+    elif action == "auto":
+        dest = "auto"
     elif action.startswith("f_"):
         dest = action[2:]
 
