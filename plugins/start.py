@@ -85,7 +85,21 @@ async def handle_start_command_unique(client, message):
                                 count += 1
                                 await asyncio.sleep(0.5) # Anti-flood delay
                             except Exception as e:
-                                logger.error(f"Failed to copy group file {fid_str}: {e}")
+                                if "Peer id invalid" in str(e) or "PeerIdInvalid" in str(type(e)):
+                                    try:
+                                        await client.get_chat(f["channel_id"])
+                                        await client.copy_message(
+                                            chat_id=user_id,
+                                            from_chat_id=f["channel_id"],
+                                            message_id=f["message_id"],
+                                            protect_content=protect
+                                        )
+                                        count += 1
+                                        await asyncio.sleep(0.5)
+                                    except Exception as nested_e:
+                                        logger.error(f"Failed to copy group file {fid_str} after peer cache: {nested_e}")
+                                else:
+                                    logger.error(f"Failed to copy group file {fid_str}: {e}")
 
                     try:
                         await client.send_sticker(user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
