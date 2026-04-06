@@ -1384,6 +1384,9 @@ class TaskProcessor:
                         system_filename_template = settings.get("templates", {}).get("system_filename")
 
                         if system_filename_template:
+                            # Safely fetch properties
+                            safe_title = self.title if self.title else "unknown"
+                            year_str = str(self.year) if self.year else ""
                             # Ensure episode is safely formatted for formatting string dict
                             ep_str_for_sys = "".join([f"E{int(e):02d}" for e in self.episode]) if isinstance(self.episode, list) else f"{self.episode:02d}" if self.episode else ""
                             sys_fmt_dict = {
