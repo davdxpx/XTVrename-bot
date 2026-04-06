@@ -25,6 +25,69 @@ async def handle_start_command_unique(client, message):
     if len(command_parts) > 1:
         param = command_parts[1]
 
+        if param.startswith("group_"):
+            from pyrogram import StopPropagation
+            group_id = param.replace("group_", "")
+            from bson.objectid import ObjectId
+            try:
+                group_doc = await db.db.file_groups.find_one({"group_id": group_id})
+                if group_doc:
+                    if not Config.PUBLIC_MODE:
+                        if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
+                            await message.reply_text("❌ Access Denied.")
+                            raise StopPropagation
+                    else:
+                        config = await db.get_public_config()
+                        if not await check_force_sub(client, user_id):
+                            await send_force_sub_gate(client, message, config)
+                            raise StopPropagation
+
+                    file_ids = group_doc.get("files", [])
+                    owner_id = group_doc.get("user_id")
+
+                    owner_name = "A user"
+                    is_owner_premium = False
+                    share_display_name = True
+
+                    if owner_id:
+                        owner_settings = await db.get_settings(owner_id)
+                        if owner_settings and "share_display_name" in owner_settings:
+                            share_display_name = owner_settings["share_display_name"]
+                        owner_doc = await db.get_user(owner_id)
+                        if owner_doc:
+                            is_owner_premium = owner_doc.get("is_premium", False)
+                            if share_display_name:
+                                owner_name = owner_doc.get("first_name", "A user")
+
+                    # If premium, hide forwarding tags
+                    protect = not is_owner_premium
+
+                    await message.reply_text(f"📦 **Batch File Delivery**\n\nReceiving {len(file_ids)} files shared by: `{owner_name if share_display_name else 'Anonymous'}`")
+
+                    # We could queue this or send them slowly
+                    import asyncio
+                    count = 0
+                    for fid_str in file_ids:
+                        f = await db.files.find_one({"_id": ObjectId(fid_str)})
+                        if f:
+                            try:
+                                await client.copy_message(
+                                    chat_id=user_id,
+                                    from_chat_id=f["channel_id"],
+                                    message_id=f["message_id"],
+                                    protect_content=protect
+                                )
+                                count += 1
+                                await asyncio.sleep(0.5) # Anti-flood delay
+                            except Exception as e:
+                                logger.error(f"Failed to copy group file {fid_str}: {e}")
+
+                    await message.reply_text(f"✅ Delivered {count} files successfully.")
+                    raise StopPropagation
+            except Exception as e:
+                logger.error(f"Error handling group deep link: {e}")
+                pass
+
         if param.startswith("file_"):
             from pyrogram import StopPropagation
             file_id_str = param.replace("file_", "")

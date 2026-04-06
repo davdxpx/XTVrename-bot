@@ -161,12 +161,15 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
             InlineKeyboardButton(f"📂 Move Selected ({len(selected_files)})", callback_data=f"myfiles_ms_move_{back_data}"),
             InlineKeyboardButton(f"🗑 Delete Selected ({len(selected_files)})", callback_data=f"myfiles_ms_delete_{back_data}")
         ])
+        buttons.append([
+            InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"myfiles_ms_share_{back_data}")
+        ])
 
     buttons.append([
         InlineKeyboardButton("📤 Send All", callback_data=f"myfiles_sendall_{back_data}")
     ])
 
-    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=back_data)])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"myfiles_leave_{back_data}")])
     return buttons, total_files
 
 @Client.on_message(filters.text & filters.private, group=-2)
@@ -258,7 +261,21 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         pass
 
     if data.startswith("myfiles_sort_toggle_"):
-        back_data = data.replace("myfiles_sort_toggle_", "")
+        # The back_data here actually represents the menu we are currently in
+        # (e.g. myfiles_cat_custom, myfiles_folder_<id>)
+        # We need to re-render the page view.
+        # Usually, when user hits sort toggle, they are on page 0 or a specific page.
+        # However, the callback_data for sort toggle only contains back_data which is the *parent* menu.
+        # To truly reload the current page, we need to know the current folder context.
+        parts = data.split("_", 3)
+        if len(parts) >= 4 and parts[3].startswith("page_"):
+            # New format: myfiles_sort_toggle_{page}_{back_data}
+            page = int(parts[3].replace("page_", "").split("_")[0])
+            back_data = data.replace(f"myfiles_sort_toggle_page_{page}_", "")
+        else:
+            page = 0
+            back_data = data.replace("myfiles_sort_toggle_", "")
+
         state_dict = await get_myfiles_state(user_id)
 
         current_sort = state_dict.get("sort_order", "newest")
@@ -272,23 +289,21 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         state_dict["sort_order"] = next_sort
         await set_myfiles_state(user_id, state_dict)
 
-        # Determine the current page, if applicable. Default to 0.
-        # It's better to just refresh the current back_data view.
-        callback_query.data = back_data
-        if "page_" in back_data:
-            callback_query.data = back_data # It will hit page handler
-        else:
-            # Let's just simulate returning to the list view by calling the appropriate list view data
-            if back_data == "myfiles_main":
-                callback_query.data = "myfiles_cat_recent"
-            else:
-                callback_query.data = back_data
-
+        # We simulate myfiles_page_ call which properly renders the file list using back_data as context
+        callback_query.data = f"myfiles_page_{page}_{back_data}"
         await myfiles_callback(client, callback_query)
         return
 
     if data.startswith("myfiles_ms_toggle_"):
-        back_data = data.replace("myfiles_ms_toggle_", "")
+        parts = data.split("_", 3)
+        if len(parts) >= 4 and parts[3].startswith("page_"):
+            # New format: myfiles_ms_toggle_{page}_{back_data}
+            page = int(parts[3].replace("page_", "").split("_")[0])
+            back_data = data.replace(f"myfiles_ms_toggle_page_{page}_", "")
+        else:
+            page = 0
+            back_data = data.replace("myfiles_ms_toggle_", "")
+
         state_dict = await get_myfiles_state(user_id)
 
         multi_select = state_dict.get("multi_select", False)
@@ -298,11 +313,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         await set_myfiles_state(user_id, state_dict)
 
-        if back_data == "myfiles_main":
-            callback_query.data = "myfiles_cat_recent"
-        else:
-            callback_query.data = back_data
-
+        callback_query.data = f"myfiles_page_{page}_{back_data}"
         await myfiles_callback(client, callback_query)
         return
 
@@ -355,6 +366,87 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             callback_query.data = back_data
 
         await myfiles_callback(client, callback_query)
+        return
+
+    if data.startswith("myfiles_leave_"):
+        # Automatically deactivate multi-select on leaving
+        back_data = data.replace("myfiles_leave_", "")
+        state_dict = await get_myfiles_state(user_id)
+        if state_dict.get("multi_select", False):
+            state_dict["multi_select"] = False
+            state_dict["selected_files"] = []
+            await set_myfiles_state(user_id, state_dict)
+
+        callback_query.data = back_data
+        await myfiles_callback(client, callback_query)
+        return
+
+    if data.startswith("myfiles_ms_share_"):
+        back_data = data.replace("myfiles_ms_share_", "")
+        state_dict = await get_myfiles_state(user_id)
+        selected_files = state_dict.get("selected_files", [])
+
+        if not selected_files:
+            await callback_query.answer("No files selected.", show_alert=True)
+            return
+
+        bot_me = await client.get_me()
+        bot_username = bot_me.username
+
+        # We need to save the grouped files to generate a shareable group link.
+        # Check permissions for batch sharing
+        user_doc = await db.get_user(user_id)
+        if Config.PUBLIC_MODE:
+            plan = user_doc.get("premium_plan", "standard") if user_doc and user_doc.get("is_premium") else "free"
+            config = await db.get_public_config()
+        else:
+            plan = "global"
+            config = await db.settings.find_one({"_id": "global_settings"})
+
+        # Optional: implement per-plan checks for batch sharing
+        # If toggled off in features for this plan:
+        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+        if plan == "free":
+            # For now, allow it, but we can respect feature toggles
+            pass
+
+        group_id = f"batch_{user_id}_{int(datetime.datetime.utcnow().timestamp())}"
+
+        # We can store this group in the database
+        await db.db.file_groups.insert_one({
+            "group_id": group_id,
+            "user_id": user_id,
+            "files": selected_files,
+            "created_at": datetime.datetime.utcnow()
+        })
+
+        deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
+
+        # Get usage
+        perm_count = await db.files.count_documents({"user_id": user_id, "status": "permanent"} if Config.PUBLIC_MODE else {"status": "permanent"})
+        limits = config.get("myfiles_limits", {}).get(plan, {})
+        perm_limit = limits.get("permanent_limit", 50)
+        limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
+
+        text = (
+            f"✅ **Batch Processing Complete!**\n\n"
+            f"Processed: {len(selected_files)}/{len(selected_files)} files successfully.\n\n"
+            f"Share Link: `{deep_link}`\n\n"
+            f"📊 Usage: {perm_count} files used of {limit_str} (Permanent slots)\n"
+        )
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data=back_data)]])
+            )
+        except MessageNotModified:
+            pass
+
+        # Turn off multi-select
+        state_dict["multi_select"] = False
+        state_dict["selected_files"] = []
+        await set_myfiles_state(user_id, state_dict)
         return
 
     if data.startswith("myfiles_ms_move_"):
@@ -444,14 +536,26 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "myfiles_auto_permanent" in user_settings:
             auto_perm = user_settings["myfiles_auto_permanent"]
 
+        grouping_enabled = False
+        if Config.PUBLIC_MODE:
+            user_doc = await db.get_user(user_id)
+            grouping_enabled = user_doc.get("group_series_by_season", False)
+        else:
+            config = await db.settings.find_one({"_id": "global_settings"})
+            grouping_enabled = config.get("group_series_by_season", False)
+
         emoji = "✅ ON" if auto_perm else "❌ OFF"
+        group_emoji = "✅ ON" if grouping_enabled else "❌ OFF"
+
         text = (
             "⚙️ **/myfiles Settings**\n\n"
             "**Auto-Permanent Mode:** When enabled, files will automatically consume your permanent storage slots. "
-            "When disabled, files are saved as temporary by default, and you must manually mark them as permanent."
+            "When disabled, files are saved as temporary by default, and you must manually mark them as permanent.\n\n"
+            "**Group Series by Season:** When enabled, files in Series folders will be dynamically grouped into virtual Season subfolders based on metadata."
         )
         buttons = [
             [InlineKeyboardButton(f"Auto-Permanent: {emoji}", callback_data="myfiles_toggle_auto")],
+            [InlineKeyboardButton(f"Group Series by Season: {group_emoji}", callback_data="myfiles_toggle_grouping")],
             [InlineKeyboardButton("🔒 Privacy Settings", callback_data="myfiles_privacy_settings")],
             [InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")],
             [InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")]
@@ -460,6 +564,21 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
             pass
+        return
+
+    if data == "myfiles_toggle_grouping":
+        if Config.PUBLIC_MODE:
+            user_doc = await db.get_user(user_id)
+            current = user_doc.get("group_series_by_season", False)
+            await db.users.update_one({"user_id": user_id}, {"$set": {"group_series_by_season": not current}})
+        else:
+            config = await db.settings.find_one({"_id": "global_settings"})
+            current = config.get("group_series_by_season", False)
+            await db.settings.update_one({"_id": "global_settings"}, {"$set": {"group_series_by_season": not current}})
+
+        await callback_query.answer("Grouping setting toggled.", show_alert=False)
+        callback_query.data = "myfiles_settings"
+        await myfiles_callback(client, callback_query)
         return
 
     if data == "myfiles_privacy_settings":
@@ -580,12 +699,100 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             return
 
         filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
+
+        # Check grouping setting
+        if Config.PUBLIC_MODE:
+            user_doc = await db.get_user(user_id)
+            grouping_enabled = user_doc.get("group_series_by_season", False)
+        else:
+            config = await db.settings.find_one({"_id": "global_settings"})
+            grouping_enabled = config.get("group_series_by_season", False)
+
+        if folder.get('type') == 'series' and grouping_enabled:
+            # Group by season
+            files = await db.files.find(filter_query).to_list(length=None)
+            season_counts = {}
+            for f in files:
+                # We need to extract the season. We can use guessit or custom parsing if available in tmdb_data or guessit_data.
+                # First check if we have season in tmdb_data or guess_data
+                season = "Unknown"
+                tmdb_data = f.get("tmdb_data")
+                if tmdb_data and "season" in tmdb_data:
+                    season = str(tmdb_data["season"])
+                elif f.get("guess_data") and "season" in f["guess_data"]:
+                    # Season could be a list or int in guessit
+                    s_data = f["guess_data"]["season"]
+                    if isinstance(s_data, list):
+                        season = str(s_data[0])
+                    else:
+                        season = str(s_data)
+
+                if season not in season_counts:
+                    season_counts[season] = 0
+                season_counts[season] += 1
+
+            buttons = []
+            for season in sorted(season_counts.keys(), key=lambda x: int(x) if x.isdigit() else 9999):
+                buttons.append([InlineKeyboardButton(f"📁 Season {season} ({season_counts[season]})", callback_data=f"myfiles_season_{folder_id}_{season}")])
+
+            buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"myfiles_cat_{folder.get('type', 'custom')}")])
+            total = sum(season_counts.values())
+            text = f"📁 **{folder['name']}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary\n\nSelect a season:"
+
+            try:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except MessageNotModified:
+                pass
+            return
+
+        # Normal list
         buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"myfiles_cat_{folder.get('type', 'custom')}")
 
         if folder.get('type') == 'custom':
             buttons.insert(-2, [InlineKeyboardButton("🗑️ Delete Folder", callback_data=f"myfiles_del_folder_{folder_id}")])
 
         text = f"📁 **{folder['name']}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary"
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("myfiles_season_"):
+        parts = data.replace("myfiles_season_", "").split("_")
+        folder_id = parts[0]
+        season = parts[1]
+
+        folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
+        if not folder:
+            await callback_query.answer("Folder not found.", show_alert=True)
+            return
+
+        filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
+
+        # We need to filter files by season in the DB query
+        # Since MongoDB can't easily filter by nested variant types directly for this specific guessit structure,
+        # we do a normal fetch and filter in python if necessary. But to support pagination, we should build a query if possible.
+        # Let's try to query by guess_data.season. Since it can be a list or int, we use $in or simple equality.
+
+        if season.isdigit():
+            season_val = int(season)
+            # Match where season is season_val, or season is an array containing season_val, or tmdb_data.season is season_val
+            filter_query["$or"] = [
+                {"guess_data.season": season_val},
+                {"guess_data.season": {"$in": [season_val]}},
+                {"tmdb_data.season": season_val}
+            ]
+        else:
+            # Handle "Unknown" or non-digit seasons
+            filter_query["$and"] = [
+                {"guess_data.season": {"$exists": False}},
+                {"tmdb_data.season": {"$exists": False}}
+            ]
+
+        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"myfiles_folder_{folder_id}")
+
+        text = f"📁 **{folder['name']} - Season {season}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary"
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
@@ -934,15 +1141,47 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data.startswith("myfiles_sendall_"):
         back_data = data.replace("myfiles_sendall_", "")
 
-        if back_data == "myfiles_main":
-            filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
-        elif back_data.startswith("myfiles_folder_"):
-            folder_id = back_data.replace("myfiles_folder_", "")
-            filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
-        else:
-            filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
+        filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
 
-        files = await db.files.find(filter_query).sort("created_at", 1).to_list(length=None)
+        # When paginating, back_data is wrapped. We can ignore "myfiles_page_..." but we need context
+        # But wait, sendall back_data is just the parent menu like "myfiles_folder_id" or "myfiles_season_id_season"
+
+        if back_data.startswith("myfiles_folder_"):
+            folder_id = back_data.replace("myfiles_folder_", "")
+            filter_query["folder_id"] = ObjectId(folder_id)
+        elif back_data.startswith("myfiles_season_"):
+            parts = back_data.replace("myfiles_season_", "").split("_")
+            folder_id = parts[0]
+            season = parts[1]
+            filter_query["folder_id"] = ObjectId(folder_id)
+            if season.isdigit():
+                season_val = int(season)
+                filter_query["$or"] = [
+                    {"guess_data.season": season_val},
+                    {"guess_data.season": {"$in": [season_val]}},
+                    {"tmdb_data.season": season_val}
+                ]
+            else:
+                filter_query["$and"] = [
+                    {"guess_data.season": {"$exists": False}},
+                    {"tmdb_data.season": {"$exists": False}}
+                ]
+        elif back_data.startswith("myfiles_cat_"):
+            # They pressed send all on a category view? Usually send all is only on files list
+            pass
+
+        # Use sort order from state
+        state_dict = await get_myfiles_state(user_id)
+        sort_order = state_dict.get("sort_order", "newest")
+
+        if sort_order == "oldest":
+            sort_tuple = [("created_at", 1)]
+        elif sort_order == "a-z":
+            sort_tuple = [("file_name", 1)]
+        else:
+            sort_tuple = [("created_at", -1)]
+
+        files = await db.files.find(filter_query).sort(sort_tuple).to_list(length=None)
         if not files:
             await callback_query.answer("No files to send.", show_alert=True)
             return

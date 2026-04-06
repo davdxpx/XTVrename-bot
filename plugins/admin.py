@@ -182,7 +182,7 @@ async def get_admin_limits_menu():
         buttons.append(
             [
                 InlineKeyboardButton(
-                    "⚙️ Per Plan Limits", callback_data="admin_per_plan_limits"
+                    "⚙️ Per Plan Settings", callback_data="admin_per_plan_limits"
                 )
             ]
         )
@@ -376,30 +376,63 @@ async def admin_callback(client, callback_query):
         dlx_egress = dlx_settings.get("daily_egress_mb", 0)
         dlx_files = dlx_settings.get("daily_file_count", 0)
 
+        global_toggles = await db.get_feature_toggles()
+        def get_features_str(plan_key):
+            plan_settings = config.get(plan_key, {})
+            features = plan_settings.get("features", {})
+            feat_list = []
+
+            # Global toggles apply to everyone if enabled, otherwise check plan override
+            if global_toggles.get("subtitle_extractor", True) or features.get("subtitle_extractor", False):
+                feat_list.append("Subtitle Extractor")
+            if global_toggles.get("watermarker", True) or features.get("watermarker", False):
+                feat_list.append("Watermarker")
+            if global_toggles.get("file_converter", True) or features.get("file_converter", False):
+                feat_list.append("File Converter")
+            if global_toggles.get("audio_editor", True) or features.get("audio_editor", False):
+                feat_list.append("Audio Editor")
+            if features.get("priority_queue", False):
+                feat_list.append("Priority Queue")
+
+            feat_list.append("Batch Sharing")
+
+            # Formatting as bullet points
+            return "\n".join([f"  • {feat}" for feat in feat_list]) if feat_list else "  • None"
+
         text = (
-            "⚙️ **Per Plan Limit**\n\n"
-            "> Overview of all tier limitations.\n"
+            "⚙️ **Per Plan Settings**\n\n"
+            "> Overview of all tier configurations including limitations, features, and pricing.\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "🆓 **Free Plan**\n"
+            "🆓 **Free Plan**\n\n"
             f"📌 Permanent Slots : `{f(free_lm.get('permanent_limit', 0))}`\n"
             f"📁 Custom Folders  : `{f(free_lm.get('folder_limit', 0))}`\n"
             f"⏳ Temp Expiration : `{f(free_lm.get('expiry_days', 0))} days`\n"
             f"📦 Daily Egress: `{f(free_egress)}` MB\n"
-            f"📄 Daily Files: `{f(free_files)}` files\n"
+            f"📄 Daily Files: `{f(free_files)}` files\n\n"
+            "✨ **Features:**\n"
+            f"{get_features_str('free_placeholder')}\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "🌟 **Standard Plan**\n"
+            "🌟 **Standard Plan**\n\n"
             f"📌 Permanent Slots : `{f(std_lm.get('permanent_limit', 0))}`\n"
             f"📁 Custom Folders  : `{f(std_lm.get('folder_limit', 0))}`\n"
             f"⏳ Temp Expiration : `{f(std_lm.get('expiry_days', 0))} days`\n"
             f"📦 Daily Egress: `{f(std_egress)}` MB\n"
-            f"📄 Daily Files: `{f(std_files)}` files\n"
+            f"📄 Daily Files: `{f(std_files)}` files\n\n"
+            "✨ **Features:**\n"
+            f"{get_features_str('premium_standard')}\n\n"
+            f"💵 **Price (Fiat):** `{std_settings.get('price_string', '0 USD')}`\n"
+            f"⭐ **Price (Stars):** `{std_settings.get('stars_price', 0)}` Stars\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "💎 **Deluxe Plan**\n"
+            "💎 **Deluxe Plan**\n\n"
             f"📌 Permanent Slots : `{f(dlx_lm.get('permanent_limit', 0))}`\n"
             f"📁 Custom Folders  : `{f(dlx_lm.get('folder_limit', 0))}`\n"
             f"⏳ Temp Expiration : `{f(dlx_lm.get('expiry_days', 0))} days`\n"
             f"📦 Daily Egress: `{f(dlx_egress)}` MB\n"
-            f"📄 Daily Files: `{f(dlx_files)}` files\n"
+            f"📄 Daily Files: `{f(dlx_files)}` files\n\n"
+            "✨ **Features:**\n"
+            f"{get_features_str('premium_deluxe')}\n\n"
+            f"💵 **Price (Fiat):** `{dlx_settings.get('price_string', '0 USD')}`\n"
+            f"⭐ **Price (Stars):** `{dlx_settings.get('stars_price', 0)}` Stars\n"
             "━━━━━━━━━━━━━━━━━━━━"
         )
 
@@ -429,6 +462,13 @@ async def admin_callback(client, callback_query):
         else:
             buttons.append([InlineKeyboardButton("📦 Edit Egress Limit", callback_data=f"prompt_premium_{plan_name}_egress")])
             buttons.append([InlineKeyboardButton("📄 Edit File Limit", callback_data=f"prompt_premium_{plan_name}_files")])
+
+            # Additional configurations for premium plans (moved from Premium Settings)
+            buttons.append([
+                InlineKeyboardButton("💵 Edit Fiat Price", callback_data=f"prompt_premium_{plan_name}_price"),
+                InlineKeyboardButton("⭐ Edit Stars Price", callback_data=f"prompt_premium_{plan_name}_stars")
+            ])
+            buttons.append([InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")])
 
         buttons.append([InlineKeyboardButton("← Back", callback_data="admin_per_plan_limits")])
 
@@ -1076,9 +1116,6 @@ async def admin_callback(client, callback_query):
 
             if enabled:
                 buttons.append([InlineKeyboardButton(f"Toggle Deluxe Plan: {deluxe_status_emoji}", callback_data="admin_premium_deluxe_toggle")])
-                buttons.append([InlineKeyboardButton("⚙️ Configure Standard Plan", callback_data="admin_premium_plan_standard")])
-                if deluxe_enabled:
-                    buttons.append([InlineKeyboardButton("⚙️ Configure Deluxe Plan", callback_data="admin_premium_plan_deluxe")])
 
                 buttons.append([InlineKeyboardButton(f"Toggle Trial System: {trial_status_emoji}", callback_data="admin_trial_toggle")])
                 if trial_enabled:
@@ -1122,37 +1159,6 @@ async def admin_callback(client, callback_query):
             await admin_callback(client, callback_query)
             return
 
-        elif data.startswith("admin_premium_plan_"):
-            plan_name = data.replace("admin_premium_plan_", "")
-            config = await db.get_public_config()
-            plan_key = f"premium_{plan_name}"
-            plan_settings = config.get(plan_key, {})
-
-            price = plan_settings.get("price_string", "0 USD")
-            stars_price = plan_settings.get("stars_price", 0)
-
-            text = (
-                f"💎 **{plan_name.capitalize()} Plan Settings**\n\n"
-                f"💵 Price (Fiat): `{price}`\n"
-                f"⭐ Price (Stars): `{stars_price}` Stars\n\n"
-                "Select a setting to edit:"
-            )
-
-            try:
-                await callback_query.message.edit_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup([
-                        [
-                            InlineKeyboardButton("💵 Edit Fiat Price", callback_data=f"prompt_premium_{plan_name}_price"),
-                            InlineKeyboardButton("⭐ Edit Stars Price", callback_data=f"prompt_premium_{plan_name}_stars")
-                        ],
-                        [InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")],
-                        [InlineKeyboardButton("← Back", callback_data="admin_premium_settings")]
-                    ])
-                )
-            except MessageNotModified:
-                pass
-            return
 
         elif data.startswith("admin_premium_features_"):
             plan_name = data.replace("admin_premium_features_", "")
@@ -1187,7 +1193,7 @@ async def admin_callback(client, callback_query):
                 se = features.get("subtitle_extractor", False)
                 buttons.append([InlineKeyboardButton(f"{emoji(se)} Subtitle Extractor", callback_data=f"admin_premium_feat_{plan_name}_subtitle_extractor")])
 
-            buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_premium_plan_{plan_name}")])
+            buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")])
 
             text = f"⚙️ **{plan_name.capitalize()} Plan Features**\n\nToggle which features users on this plan can access (overrides global toggles):"
 
@@ -1269,7 +1275,7 @@ async def admin_callback(client, callback_query):
                                 [InlineKeyboardButton("INR (₹)", callback_data=f"admin_prem_cur_{plan_name}_INR"),
                                  InlineKeyboardButton("RUB (₽)", callback_data=f"admin_prem_cur_{plan_name}_RUB"),
                                  InlineKeyboardButton("BRL (R$)", callback_data=f"admin_prem_cur_{plan_name}_BRL")],
-                                [InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]
+                                [InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]
                             ])
                         )
                     except MessageNotModified:
@@ -1298,11 +1304,7 @@ async def admin_callback(client, callback_query):
 
                     prompts["stars"] = star_prompt
 
-                # Dynamic cancel target depending on the field being edited
-                if field in ["egress", "files"]:
-                    cancel_cb = f"admin_edit_plan_{plan_name}"
-                else:
-                    cancel_cb = f"admin_premium_plan_{plan_name}"
+                cancel_cb = f"admin_edit_plan_{plan_name}"
 
                 try:
                     await callback_query.message.edit_text(
@@ -3335,7 +3337,7 @@ async def handle_admin_text(client, message):
 
             await db.update_public_config(plan_key, plan_settings)
 
-            back_btn_cb = f"admin_edit_plan_{plan_name}" if field in ["egress", "files"] else f"admin_premium_plan_{plan_name}"
+            back_btn_cb = f"admin_edit_plan_{plan_name}"
 
             await edit_or_reply(client, message, msg_id, f"✅ **Success!**\n\nThe {field.capitalize()} Limit for the **{plan_name.capitalize()} Plan** has been successfully updated to **{val_num}**.\n\nChanges have been saved and applied globally.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=back_btn_cb)]])
@@ -3357,7 +3359,7 @@ async def handle_admin_text(client, message):
                     float_val = float(val.replace(",", "."))
                 except ValueError:
                     await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
-                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
                     )
                     return
 
@@ -3372,7 +3374,7 @@ async def handle_admin_text(client, message):
                 await db.update_public_config(plan_key, plan_settings)
 
                 await edit_or_reply(client, message, msg_id, f"✅ {plan_name.capitalize()} fiat price updated to `{formatted_price}`.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_premium_plan_{plan_name}")]])
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")]])
                 )
                 admin_sessions.pop(user_id, None)
                 return
