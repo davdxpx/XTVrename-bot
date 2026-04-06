@@ -1413,15 +1413,15 @@ class TaskProcessor:
                                 name = re.sub(r'[\._\s]{2,}', " ", name)
                                 name = name.strip('._ ')
                                 return name
-                            internal_name = clean_sys_filename(base_name, system_filename_template) + file_ext
+                            internal_name = clean_sys_filename(base_name, system_filename_template) + ext
                         elif self.title:
                             if self.media_type == "series":
                                 ep_str = "".join([f"E{int(e):02d}" for e in self.episode]) if isinstance(self.episode, list) else f"E{self.episode:02d}" if self.episode else ""
-                                internal_name = f"{self.title} S{self.season:02d}{ep_str}{file_ext}"
+                                internal_name = f"{self.title} S{self.season:02d}{ep_str}{ext}"
                             elif self.year:
-                                internal_name = f"{self.title} ({self.year}){file_ext}"
+                                internal_name = f"{self.title} ({self.year}){ext}"
                             else:
-                                internal_name = f"{self.title}{file_ext}"
+                                internal_name = f"{self.title}{ext}"
                     except Exception as e:
                         logger.warning(f"Error applying system filename template: {e}")
 
@@ -1436,7 +1436,9 @@ class TaskProcessor:
                         "expires_at": expiry_date,
                         "tmdb_id": self.tmdb_id,
                         "poster_url": self.poster_url,
-                        "media_type": self.media_type
+                        "media_type": self.media_type,
+                        "season": self.season,
+                        "episode": self.episode
                     }
                     await db.files.insert_one(file_data)
             except Exception as e:
