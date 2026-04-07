@@ -22,24 +22,12 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ## 📋 What's New in v1.5.0
 
-> **The biggest update in 𝕏TV history — 77 pull requests, a full rebrand, and an entirely new product.**
-
-- **🏷️ Rebrand:** XTV Rename Bot is now **𝕏TV MediaStudio™** — new name, new identity, new era
-- **📁 MyFiles V2.0 — Endgame Evolution:** Personal cloud storage with auto-folders, custom folders, batch multi-select actions, season grouping, Netflix-style TMDb poster dashboard, inline query search (`@bot query`), system filename templates, dynamic sorting, and privacy settings
-- **💎 Premium System Overhaul:** Multi-tier plans (Standard ⭐ / Deluxe 💎), Telegram Stars payments, PayPal, Crypto (USDT/BTC/ETH), UPI, automated trial system, priority queue, and per-plan feature overrides
-- **📡 Dumb Channel Auto-Routing:** Automatic Movie / Series / Default channel routing based on TMDb detection
-- **🎯 Unified Destination Menu:** Folder + channel selection combined in a single paginated UI
-- **🖼️ Thumbnail Mode Preferences:** None / Auto / Custom modes configurable per user and globally
-- **🔧 Global Feature Toggles:** Admin can enable/disable resource-heavy tools globally, with premium cascade overrides
-- **📺 Season & Episode Detection:** Multi-episode file support and improved parsing accuracy
-- **✏️ Edit Instead of Send UX:** Admin configuration prompts now edit messages in-place for a cleaner chat
-- **🗂️ Major Codebase Refactor:** Core processing extracted to `tools/` directory, pre-processing separated into standalone modules
-- **📖 Start Menu & Help Guide Overhaul:** Redesigned interactive starter setup, expandable troubleshooting sub-menus, and categorized help sections
-- **⚡ Performance:** Persistent HTTP sessions, database settings cache (60s TTL), programmatic MongoDB indexes, async file cleanup
-- **🔒 Security:** SSL bypass removed, config validation on startup, FFmpeg metadata sanitization
-- **🧹 Reliability:** State TTL auto-cleanup, queue memory leak fix, graceful shutdown, robust subprocess cleanup with disk checks
-- **🎨 UI Polish:** 150+ back-button labels standardized with contextual `← Back to [Page]` format
-- **🏗️ Infrastructure:** Ruff linter, GitHub Actions CI, pinned dependencies, Dockerfile optimization
+- **Performance:** Persistent HTTP sessions, database settings cache (60s TTL), programmatic indexes, async file cleanup
+- **Security:** SSL bypass removed, config validation, FFmpeg metadata sanitization
+- **Reliability:** State TTL auto-cleanup, queue memory leak fix, graceful shutdown
+- **UI Polish:** 150+ back-button labels standardized with contextual `← Back to [Page]` format
+- **Fixes:** Admin panel italic markdown, dead callbacks, toggle split-bug, cancel button fixes
+- **Infrastructure:** Ruff linter, GitHub Actions CI, pinned dependencies
 
 ---
 
