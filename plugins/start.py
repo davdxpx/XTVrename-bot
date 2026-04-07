@@ -760,10 +760,10 @@ async def handle_help_callbacks(client, callback_query):
     elif data == "help_file_management":
         try:
             await callback_query.message.edit_text(
-                "**📁 File Management (/xfiles)**\n\n"
+                "**📁 File Management (/myfiles)**\n\n"
                 "> Your personal cloud storage.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "Use the `/xfiles` command to access your digital storage locker.\n\n"
+                "Use the `/myfiles` command to access your digital storage locker.\n\n"
                 "• **Temporary Files:** Files you have recently processed are saved here temporarily (based on your plan's expiry limits).\n"
                 "• **Permanent Slots:** You can pin important files to keep them forever! (Limit depends on plan).\n"
                 "• **Custom Folders:** Organize your permanent files into categories.",
@@ -836,8 +836,8 @@ async def handle_help_callbacks(client, callback_query):
                 "To keep the bot fast and stable, daily limits are applied. These reset every 24 hours.\n\n"
                 "• **Daily Files:** The maximum number of files you can process per day.\n"
                 "• **Daily Egress:** The maximum total bandwidth (in MB or GB) you can process per day.\n"
-                "• **𝕏Files Expiry:** Temporary files are deleted from your storage locker after a set number of days to free up space.\n\n"
-                "Check your profile or use `/xfiles` to view your current usage.",
+                "• **MyFiles Expiry:** Temporary files are deleted from your storage locker after a set number of days to free up space.\n\n"
+                "Check your profile or use `/myfiles` to view your current usage.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
@@ -853,7 +853,7 @@ async def handle_help_callbacks(client, callback_query):
                 "**Benefits:**\n"
                 "• **Priority Queue:** Skip the wait times when the bot is under heavy load.\n"
                 "• **Bigger Limits:** Huge increases to Daily Egress and Daily File limits.\n"
-                "• **Permanent Storage:** Store significantly more files in your `/xfiles` locker forever.\n"
+                "• **Permanent Storage:** Store significantly more files in your `/myfiles` locker forever.\n"
                 "• **Access to Heavy Tools:** Exclusive access to CPU-intensive tools like the Subtitle Extractor or Video Converter (if restricted by the Admin).\n\n"
                 "Use the Premium Dashboard on the `/start` menu to view available plans.",
                 reply_markup=InlineKeyboardMarkup(back_button),

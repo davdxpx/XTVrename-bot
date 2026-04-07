@@ -2740,7 +2740,7 @@ async def edit_system_filename_template(client, callback_query):
     try:
         await callback_query.message.edit_text(
             "⚙️ **System Filename Template**\n\n"
-            "How should the bot save files internally to your 𝕏Files database?\n"
+            "How should the bot save files internally to your MyFiles database?\n"
             "You can use these variables:\n"
             "`{title}` - The movie or series name\n"
             "`{year}` - The release year\n"

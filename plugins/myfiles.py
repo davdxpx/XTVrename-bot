@@ -150,7 +150,7 @@ async def get_myfiles_main_menu(user_id: int):
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
         text = (
-            "📁 **𝕏Files Management**\n\n"
+            "📁 **MyFiles Management**\n\n"
             f"**Plan:** `{plan.capitalize()}`\n"
             f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage:** `{temp_count}` files\n\n"
@@ -166,7 +166,7 @@ async def get_myfiles_main_menu(user_id: int):
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
         text = (
-            "📁 **Team 𝕏Files Management**\n\n"
+            "📁 **Team MyFiles Management**\n\n"
             f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage:** `{temp_count}` files\n\n"
             "Select a category to view files:"
@@ -353,7 +353,7 @@ async def myfiles_text_handler(client: Client, message: Message):
     raise ContinuePropagation
 
 # === Handlers ===
-@Client.on_message(filters.command(["myfiles", "xfiles"]) & filters.private)
+@Client.on_message(filters.command("myfiles") & filters.private)
 async def myfiles_command(client: Client, message: Message):
     user_id = message.from_user.id
     if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
@@ -625,7 +625,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         group_emoji = "✅ ON" if grouping_enabled else "❌ OFF"
 
         text = (
-            "⚙️ **𝕏Files Settings**\n\n"
+            "⚙️ **MyFiles Settings**\n\n"
             "**Auto-Permanent Mode:** When enabled, files will automatically consume your permanent storage slots. "
             "When disabled, files are saved as temporary by default, and you must manually mark them as permanent.\n\n"
             "**Group Series by Season:** When enabled, files in Series folders will be dynamically grouped into virtual Season subfolders based on metadata."
@@ -648,7 +648,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             buttons.append([InlineKeyboardButton("🔒 Privacy Settings", callback_data="myfiles_privacy_settings")])
 
         buttons.append([InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")])
-        buttons.append([InlineKeyboardButton("← Back to 𝕏Files", callback_data="myfiles_main")])
+        buttons.append([InlineKeyboardButton("← Back to MyFiles", callback_data="myfiles_main")])
 
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
@@ -722,7 +722,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             text += "**Link Anonymity:** When enabled, batch share links use a secure, anonymous hash rather than embedding your account ID.\n\n"
             buttons.append([InlineKeyboardButton(f"Link Anonymity: {emoji_anon}", callback_data="myfiles_toggle_link_anon")])
 
-        buttons.append([InlineKeyboardButton("← Back to 𝕏Files Settings", callback_data="myfiles_settings")])
+        buttons.append([InlineKeyboardButton("← Back to MyFiles Settings", callback_data="myfiles_settings")])
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
@@ -853,7 +853,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
                 count = await db.files.count_documents({"user_id": user_id, "folder_id": folder["_id"]})
                 buttons.append([InlineKeyboardButton(f"📁 {folder['name']} ({count})", callback_data=f"myfiles_folder_{str(folder['_id'])}")])
 
-        buttons.append([InlineKeyboardButton("← Back to 𝕏Files", callback_data="myfiles_main")])
+        buttons.append([InlineKeyboardButton("← Back to MyFiles", callback_data="myfiles_main")])
 
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return

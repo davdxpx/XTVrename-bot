@@ -116,7 +116,7 @@ async def info_command(client, message):
 
     text += f"**📊 System Details**\n"
     text += f"• **Version:** `{Config.VERSION} (Public Edition)`\n"
-    text += f"• **𝕏Files Version:** `{Config.MYFILES_VERSION}`\n"
+    text += f"• **MyFiles Version:** `{Config.MYFILES_VERSION}`\n"
     text += f"• **Status:** `Online & Operational`\n"
     text += f"• **Community:** `{community_name}`\n\n"
 
