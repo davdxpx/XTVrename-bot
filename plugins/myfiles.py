@@ -150,7 +150,7 @@ async def get_myfiles_main_menu(user_id: int):
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
         text = (
-            "📁 **My Files Management**\n\n"
+            "📁 **𝕏Files Management**\n\n"
             f"**Plan:** `{plan.capitalize()}`\n"
             f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage:** `{temp_count}` files\n\n"
@@ -166,7 +166,7 @@ async def get_myfiles_main_menu(user_id: int):
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
         text = (
-            "📁 **Team Files Management**\n\n"
+            "📁 **Team 𝕏Files Management**\n\n"
             f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage:** `{temp_count}` files\n\n"
             "Select a category to view files:"
@@ -284,7 +284,7 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         InlineKeyboardButton("📤 Send All", callback_data=f"mf_sa")
     ])
 
-    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"myfiles_leave_{back_data}")])
+    buttons.append([InlineKeyboardButton("← Back", callback_data=f"myfiles_leave_{back_data}")])
     return buttons, total_files
 
 @Client.on_message(filters.text & filters.private, group=-2)
@@ -319,7 +319,7 @@ async def myfiles_text_handler(client: Client, message: Message):
             query_filter = {"user_id": user_id, "type": "custom"} if Config.PUBLIC_MODE else {"type": "custom"}
             count = await db.folders.count_documents(query_filter)
             if count >= folder_limit:
-                await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="myfiles_cat_custom")]]))
+                await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Folders", callback_data="myfiles_cat_custom")]]))
                 await set_myfiles_state(user_id, {})
                 return
 
@@ -330,7 +330,7 @@ async def myfiles_text_handler(client: Client, message: Message):
             "created_at": datetime.datetime.utcnow()
         })
 
-        await message.reply_text(f"✅ Folder **{folder_name}** created successfully.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Folders", callback_data="myfiles_cat_custom")]]))
+        await message.reply_text(f"✅ Folder **{folder_name}** created successfully.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Folders", callback_data="myfiles_cat_custom")]]))
         await set_myfiles_state(user_id, {})
 
         # Stop propagation to prevent flow.py from processing this text
@@ -343,7 +343,7 @@ async def myfiles_text_handler(client: Client, message: Message):
 
         await db.files.update_one({"_id": ObjectId(file_id)}, {"$set": {"file_name": new_name}})
 
-        await message.reply_text(f"✅ File renamed to `{new_name}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to File", callback_data=f"myfiles_file_{file_id}")]]))
+        await message.reply_text(f"✅ File renamed to `{new_name}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to File", callback_data=f"myfiles_file_{file_id}")]]))
         await set_myfiles_state(user_id, {})
 
         from pyrogram import StopPropagation
@@ -353,7 +353,7 @@ async def myfiles_text_handler(client: Client, message: Message):
     raise ContinuePropagation
 
 # === Handlers ===
-@Client.on_message(filters.command("myfiles") & filters.private)
+@Client.on_message(filters.command(["myfiles", "xfiles"]) & filters.private)
 async def myfiles_command(client: Client, message: Message):
     user_id = message.from_user.id
     if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
@@ -530,7 +530,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         markup = InlineKeyboardMarkup([
             [InlineKeyboardButton("🔗 Copy Link", copy_text=deep_link)],
-            [InlineKeyboardButton("🔙 Back", callback_data=back_data)]
+            [InlineKeyboardButton("← Back", callback_data=back_data)]
         ])
 
         await safe_edit_or_send(client, callback_query, text, markup)
@@ -554,7 +554,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             buttons.append([InlineKeyboardButton(f"📁 {folder['name']}", callback_data=f"mf_ms_domov_{str(folder['_id'])}")])
 
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
-        buttons.append([InlineKeyboardButton("🔙 Cancel", callback_data=back_data)])
+        buttons.append([InlineKeyboardButton("← Back", callback_data=back_data)])
 
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
@@ -625,7 +625,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         group_emoji = "✅ ON" if grouping_enabled else "❌ OFF"
 
         text = (
-            "⚙️ **/myfiles Settings**\n\n"
+            "⚙️ **𝕏Files Settings**\n\n"
             "**Auto-Permanent Mode:** When enabled, files will automatically consume your permanent storage slots. "
             "When disabled, files are saved as temporary by default, and you must manually mark them as permanent.\n\n"
             "**Group Series by Season:** When enabled, files in Series folders will be dynamically grouped into virtual Season subfolders based on metadata."
@@ -648,7 +648,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             buttons.append([InlineKeyboardButton("🔒 Privacy Settings", callback_data="myfiles_privacy_settings")])
 
         buttons.append([InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")])
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")])
+        buttons.append([InlineKeyboardButton("← Back to 𝕏Files", callback_data="myfiles_main")])
 
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
@@ -722,7 +722,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             text += "**Link Anonymity:** When enabled, batch share links use a secure, anonymous hash rather than embedding your account ID.\n\n"
             buttons.append([InlineKeyboardButton(f"Link Anonymity: {emoji_anon}", callback_data="myfiles_toggle_link_anon")])
 
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_settings")])
+        buttons.append([InlineKeyboardButton("← Back to 𝕏Files Settings", callback_data="myfiles_settings")])
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
@@ -853,7 +853,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
                 count = await db.files.count_documents({"user_id": user_id, "folder_id": folder["_id"]})
                 buttons.append([InlineKeyboardButton(f"📁 {folder['name']} ({count})", callback_data=f"myfiles_folder_{str(folder['_id'])}")])
 
-        buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")])
+        buttons.append([InlineKeyboardButton("← Back to 𝕏Files", callback_data="myfiles_main")])
 
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
@@ -912,7 +912,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             for season in sorted(season_counts.keys(), key=lambda x: int(x) if x.isdigit() else 9999):
                 buttons.append([InlineKeyboardButton(f"📁 Season {season} ({season_counts[season]})", callback_data=f"mf_sea_{folder_id}_{season}")])
 
-            buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"myfiles_cat_{folder.get('type', 'custom')}")])
+            buttons.append([InlineKeyboardButton("← Back to Category", callback_data=f"myfiles_cat_{folder.get('type', 'custom')}")])
             total = sum(season_counts.values())
             text = f"📁 **{folder['name']}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary\n\nSelect a season:"
 
@@ -1022,7 +1022,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             [InlineKeyboardButton("✏️ Rename", callback_data=f"myfiles_rename_{file_id}"),
              InlineKeyboardButton("📂 Move", callback_data=f"myfiles_move_{file_id}")],
             [InlineKeyboardButton("🗑️ Delete File", callback_data=f"myfiles_delfile_{file_id}")],
-            [InlineKeyboardButton("🔙 Back", callback_data=last_menu)]
+            [InlineKeyboardButton("← Back", callback_data=last_menu)]
         ]
 
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -1105,7 +1105,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         for folder in folders:
             buttons.append([InlineKeyboardButton(f"📁 {folder['name']}", callback_data=f"mf_mov_{file_id}_{str(folder['_id'])}")])
 
-        buttons.append([InlineKeyboardButton("🔙 Cancel", callback_data=f"myfiles_file_{file_id}")])
+        buttons.append([InlineKeyboardButton("← Back", callback_data=f"myfiles_file_{file_id}")])
 
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
@@ -1164,7 +1164,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             f"Anyone with this link can start the bot and receive this file."
         )
 
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to File", callback_data=f"myfiles_file_{file_id}")]])
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("← Back to File", callback_data=f"myfiles_file_{file_id}")]])
         await safe_edit_or_send(client, callback_query, text, markup)
         return
 

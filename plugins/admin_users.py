@@ -35,7 +35,7 @@ async def show_users_menu(client, update):
         buttons[1].append(InlineKeyboardButton("💎 Premium", callback_data="list_users|premium|0"))
 
     buttons.append([InlineKeyboardButton("🕒 Recent", callback_data="list_users|recent|0")])
-    buttons.append([InlineKeyboardButton("🔙 Back to Admin", callback_data="admin_main")])
+    buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
 
     markup = InlineKeyboardMarkup(buttons)
 
@@ -109,7 +109,7 @@ async def list_users(client, callback):
 
     if nav: markup.append(nav)
 
-    markup.append([InlineKeyboardButton("🔙 Back", callback_data="admin_users_menu")])
+    markup.append([InlineKeyboardButton("← Back to User Management", callback_data="admin_users_menu")])
 
     await callback.edit_message_text(text, reply_markup=InlineKeyboardMarkup(markup))
 
@@ -212,7 +212,7 @@ async def view_user_profile(client, callback):
     ])
 
     markup.append([
-        InlineKeyboardButton("🔙 Back to Users", callback_data="admin_users_menu")
+        InlineKeyboardButton("← Back to User Management", callback_data="admin_users_menu")
     ])
 
     await callback.edit_message_text(text, reply_markup=InlineKeyboardMarkup(markup))

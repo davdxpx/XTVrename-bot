@@ -53,7 +53,7 @@ async def handle_bot_added_to_channel(client, update):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "🔙 Back to Menu", callback_data="admin_main"
+                                    "← Back to Admin Panel", callback_data="admin_main"
                                 )
                             ]
                         ]
@@ -88,7 +88,7 @@ async def handle_bot_added_to_channel(client, update):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "🔙 Back to Config", callback_data="admin_force_sub_menu"
+                                    "← Back to Force-Sub Settings", callback_data="admin_force_sub_menu"
                                 )
                             ]
                         ]

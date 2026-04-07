@@ -63,6 +63,13 @@ def get_admin_main_menu(pro_session, public_mode):
                 ),
             ]
         )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "📁 𝕏Files Settings", callback_data="admin_myfiles_settings"
+                ),
+            ]
+        )
     else:
         keyboard.append(
             [
@@ -100,7 +107,7 @@ def get_admin_main_menu(pro_session, public_mode):
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "📁 /myfiles Settings", callback_data="admin_myfiles_settings"
+                    "📁 𝕏Files Settings", callback_data="admin_myfiles_settings"
                 ),
             ]
         )
@@ -154,7 +161,7 @@ async def get_admin_access_limits_menu():
             ]
         )
 
-    buttons.append([InlineKeyboardButton("← Back", callback_data="admin_access_limits")])
+    buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")])
     return InlineKeyboardMarkup(buttons)
 
 def get_admin_public_settings_menu():
@@ -238,7 +245,7 @@ async def admin_callback(client, callback_query):
     debug(f"Admin callback: {data} from user {user_id}")
 
     if data == "admin_myfiles_settings":
-        text = "📁 **/myfiles Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
+        text = "📁 **𝕏Files Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
         buttons = [
             [InlineKeyboardButton("🗄️ Database Channels", callback_data="admin_myfiles_db_channels")],
         ]
@@ -272,7 +279,7 @@ async def admin_callback(client, callback_query):
                 [InlineKeyboardButton("✏️ Edit Free", callback_data="prompt_myfiles_db_free"),
                  InlineKeyboardButton("✏️ Edit Standard", callback_data="prompt_myfiles_db_standard")],
                 [InlineKeyboardButton("✏️ Edit Deluxe", callback_data="prompt_myfiles_db_deluxe")],
-                [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+                [InlineKeyboardButton("← Back to 𝕏Files Settings", callback_data="admin_myfiles_settings")]
             ]
         else:
             global_ch = channels.get("global", "Not Set")
@@ -283,7 +290,7 @@ async def admin_callback(client, callback_query):
             )
             buttons = [
                 [InlineKeyboardButton("✏️ Edit Global", callback_data="prompt_myfiles_db_global")],
-                [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+                [InlineKeyboardButton("← Back to 𝕏Files Settings", callback_data="admin_myfiles_settings")]
             ]
 
         try:
@@ -314,7 +321,7 @@ async def admin_callback(client, callback_query):
             [InlineKeyboardButton("🆓 Manage Free Plan", callback_data="admin_edit_plan_free")],
             [InlineKeyboardButton("🌟 Manage Standard Plan", callback_data="admin_edit_plan_standard")],
             [InlineKeyboardButton("💎 Manage Deluxe Plan", callback_data="admin_edit_plan_deluxe")],
-            [InlineKeyboardButton("← Back", callback_data="admin_limits_menu")]
+            [InlineKeyboardButton("← Back to Settings", callback_data="admin_limits_menu")]
         ]
 
         try:
@@ -410,7 +417,7 @@ async def admin_callback(client, callback_query):
             ])
 
         buttons.append([InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")])
-        buttons.append([InlineKeyboardButton("← Back", callback_data="admin_per_plan_limits")])
+        buttons.append([InlineKeyboardButton("← Back to Plan Settings", callback_data="admin_per_plan_limits")])
 
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -438,7 +445,7 @@ async def admin_callback(client, callback_query):
         )
         buttons = [
             [InlineKeyboardButton("✏️ Edit Global Limits", callback_data="admin_myfiles_edit_limits_global")],
-            [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+            [InlineKeyboardButton("← Back to 𝕏Files Settings", callback_data="admin_myfiles_settings")]
         ]
 
         try:
@@ -457,7 +464,7 @@ async def admin_callback(client, callback_query):
             [InlineKeyboardButton("📌 Edit Permanent Limit", callback_data=f"prompt_myfiles_lim_{plan}_permanent")],
             [InlineKeyboardButton("📁 Edit Folder Limit", callback_data=f"prompt_myfiles_lim_{plan}_folder")],
             [InlineKeyboardButton("⏳ Edit Expiry Days", callback_data=f"prompt_myfiles_lim_{plan}_expiry")],
-            [InlineKeyboardButton("← Back", callback_data="admin_myfiles_limits")]
+            [InlineKeyboardButton("← Back to Storage Limits", callback_data="admin_myfiles_limits")]
         ]
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -500,7 +507,7 @@ async def admin_callback(client, callback_query):
         buttons = [
             [InlineKeyboardButton("🧹 Clear Free Expired", callback_data="admin_myfiles_clean_free")],
             [InlineKeyboardButton("🧹 Clear Donator Expired", callback_data="admin_myfiles_clean_donator")],
-            [InlineKeyboardButton("← Back", callback_data="admin_myfiles_settings")]
+            [InlineKeyboardButton("← Back to 𝕏Files Settings", callback_data="admin_myfiles_settings")]
         ]
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -598,7 +605,7 @@ async def admin_callback(client, callback_query):
                         nav.append(InlineKeyboardButton("➡️", callback_data=f"dumb_menu_{page+1}"))
                     buttons.append(nav)
 
-            buttons.append([InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="admin_main")])
+            buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
 
             try:
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -640,7 +647,7 @@ async def admin_callback(client, callback_query):
                 [InlineKeyboardButton(f"🎬 Set Movie Default", callback_data=f"dumb_def_mov_{ch_id}")],
                 [InlineKeyboardButton(f"📺 Set Series Default", callback_data=f"dumb_def_ser_{ch_id}")],
                 [InlineKeyboardButton("🗑 Delete Channel", callback_data=f"dumb_del_{ch_id}")],
-                [InlineKeyboardButton("🔙 Back", callback_data="dumb_menu")]
+                [InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_menu")]
             ]
 
             try:
@@ -744,7 +751,7 @@ async def admin_callback(client, callback_query):
                     [InlineKeyboardButton(f"{emoji(cr)} Crypto", callback_data="admin_pay_toggle_crypto"),
                      InlineKeyboardButton("✏️ Edit Addresses", callback_data="admin_pay_crypto_menu")],
                     [InlineKeyboardButton(f"{emoji(st)} Telegram Stars", callback_data="admin_pay_toggle_stars")],
-                    [InlineKeyboardButton("← Back", callback_data="admin_payments_menu")]
+                    [InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]
                 ])
             )
         except MessageNotModified:
@@ -759,7 +766,7 @@ async def admin_callback(client, callback_query):
                     [InlineKeyboardButton("USDT (TRC20/ERC20)", callback_data="prompt_pay_crypto_usdt")],
                     [InlineKeyboardButton("BTC (Bitcoin)", callback_data="prompt_pay_crypto_btc")],
                     [InlineKeyboardButton("ETH (Ethereum)", callback_data="prompt_pay_crypto_eth")],
-                    [InlineKeyboardButton("← Back", callback_data="admin_pay_settings")]
+                    [InlineKeyboardButton("← Back to Payment Settings", callback_data="admin_pay_settings")]
                 ])
             )
         except MessageNotModified:
@@ -813,7 +820,7 @@ async def admin_callback(client, callback_query):
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("✏️ Edit 3-Month Discount", callback_data="prompt_pay_disc_3")],
                     [InlineKeyboardButton("✏️ Edit 12-Month Discount", callback_data="prompt_pay_disc_12")],
-                    [InlineKeyboardButton("← Back", callback_data="admin_payments_menu")]
+                    [InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]
                 ])
             )
         except MessageNotModified:
@@ -838,7 +845,7 @@ async def admin_callback(client, callback_query):
             try:
                 await callback_query.message.edit_text(
                     "📬 **Pending Approvals Queue**\n\nNo pending payments found.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_payments_menu")]])
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]])
                 )
             except MessageNotModified:
                 pass
@@ -863,7 +870,7 @@ async def admin_callback(client, callback_query):
                     [InlineKeyboardButton("✅ Approve", callback_data=f"admin_pay_approve_{p['_id']}"),
                      InlineKeyboardButton("❌ Reject", callback_data=f"admin_pay_reject_{p['_id']}")],
                     [InlineKeyboardButton("⏭ Skip", callback_data="admin_pay_queue")],
-                    [InlineKeyboardButton("← Back", callback_data="admin_payments_menu")]
+                    [InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]
                 ])
             )
         except MessageNotModified:
@@ -944,7 +951,7 @@ async def admin_callback(client, callback_query):
             [InlineKeyboardButton(f"{emoji(sub_en)} Subtitle Extractor", callback_data="admin_toggle_subtitle_extractor")],
             [InlineKeyboardButton(f"{emoji(wm_en)} Image Watermarker", callback_data="admin_toggle_watermarker")],
             [InlineKeyboardButton(f"{emoji(audio_en)} Audio Editor", callback_data="admin_toggle_audio_editor")],
-            [InlineKeyboardButton("← Back", callback_data="admin_access_menu")]
+            [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_menu")]
         ]
 
         try:
@@ -982,7 +989,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="admin_limits_menu"
+                                "← Back to Settings", callback_data="admin_limits_menu"
                             )
                         ],
                     ]
@@ -1027,7 +1034,7 @@ async def admin_callback(client, callback_query):
                 if trial_enabled:
                     buttons.append([InlineKeyboardButton("⏱ Edit Trial Duration", callback_data="prompt_trial_days")])
 
-            buttons.append([InlineKeyboardButton("← Back", callback_data="admin_limits_menu")])
+            buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="admin_limits_menu")])
 
             try:
                 await callback_query.message.edit_text(
@@ -1073,7 +1080,7 @@ async def admin_callback(client, callback_query):
                 [InlineKeyboardButton("🌟 Account Perks", callback_data=f"admin_features_perks_{plan_name}")],
                 [InlineKeyboardButton("🛠️ Media Tools", callback_data=f"admin_features_media_{plan_name}")],
                 [InlineKeyboardButton("🔒 Privacy Settings", callback_data=f"admin_features_privacy_{plan_name}")],
-                [InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")]
+                [InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]
             ]
 
             if plan_name == "free":
@@ -1114,7 +1121,7 @@ async def admin_callback(client, callback_query):
                 [InlineKeyboardButton(f"{emoji(access_4gb)} 🚀 4GB Access", callback_data=f"admin_premium_feat_{plan_name}_xtv_pro_4gb")],
                 [InlineKeyboardButton(f"{emoji(pq)} ⚡ Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue"),
                  InlineKeyboardButton(f"{emoji(bs)} 📦 Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")],
-                [InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")]
+                [InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")]
             ]
 
             text = f"🌟 **Account Perks ({plan_name.capitalize()})**\n\nConfigure account perks for this tier:"
@@ -1172,7 +1179,7 @@ async def admin_callback(client, callback_query):
                 if not media_tools_row1 and not media_tools_row2:
                     buttons.append([InlineKeyboardButton("✅ All tools globally enabled", callback_data="noop")])
 
-            buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")])
+            buttons.append([InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")])
 
             text = f"🛠️ **Media Tools ({plan_name.capitalize()})**\n\nConfigure media tools for this tier:"
 
@@ -1240,7 +1247,7 @@ async def admin_callback(client, callback_query):
                     [InlineKeyboardButton(f"{emoji(privacy.get('link_anonymity', False))} Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")]
                 ])
 
-            buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")])
+            buttons.append([InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")])
 
             text = f"🔒 **Privacy Settings ({plan_name.capitalize()})**\n\nToggle which privacy controls are **available** for users on this plan to configure in their /settings:"
 
@@ -1301,7 +1308,7 @@ async def admin_callback(client, callback_query):
                                     ],
                                     [
                                         InlineKeyboardButton(
-                                            "← Back", callback_data=f"admin_edit_plan_{plan_name}"
+                                            "← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}"
                                         )
                                     ],
                                 ]
@@ -1322,7 +1329,7 @@ async def admin_callback(client, callback_query):
                                 [InlineKeyboardButton("INR (₹)", callback_data=f"admin_prem_cur_{plan_name}_INR"),
                                  InlineKeyboardButton("RUB (₽)", callback_data=f"admin_prem_cur_{plan_name}_RUB"),
                                  InlineKeyboardButton("BRL (R$)", callback_data=f"admin_prem_cur_{plan_name}_BRL")],
-                                [InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]
+                                [InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]
                             ])
                         )
                     except MessageNotModified:
@@ -1476,7 +1483,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="admin_main"
+                                "← Back to Admin Panel", callback_data="admin_main"
                             )
                         ],
                     ]
@@ -1526,7 +1533,7 @@ async def admin_callback(client, callback_query):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_public_settings"
+                                    "← Back to Public Settings", callback_data="admin_public_settings"
                                 )
                             ]
                         ]
@@ -1551,7 +1558,7 @@ async def admin_callback(client, callback_query):
                             ],
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_public_settings"
+                                    "← Back to Public Settings", callback_data="admin_public_settings"
                                 )
                             ],
                         ]
@@ -1577,7 +1584,7 @@ async def admin_callback(client, callback_query):
                             ],
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_public_settings"
+                                    "← Back to Public Settings", callback_data="admin_public_settings"
                                 )
                             ],
                         ]
@@ -1603,7 +1610,7 @@ async def admin_callback(client, callback_query):
                             ],
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_public_settings"
+                                    "← Back to Public Settings", callback_data="admin_public_settings"
                                 )
                             ],
                         ]
@@ -1654,7 +1661,7 @@ async def admin_callback(client, callback_query):
                 InlineKeyboardButton("🔘 Edit Button", callback_data="admin_fs_edit_btn"),
                 InlineKeyboardButton("🎉 Edit Welcome Msg", callback_data="admin_fs_edit_welcome")
             ])
-            keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="admin_main")])
+            keyboard.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
 
             try:
                 await callback_query.message.edit_text(
@@ -1721,7 +1728,7 @@ async def admin_callback(client, callback_query):
                 title = ch.get("title", f"Channel {i+1}")
                 keyboard.append([InlineKeyboardButton(f"❌ Remove {title}", callback_data=f"admin_fs_rem_ch_{i}")])
 
-            keyboard.append([InlineKeyboardButton("🔙 Back", callback_data="admin_force_sub_menu")])
+            keyboard.append([InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")])
 
             try:
                 await callback_query.message.edit_text(
@@ -1815,7 +1822,7 @@ async def admin_callback(client, callback_query):
                         [InlineKeyboardButton("🔘 Edit Label", callback_data="admin_fs_btn_label"),
                          InlineKeyboardButton("😀 Edit Emoji", callback_data="admin_fs_btn_emoji")],
                         [InlineKeyboardButton("↩️ Reset Button", callback_data="admin_fs_btn_reset")],
-                        [InlineKeyboardButton("🔙 Back", callback_data="admin_force_sub_menu")]
+                        [InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]
                     ])
                 )
             except MessageNotModified:
@@ -1890,7 +1897,7 @@ async def admin_callback(client, callback_query):
                             ],
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_edit_plan_free"
+                                    "← Back to Plan Settings", callback_data="admin_edit_plan_free"
                                 )
                             ],
                         ]
@@ -1923,7 +1930,7 @@ async def admin_callback(client, callback_query):
                             ],
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_edit_plan_free"
+                                    "← Back to Plan Settings", callback_data="admin_edit_plan_free"
                                 )
                             ],
                         ]
@@ -2029,7 +2036,7 @@ async def admin_callback(client, callback_query):
                 InlineKeyboardButton("🗑 Remove Thumbnail", callback_data="admin_thumb_remove")
             ])
 
-        buttons.append([InlineKeyboardButton("← Back", callback_data="admin_main")])
+        buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
 
         try:
             await callback_query.message.edit_text(
@@ -2054,7 +2061,7 @@ async def admin_callback(client, callback_query):
             await callback_query.message.edit_text(
                 "✅ **Thumbnail Removed & Deactivated**\n\nFiles will no longer use a default custom thumbnail and the global thumbnail mode has been set to None.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data="admin_thumb_menu")]]
+                    [[InlineKeyboardButton("← Back to Thumbnail Settings", callback_data="admin_thumb_menu")]]
                 ),
             )
         except MessageNotModified:
@@ -2116,7 +2123,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="admin_thumb_menu"
+                                "← Back to Thumbnail Settings", callback_data="admin_thumb_menu"
                             )
                         ],
                     ]
@@ -2184,7 +2191,7 @@ async def admin_callback(client, callback_query):
                         [
                             InlineKeyboardButton("Space ( )", callback_data="admin_set_sep_space"),
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="admin_templates_menu")],
+                        [InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")],
                     ]
                 )
             )
@@ -2215,7 +2222,7 @@ async def admin_callback(client, callback_query):
                         [
                             InlineKeyboardButton("Space ( )", callback_data="admin_set_sep_space"),
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="admin_templates_menu")],
+                        [InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")],
                     ]
                 )
             )
@@ -2253,7 +2260,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="admin_templates_menu"
+                                "← Back to Templates", callback_data="admin_templates_menu"
                             )
                         ],
                     ]
@@ -2283,7 +2290,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="admin_templates_menu"
+                                "← Back to Templates", callback_data="admin_templates_menu"
                             )
                         ],
                     ]
@@ -2386,7 +2393,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="admin_templates_menu"
+                                "← Back to Templates", callback_data="admin_templates_menu"
                             )
                         ],
                     ]
@@ -2421,7 +2428,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "🔙 Back", callback_data="admin_filename_templates"
+                                "← Back to Filename Templates", callback_data="admin_filename_templates"
                             )
                         ],
                     ]
@@ -2476,7 +2483,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "🔙 Back", callback_data="admin_filename_templates"
+                                "← Back to Filename Templates", callback_data="admin_filename_templates"
                             )
                         ],
                     ]
@@ -2530,7 +2537,7 @@ async def admin_callback(client, callback_query):
                                 "⚙️ Workflow Mode", callback_data="admin_general_workflow"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="admin_main")],
+                        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
                     ]
                 ),
             )
@@ -2560,7 +2567,7 @@ async def admin_callback(client, callback_query):
                                 callback_data="set_admin_workflow_quick"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
                     ]
                 ),
             )
@@ -2592,7 +2599,7 @@ async def admin_callback(client, callback_query):
                                 "✏️ Change", callback_data="prompt_admin_channel"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
                     ]
                 ),
             )
@@ -2624,7 +2631,7 @@ async def admin_callback(client, callback_query):
                                 "✏️ Change", callback_data="prompt_admin_language"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
                     ]
                 ),
             )
@@ -2665,7 +2672,7 @@ async def admin_callback(client, callback_query):
                             InlineKeyboardButton("🇮🇹 Italian", callback_data="admin_set_lang_it-IT"),
                             InlineKeyboardButton("🇧🇷 Portuguese", callback_data="admin_set_lang_pt-BR"),
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="admin_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
                     ]
                 ),
             )
@@ -2729,7 +2736,7 @@ async def admin_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="admin_templates"
+                                "← Back to Metadata Templates", callback_data="admin_templates"
                             )
                         ],
                     ]
@@ -2773,7 +2780,7 @@ async def handle_admin_photo(client, message):
             await message.reply_photo(
                 file_id,
                 caption="✅ Banner updated successfully! It will appear like this.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_force_sub_menu")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]])
             )
             admin_sessions.pop(user_id, None)
         except Exception as e:
@@ -2798,7 +2805,7 @@ async def handle_admin_photo(client, message):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔙 Back to Menu", callback_data="admin_thumb_menu"
+                            "← Back to Thumbnail Settings", callback_data="admin_thumb_menu"
                         )
                     ]
                 ]
@@ -2869,7 +2876,7 @@ async def handle_admin_text(client, message):
         if ch_id:
             await db.update_db_channel(plan, ch_id)
             await edit_or_reply(client, message, msg_id, f"✅ {plan.capitalize()} DB Channel updated to `{ch_id}`.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_myfiles_db_channels")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to DB Channels", callback_data="admin_myfiles_db_channels")]])
             )
             admin_sessions.pop(user_id, None)
 
@@ -2929,7 +2936,7 @@ async def handle_admin_text(client, message):
         await db.update_global_daily_egress_limit(float(val))
         await edit_or_reply(client, message, msg_id, f"✅ Global daily egress limit updated to `{val}` MB.",
             reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data="admin_limits_menu")]]
+                    [[InlineKeyboardButton("← Back to Settings", callback_data="admin_limits_menu")]]
             ),
         )
         admin_sessions.pop(user_id, None)
@@ -2955,7 +2962,7 @@ async def handle_admin_text(client, message):
             uname = f"(@{u.get('username')})" if u.get("username") else ""
             markup.append([InlineKeyboardButton(f"{name} {uname} ({uid})", callback_data=f"view_user|{uid}")])
 
-        markup.append([InlineKeyboardButton("🔙 Back", callback_data="admin_users_menu")])
+        markup.append([InlineKeyboardButton("← Back to User Management", callback_data="admin_users_menu")])
         await message.reply(text, reply_markup=InlineKeyboardMarkup(markup))
         admin_sessions.pop(user_id, None)
         return
@@ -2968,7 +2975,7 @@ async def handle_admin_text(client, message):
             await db.add_premium_user(uid, days, plan=plan)
             await db.add_log("add_premium", user_id, f"Added {days} days premium ({plan}) to {uid}")
 
-            await message.reply(f"✅ **Success!**\nUser `{uid}` has received {days} days of Premium ({plan}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Profile", callback_data=f"view_user|{uid}")]]))
+            await message.reply(f"✅ **Success!**\nUser `{uid}` has received {days} days of Premium ({plan}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Profile", callback_data=f"view_user|{uid}")]]))
             admin_sessions.pop(user_id, None)
         except ValueError:
             await message.reply("❌ Invalid number. Enter days (e.g. 30).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{state['target_id']}")]]))
@@ -2991,7 +2998,7 @@ async def handle_admin_text(client, message):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_usage_dashboard"
+                                    "← Back to Dashboard", callback_data="admin_usage_dashboard"
                                 )
                             ]
                         ]
@@ -3022,7 +3029,7 @@ async def handle_admin_text(client, message):
         await db.update_dumb_channel_timeout(int(val))
         await edit_or_reply(client, message, msg_id, f"✅ Dumb channel timeout updated to `{val}` seconds.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back", callback_data="admin_templates_menu")]]
+                [[InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")]]
             ),
         )
         admin_sessions.pop(user_id, None)
@@ -3035,7 +3042,7 @@ async def handle_admin_text(client, message):
             admin_sessions.pop(user_id, None)
             await edit_or_reply(client, message, msg_id, "Cancelled.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data=f"dumb_opt_{ch_id}")]]
+                    [[InlineKeyboardButton("← Back to Channel Settings", callback_data=f"dumb_opt_{ch_id}")]]
                 ),
             )
             return
@@ -3047,7 +3054,7 @@ async def handle_admin_text(client, message):
             await db.settings.update_one({"_id": doc_id}, {"$set": {"dumb_channels": channels}}, upsert=True)
             await edit_or_reply(client, message, msg_id, f"✅ Channel renamed to **{val}**.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data=f"dumb_opt_{ch_id}")]]
+                    [[InlineKeyboardButton("← Back to Channel Settings", callback_data=f"dumb_opt_{ch_id}")]]
                 ),
             )
         admin_sessions.pop(user_id, None)
@@ -3062,7 +3069,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="dumb_menu"
+                                "← Back to Dumb Channels", callback_data="dumb_menu"
                             )
                         ]
                     ]
@@ -3101,7 +3108,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="dumb_menu"
+                                "← Back to Dumb Channels", callback_data="dumb_menu"
                             )
                         ]
                     ]
@@ -3129,7 +3136,7 @@ async def handle_admin_text(client, message):
             await db.update_public_config("discounts", disc)
 
             await edit_or_reply(client, message, msg_id, f"✅ {months}-Month discount updated to `{val}%`.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_pay_discounts")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Discounts", callback_data="admin_pay_discounts")]])
             )
             admin_sessions.pop(user_id, None)
             return
@@ -3176,7 +3183,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="admin_main"
+                                "← Back to Admin Panel", callback_data="admin_main"
                             )
                         ]
                     ]
@@ -3189,7 +3196,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="admin_main"
+                                "← Back to Admin Panel", callback_data="admin_main"
                             )
                         ]
                     ]
@@ -3202,7 +3209,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="admin_main"
+                                "← Back to Admin Panel", callback_data="admin_main"
                             )
                         ]
                     ]
@@ -3213,7 +3220,7 @@ async def handle_admin_text(client, message):
                 admin_sessions.pop(user_id, None)
                 await edit_or_reply(client, message, msg_id, "Cancelled.",
                     reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton("🔙 Back to Config", callback_data="admin_force_sub_menu")]]
+                        [[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]]
                     )
                 )
             else:
@@ -3243,7 +3250,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="admin_main"
+                                "← Back to Admin Panel", callback_data="admin_main"
                             )
                         ]
                     ]
@@ -3277,7 +3284,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Free Plan Limits", callback_data="admin_edit_plan_free"
+                                "← Back to Plan Settings", callback_data="admin_edit_plan_free"
                             )
                         ]
                     ]
@@ -3303,7 +3310,7 @@ async def handle_admin_text(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Free Plan Limits", callback_data="admin_edit_plan_free"
+                                "← Back to Plan Settings", callback_data="admin_edit_plan_free"
                             )
                         ]
                     ]
@@ -3403,7 +3410,7 @@ async def handle_admin_text(client, message):
                 await db.update_public_config(plan_key, plan_settings)
 
                 await edit_or_reply(client, message, msg_id, f"✅ {plan_name.capitalize()} fiat price updated to `{formatted_price}`.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")]])
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]])
                 )
                 admin_sessions.pop(user_id, None)
                 return
@@ -3417,7 +3424,7 @@ async def handle_admin_text(client, message):
             return
         await db.update_public_config("premium_trial_days", int(val))
         await edit_or_reply(client, message, msg_id, f"✅ Premium trial duration updated to `{val}` days.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_premium_settings")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Premium Settings", callback_data="admin_premium_settings")]])
         )
         admin_sessions.pop(user_id, None)
         return
@@ -3426,7 +3433,7 @@ async def handle_admin_text(client, message):
         val = message.text.strip() if message.text else ""
         if val == "/cancel":
             admin_sessions.pop(user_id, None)
-            await edit_or_reply(client, message, msg_id, "Cancelled.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="admin_force_sub_menu")]]))
+            await edit_or_reply(client, message, msg_id, "Cancelled.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]]))
             return
 
         field = state.replace("awaiting_fs_", "")
@@ -3434,24 +3441,24 @@ async def handle_admin_text(client, message):
         if field == "msg":
             await db.update_public_config("force_sub_message_text", val)
             await edit_or_reply(client, message, msg_id, "✅ Gate message updated successfully.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_force_sub_menu")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]])
             )
         elif field == "btn_label":
             await db.update_public_config("force_sub_button_label", val)
             await edit_or_reply(client, message, msg_id, f"✅ Button label updated to `{val}`.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_fs_edit_btn")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Button Settings", callback_data="admin_fs_edit_btn")]])
             )
         elif field == "btn_emoji":
 
             emoji = val[0] if val else "📢"
             await db.update_public_config("force_sub_button_emoji", emoji)
             await edit_or_reply(client, message, msg_id, f"✅ Button emoji updated to {emoji}.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_fs_edit_btn")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Button Settings", callback_data="admin_fs_edit_btn")]])
             )
         elif field == "welcome":
             await db.update_public_config("force_sub_welcome_text", val)
             await edit_or_reply(client, message, msg_id, "✅ Welcome message updated successfully.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back", callback_data="admin_force_sub_menu")]])
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]])
             )
 
         admin_sessions.pop(user_id, None)
@@ -3463,14 +3470,14 @@ async def handle_admin_text(client, message):
         await db.update_template(field, new_template)
         if field == "caption":
             reply_markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back", callback_data="admin_templates_menu")]]
+                [[InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")]]
             )
         else:
             reply_markup = InlineKeyboardMarkup(
                 [
                     [
                         InlineKeyboardButton(
-                            "🔙 Back to Templates", callback_data="admin_templates"
+                            "← Back to Metadata Templates", callback_data="admin_templates"
                         )
                     ]
                 ]
@@ -3487,7 +3494,7 @@ async def handle_admin_text(client, message):
             [
                 [
                     InlineKeyboardButton(
-                        "🔙 Back to Filename Templates",
+                        "← Back to Filename Templates",
                         callback_data="admin_filename_templates",
                     )
                 ]
@@ -3502,7 +3509,7 @@ async def handle_admin_text(client, message):
         await db.update_channel(new_channel, None)
 
         reply_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("← Back", callback_data="admin_general_channel")]]
+            [[InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_channel")]]
         )
         await edit_or_reply(client, message, msg_id, f"✅ Global channel variable updated to:\n`{new_channel}`",
             reply_markup=reply_markup,
@@ -3680,7 +3687,7 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
     buttons.append(nav_row)
 
     buttons.append(
-        [InlineKeyboardButton("← Back", callback_data="admin_usage_dashboard")]
+        [InlineKeyboardButton("← Back to Dashboard", callback_data="admin_usage_dashboard")]
     )
 
     try:
@@ -3735,7 +3742,7 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
                 [
                     [
                         InlineKeyboardButton(
-                            "← Back", callback_data="admin_usage_dashboard"
+                            "← Back to Dashboard", callback_data="admin_usage_dashboard"
                         )
                     ]
                 ]
@@ -3864,7 +3871,7 @@ async def show_user_lookup(client: Client, message: Message, user_id: int):
         ]
     )
     buttons.append(
-        [InlineKeyboardButton("← Back", callback_data="admin_usage_dashboard")]
+        [InlineKeyboardButton("← Back to Dashboard", callback_data="admin_usage_dashboard")]
     )
 
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -3920,7 +3927,7 @@ async def admin_prompt_lookup_cb(client: Client, callback_query: CallbackQuery):
                 [
                     [
                         InlineKeyboardButton(
-                            "← Back", callback_data="admin_usage_dashboard"
+                            "← Back to Dashboard", callback_data="admin_usage_dashboard"
                         )
                     ]
                 ]
@@ -3956,7 +3963,7 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "← Back", callback_data="admin_usage_dashboard"
+                                    "← Back to Dashboard", callback_data="admin_usage_dashboard"
                                 )
                             ]
                         ]

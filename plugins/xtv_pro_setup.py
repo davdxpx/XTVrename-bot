@@ -47,7 +47,7 @@ async def pro_menu(client, callback_query):
                 )
             ],
             [InlineKeyboardButton("🔄 Re-Setup", callback_data="pro_setup_start")],
-            [InlineKeyboardButton("🔙 Back to Admin Menu", callback_data="admin_main")],
+            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
         ]
     else:
         status = (
@@ -59,7 +59,7 @@ async def pro_menu(client, callback_query):
                     "🚀 Setup 𝕏TV Pro™", callback_data="pro_setup_start"
                 )
             ],
-            [InlineKeyboardButton("🔙 Back to Admin Menu", callback_data="admin_main")],
+            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
         ]
 
     try:
@@ -89,7 +89,7 @@ async def delete_setup(client, callback_query):
         "✅ **Session Deleted!**\n\n"
         "𝕏TV Pro™ has been disabled. The Userbot session was securely deleted from the database.",
         reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🔙 Back to Menu", callback_data="pro_setup_menu")]]
+            [[InlineKeyboardButton("← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu")]]
         ),
     )
 
@@ -224,7 +224,7 @@ async def pro_setup_handler(client, message):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "🔙 Back", callback_data="pro_setup_menu"
+                                    "← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu"
                                 )
                             ]
                         ]
@@ -241,7 +241,7 @@ async def pro_setup_handler(client, message):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "🔙 Back", callback_data="pro_setup_menu"
+                                    "← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu"
                                 )
                             ]
                         ]
@@ -258,7 +258,7 @@ async def pro_setup_handler(client, message):
                         [
                             [
                                 InlineKeyboardButton(
-                                    "🔙 Back", callback_data="pro_setup_menu"
+                                    "← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu"
                                 )
                             ]
                         ]
@@ -377,7 +377,7 @@ async def finalize_setup(userbot, user_id, msg):
                 "Your account doesn't have Telegram Premium.\n"
                 "Buy it or complete the setup with an account that has Premium to unlock 4GB uploads.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]
+                    [[InlineKeyboardButton("← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu")]]
                 ),
             )
             await userbot.disconnect()
@@ -412,7 +412,7 @@ async def finalize_setup(userbot, user_id, msg):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="admin_main"
+                                "← Back to Admin Panel", callback_data="admin_main"
                             )
                         ]
                     ]
@@ -427,7 +427,7 @@ async def finalize_setup(userbot, user_id, msg):
             await msg.edit_text(
                 f"❌ **Failed to finalize setup:** {e}",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("🔙 Back", callback_data="pro_setup_menu")]]
+                    [[InlineKeyboardButton("← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu")]]
                 ),
             )
         except MessageNotModified:

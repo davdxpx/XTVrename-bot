@@ -358,11 +358,11 @@ async def handle_text_input(client, message):
                 msg_id = get_data(user_id).get("dest_msg_id")
                 if msg_id:
                     try:
-                        await client.edit_message_text(message.chat.id, msg_id, f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Options", callback_data="sel_dest_page_1")]]))
+                        await client.edit_message_text(message.chat.id, msg_id, f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
                     except:
                         pass
                 else:
-                    await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Options", callback_data="sel_dest_page_1")]]))
+                    await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
                 set_state(user_id, "awaiting_destination_selection")
                 return
 
@@ -2303,7 +2303,7 @@ async def handle_quality_menu(client, callback_query):
                     ],
                     [
                         InlineKeyboardButton(
-                            "🔙 Back", callback_data=f"back_confirm_{msg_id}"
+                            "← Back", callback_data=f"back_confirm_{msg_id}"
                         )
                     ],
                 ]
@@ -2455,7 +2455,7 @@ async def handle_change_tmdb_init(client, callback_query):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔙 Back", callback_data=f"back_confirm_{msg_id}"
+                            "← Back", callback_data=f"back_confirm_{msg_id}"
                         )
                     ]
                 ]
@@ -2484,7 +2484,7 @@ async def handle_change_se_menu(client, callback_query):
                     ],
                     [
                         InlineKeyboardButton(
-                            "🔙 Back", callback_data=f"back_confirm_{msg_id}"
+                            "← Back", callback_data=f"back_confirm_{msg_id}"
                         )
                     ],
                 ]
@@ -2559,7 +2559,7 @@ async def handle_change_codec(client, callback_query):
     text = f"✅ None" if not current else "None"
     buttons.append([InlineKeyboardButton(text, callback_data=f"set_codec_none_{msg_id}")])
 
-    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"back_confirm_{msg_id}")])
+    buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
 
     try:
         await callback_query.message.edit_text(
@@ -2611,7 +2611,7 @@ async def handle_change_audio(client, callback_query):
 
     text = f"✅ None" if not current else "None"
     buttons.append([InlineKeyboardButton(text, callback_data=f"set_audio_none_{msg_id}")])
-    buttons.append([InlineKeyboardButton("🔙 Back", callback_data=f"back_confirm_{msg_id}")])
+    buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
 
     try:
         await callback_query.message.edit_text(
@@ -2740,7 +2740,7 @@ async def edit_system_filename_template(client, callback_query):
     try:
         await callback_query.message.edit_text(
             "⚙️ **System Filename Template**\n\n"
-            "How should the bot save files internally to your MyFiles database?\n"
+            "How should the bot save files internally to your 𝕏Files database?\n"
             "You can use these variables:\n"
             "`{title}` - The movie or series name\n"
             "`{year}` - The release year\n"

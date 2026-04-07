@@ -75,7 +75,7 @@ async def handle_buy_premium_dur(client, callback_query):
                 [InlineKeyboardButton(f"1 Month ({p1})", callback_data=f"buy_premium_pay_{plan}_1")],
                 [InlineKeyboardButton(f"3 Months ({p3})", callback_data=f"buy_premium_pay_{plan}_3")],
                 [InlineKeyboardButton(f"12 Months ({p12})", callback_data=f"buy_premium_pay_{plan}_12")],
-                [InlineKeyboardButton("← Back", callback_data="user_premium_menu")]
+                [InlineKeyboardButton("← Back to Premium", callback_data="user_premium_menu")]
             ])
         )
     except Exception as e:
@@ -112,7 +112,7 @@ async def handle_buy_premium_pay(client, callback_query):
         methods_available = True
         buttons.append([InlineKeyboardButton("🏦 Pay with UPI", callback_data=f"buy_manual_{plan}_{months}_upi")])
 
-    buttons.append([InlineKeyboardButton("← Back", callback_data=f"buy_premium_dur_{plan}")])
+    buttons.append([InlineKeyboardButton("← Back to Duration", callback_data=f"buy_premium_dur_{plan}")])
 
     if not methods_available:
         await callback_query.answer("No payment methods are currently available. Please contact the administrator.", show_alert=True)

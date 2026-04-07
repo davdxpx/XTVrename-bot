@@ -20,6 +20,18 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
+## 📋 What's New in v1.5.0
+
+- **Brand Rename:** MyFiles → 𝕏Files across all UI, `/xfiles` as primary command (`/myfiles` remains as alias)
+- **Performance:** Persistent HTTP sessions, database settings cache (60s TTL), programmatic indexes, async file cleanup
+- **Security:** SSL bypass removed, config validation, FFmpeg metadata sanitization
+- **Reliability:** State TTL auto-cleanup, queue memory leak fix, graceful shutdown
+- **UI Polish:** 150+ back-button labels standardized with contextual `← Back to [Page]` format
+- **Fixes:** Admin panel italic markdown, dead callbacks, toggle split-bug, cancel button fixes
+- **Infrastructure:** Ruff linter, GitHub Actions CI, pinned dependencies
+
+---
+
 ## 📑 Table of Contents
 
 - [🌟 Core Features](#-core-features)
@@ -43,10 +55,10 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 ### 🔹 Intelligent Recognition
 *   **V2.0 Endgame Evolution**:
     *   **Inline Query Search:** Use `@YourBotName [search query]` anywhere to instantly pull up your files and share them via Deep Links!
-    *   **Netflix-Style Visual Dashboard:** When viewing your files in `/myfiles`, the bot dynamically updates the interface to display the beautiful TMDb media poster inline.
+    *   **Netflix-Style Visual Dashboard:** When viewing your files in `/xfiles`, the bot dynamically updates the interface to display the beautiful TMDb media poster inline.
     *   **Smart System Filenames:** Use `{title} ({year})` and other customizable templates to completely automate how your internal media files are saved and displayed.
-    *   **Batch Actions (Multi-Select):** Easily move, send, or delete multiple files at once in your MyFiles dashboard via the new interactive checkmark system.
-    *   **Dynamic Sorting:** Sort files by Newest, Oldest, or A-Z natively inside the MyFiles interface.
+    *   **Batch Actions (Multi-Select):** Easily move, send, or delete multiple files at once in your 𝕏Files dashboard via the new interactive checkmark system.
+    *   **Dynamic Sorting:** Sort files by Newest, Oldest, or A-Z natively inside the 𝕏Files interface.
 *   **Workflow Modes (Starter Setup)**: The bot greets users with an interactive, beautifully-formatted **Starter Setup Menu** when they join your Force-Sub channel or press `/start`. Users can pick their primary mode of operation:
     *   **🧠 Smart Media Mode**: Best for TV Shows & Movies. Automatically triggers the Auto-Detection Matrix and fetches TMDb metadata/posters natively.
     *   **⚡ Quick Rename Mode**: Best for Personal Videos, Anime, or generic files. Instantly bypasses all auto-detection logic and brings the user straight to the renaming prompt for rapid processing.
@@ -56,11 +68,11 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **Automatic Archive Unpacking**: Automatically detects and downloads `.zip`, `.rar`, and `.7z` archives. It smartly identifies password-protected archives, prompts the user for the password, extracts the contents, and automatically feeds all valid media files directly into the batch processing queue!
 
 ### 🔹 Media Management & Workflows
-*   **My Files System (`/myfiles`)**: A completely interactive, in-bot cloud storage management system! Every file processed by the bot is safely routed to hidden **Database Channels** and stored persistently.
+*   **𝕏Files System (`/xfiles`)**: A completely interactive, in-bot cloud storage management system! Every file processed by the bot is safely routed to hidden **Database Channels** and stored persistently.
     *   **Auto-Folders**: Automatically organizes your media into "Movies", "Series", or "Subtitles" folders using the advanced TMDb Auto-Detection Matrix.
     *   **Custom Folders**: Users can create their own custom folders, move files between them, and rename files natively.
     *   **Temporary vs Permanent Storage**: Admins can set precise plan limits for how many "Permanent" slots users receive. Files exceeding the limits are stored as "Temporary" and automatically cleared by the bot's background cleanup engine based on expiration rules.
-    *   **Team Drive Mode**: In Non-Public Mode, the `/myfiles` system transforms into a single, shared "Global Workspace" where the entire team can securely access and manage all files across a unified global database channel.
+    *   **Team Drive Mode**: In Non-Public Mode, the `/xfiles` system transforms into a single, shared "Global Workspace" where the entire team can securely access and manage all files across a unified global database channel.
 *   **Multiple Dumb Channels & Sequential Batch Forwarding**: Configure multiple independent destination channels (globally or per-user). The bot automatically queues seasons or movie collections in bulk and strictly forwards them in sequential order (e.g., sorting series by Season/Episode and movies by resolution precedence: 2160p > 1080p > 720p > 480p).
 *   **Smart Debounce Queue Manager**: Automatically sorts batched media uploads logically. Instead of simple alphabetical sorting, series are ordered by SxxExx and movies by quality precedence, preventing out-of-order uploads to your channels.
 *   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit.
@@ -90,7 +102,7 @@ The 𝕏TV MediaStudio™ features a highly robust, business-class **Premium Sub
 <summary><b>🌟 Premium System Highlights</b></summary>
 <br>
 
-*   **Multi-Tier Subscription Model**: Supports customizable **Standard** (⭐) and **Deluxe** (💎) premium plans. Admins can configure completely different daily egress limits, file processing limits, `/myfiles` folder limits, permanent storage capacities, and pricing for each tier.
+*   **Multi-Tier Subscription Model**: Supports customizable **Standard** (⭐) and **Deluxe** (💎) premium plans. Admins can configure completely different daily egress limits, file processing limits, `/xfiles` folder limits, permanent storage capacities, and pricing for each tier.
 *   **Donator Plan**: When a user's premium subscription expires, they are elegantly downgraded to the exclusive **Donator Plan**. This honors their support while applying free-tier restrictions and custom expiration logic for their overflow files.
 *   **Feature Overrides**: Premium plans can be configured to bypass global "Admin Feature Toggles". For example, you can disable the heavy **Video Converter** for free users to save server CPU, but explicitly enable it for Premium Deluxe users!
 *   **Priority Queue Processing**: Premium users bypass standard wait times via a specialized queue mechanism with reduced debounce delays and higher asynchronous concurrency limits.
@@ -292,7 +304,7 @@ For around €4 a month, you get a dedicated IPv4 and a massive **20TB of Traffi
 *   **/start**: Check bot status and ping.
 *   **/admin**: Access the **Admin Panel** to configure global settings (or CEO controls in Public Mode).
 *   **/settings**: Access **Personal Settings** to configure your own templates and thumbnails (Public Mode only).
-*   **/myfiles**: Open your interactive cloud storage menu to view, manage, and batch-send your processed files.
+*   **/xfiles**: Open your interactive cloud storage menu to view, manage, and batch-send your processed files.
 *   **/premium**: Open the **Premium Dashboard** to view or upgrade your plan.
 *   **/info**: View bot details and support info.
 *   **/usage**: View your daily limits and personal usage (Public Mode only).

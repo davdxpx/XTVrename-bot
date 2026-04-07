@@ -69,7 +69,7 @@ def get_user_templates_menu():
                     "🔤 Preferred Separator", callback_data="user_pref_separator"
                 )
             ],
-            [InlineKeyboardButton("← Back", callback_data="user_main")],
+            [InlineKeyboardButton("← Back to Settings", callback_data="user_main")],
         ]
     )
 
@@ -116,7 +116,7 @@ async def info_command(client, message):
 
     text += f"**📊 System Details**\n"
     text += f"• **Version:** `{Config.VERSION} (Public Edition)`\n"
-    text += f"• **MyFiles Version:** `{Config.MYFILES_VERSION}`\n"
+    text += f"• **𝕏Files Version:** `{Config.MYFILES_VERSION}`\n"
     text += f"• **Status:** `Online & Operational`\n"
     text += f"• **Community:** `{community_name}`\n\n"
 
@@ -211,7 +211,7 @@ async def user_settings_callback(client, callback_query):
                         nav.append(InlineKeyboardButton("➡️", callback_data=f"dumb_user_menu_{page+1}"))
                     buttons.append(nav)
 
-            buttons.append([InlineKeyboardButton("🔙 Back to Settings", callback_data="user_main")])
+            buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="user_main")])
 
             try:
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -253,7 +253,7 @@ async def user_settings_callback(client, callback_query):
                 [InlineKeyboardButton(f"🎬 Set Movie Default", callback_data=f"dumb_user_def_mov_{ch_id}")],
                 [InlineKeyboardButton(f"📺 Set Series Default", callback_data=f"dumb_user_def_ser_{ch_id}")],
                 [InlineKeyboardButton("🗑 Delete Channel", callback_data=f"dumb_user_del_{ch_id}")],
-                [InlineKeyboardButton("🔙 Back", callback_data="dumb_user_menu")]
+                [InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_user_menu")]
             ]
 
             try:
@@ -344,7 +344,7 @@ async def user_settings_callback(client, callback_query):
                     ]
                 )
             buttons.append(
-                [InlineKeyboardButton("← Back", callback_data="dumb_user_menu")]
+                [InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_user_menu")]
             )
             try:
                 await callback_query.message.edit_text(
@@ -416,7 +416,7 @@ async def user_settings_callback(client, callback_query):
                 InlineKeyboardButton("🗑 Remove Thumbnail", callback_data="user_thumb_remove")
             ])
 
-        buttons.append([InlineKeyboardButton("← Back", callback_data="user_main")])
+        buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="user_main")])
 
         try:
             await callback_query.message.edit_text(
@@ -490,7 +490,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_thumb_menu"
+                                "← Back to Thumbnail Settings", callback_data="user_thumb_menu"
                             )
                         ],
                     ]
@@ -522,7 +522,7 @@ async def user_settings_callback(client, callback_query):
             await callback_query.message.edit_text(
                 "✅ **Thumbnail Removed & Deactivated**\n\nYour files will no longer use a default custom thumbnail and the thumbnail mode has been set to None.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data="user_thumb_menu")]]
+                    [[InlineKeyboardButton("← Back to Thumbnail Settings", callback_data="user_thumb_menu")]]
                 ),
             )
         except MessageNotModified:
@@ -553,7 +553,7 @@ async def user_settings_callback(client, callback_query):
                         [
                             InlineKeyboardButton("Space ( )", callback_data="user_set_sep_space"),
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_templates_menu")],
+                        [InlineKeyboardButton("← Back to Templates", callback_data="user_templates_menu")],
                     ]
                 )
             )
@@ -584,7 +584,7 @@ async def user_settings_callback(client, callback_query):
                         [
                             InlineKeyboardButton("Space ( )", callback_data="user_set_sep_space"),
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_templates_menu")],
+                        [InlineKeyboardButton("← Back to Templates", callback_data="user_templates_menu")],
                     ]
                 )
             )
@@ -622,7 +622,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_templates_menu"
+                                "← Back to Templates", callback_data="user_templates_menu"
                             )
                         ],
                     ]
@@ -652,7 +652,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_templates_menu"
+                                "← Back to Templates", callback_data="user_templates_menu"
                             )
                         ],
                     ]
@@ -718,7 +718,7 @@ async def user_settings_callback(client, callback_query):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data="user_main")]]
+                    [[InlineKeyboardButton("← Back to Settings", callback_data="user_main")]]
                 ),
             )
         except MessageNotModified:
@@ -751,7 +751,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_templates_menu"
+                                "← Back to Templates", callback_data="user_templates_menu"
                             )
                         ],
                     ]
@@ -786,7 +786,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_filename_templates"
+                                "← Back to Filename Templates", callback_data="user_filename_templates"
                             )
                         ],
                     ]
@@ -815,7 +815,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_filename_templates"
+                                "← Back to Filename Templates", callback_data="user_filename_templates"
                             )
                         ],
                     ]
@@ -847,7 +847,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_filename_templates"
+                                "← Back to Filename Templates", callback_data="user_filename_templates"
                             )
                         ],
                     ]
@@ -901,7 +901,7 @@ async def user_settings_callback(client, callback_query):
                                 "⚙️ Workflow Mode", callback_data="user_general_workflow"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_main")],
+                        [InlineKeyboardButton("← Back to Settings", callback_data="user_main")],
                     ]
                 ),
             )
@@ -931,7 +931,7 @@ async def user_settings_callback(client, callback_query):
                                 callback_data="set_user_workflow_quick"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="user_general_settings_menu")],
                     ]
                 ),
             )
@@ -963,7 +963,7 @@ async def user_settings_callback(client, callback_query):
                                 "✏️ Change", callback_data="prompt_user_channel"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="user_general_settings_menu")],
                     ]
                 ),
             )
@@ -995,7 +995,7 @@ async def user_settings_callback(client, callback_query):
                                 "✏️ Change", callback_data="prompt_user_language"
                             )
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="user_general_settings_menu")],
                     ]
                 ),
             )
@@ -1036,7 +1036,7 @@ async def user_settings_callback(client, callback_query):
                             InlineKeyboardButton("🇮🇹 Italian", callback_data="set_lang_it-IT"),
                             InlineKeyboardButton("🇧🇷 Portuguese", callback_data="set_lang_pt-BR"),
                         ],
-                        [InlineKeyboardButton("← Back", callback_data="user_general_settings_menu")],
+                        [InlineKeyboardButton("← Back to General Settings", callback_data="user_general_settings_menu")],
                     ]
                 ),
             )
@@ -1088,7 +1088,7 @@ async def user_settings_callback(client, callback_query):
                         ],
                         [
                             InlineKeyboardButton(
-                                "← Back", callback_data="user_templates"
+                                "← Back to Metadata Templates", callback_data="user_templates"
                             )
                         ],
                     ]
@@ -1138,7 +1138,7 @@ async def handle_user_photo(client, message):
             await msg.edit_text(
                 "✅ Personal thumbnail updated successfully!\nYour thumbnail mode has been set to **Custom**.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data="user_thumb_menu")]]
+                    [[InlineKeyboardButton("← Back to Thumbnail Settings", callback_data="user_thumb_menu")]]
                 ),
             )
         except MessageNotModified:
@@ -1192,7 +1192,7 @@ async def handle_user_text(client, message):
             user_sessions.pop(user_id, None)
             await edit_or_reply(client, message, msg_id, "Cancelled.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data=f"dumb_user_opt_{ch_id}")]]
+                    [[InlineKeyboardButton("← Back to Channel Settings", callback_data=f"dumb_user_opt_{ch_id}")]]
                 ),
             )
             return
@@ -1204,7 +1204,7 @@ async def handle_user_text(client, message):
             await db.settings.update_one({"_id": doc_id}, {"$set": {"dumb_channels": channels}}, upsert=True)
             await edit_or_reply(client, message, msg_id, f"✅ Channel renamed to **{val}**.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data=f"dumb_user_opt_{ch_id}")]]
+                    [[InlineKeyboardButton("← Back to Channel Settings", callback_data=f"dumb_user_opt_{ch_id}")]]
                 ),
             )
         user_sessions.pop(user_id, None)
@@ -1216,7 +1216,7 @@ async def handle_user_text(client, message):
             user_sessions.pop(user_id, None)
             await edit_or_reply(client, message, msg_id, "Cancelled.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data="dumb_user_menu")]]
+                    [[InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_user_menu")]]
                 ),
             )
             return
@@ -1257,7 +1257,7 @@ async def handle_user_text(client, message):
             )
             await edit_or_reply(client, message, msg_id, f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back", callback_data="dumb_user_menu")]]
+                    [[InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_user_menu")]]
                 ),
             )
             user_sessions.pop(user_id, None)
@@ -1270,7 +1270,7 @@ async def handle_user_text(client, message):
 
         if field == "caption":
             reply_markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back", callback_data="user_templates_menu")]]
+                [[InlineKeyboardButton("← Back to Templates", callback_data="user_templates_menu")]]
             )
         else:
             reply_markup = InlineKeyboardMarkup(
@@ -1315,7 +1315,7 @@ async def handle_user_text(client, message):
         await db.update_channel(new_channel, user_id)
 
         reply_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("← Back", callback_data="user_main")]]
+            [[InlineKeyboardButton("← Back to Settings", callback_data="user_main")]]
         )
         await edit_or_reply(client, message, msg_id, f"✅ Your channel variable updated to:\n`{new_channel}`",
             reply_markup=reply_markup,

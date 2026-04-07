@@ -168,12 +168,17 @@ if __name__ == "__main__":
             while True:
                 try:
                     now = datetime.datetime.utcnow()
-                    # Delete expired temporary files directly — no need to load into memory
+                    # Delete expired temporary files from DB
                     result = await db.files.delete_many(
                         {"status": "temporary", "expires_at": {"$lt": now}}
                     )
                     if result.deleted_count:
-                        logger.info(f"Cleaned up {result.deleted_count} expired temporary files.")
+                        logger.info(f"Cleaned up {result.deleted_count} expired temporary files from DB.")
+
+                    # Also clean orphaned disk files
+                    cleaned, freed = await asyncio.to_thread(_sync_cleanup_orphaned_files)
+                    if cleaned:
+                        logger.info(f"Cleaned {cleaned} orphaned disk files, freed {freed / (1024*1024):.2f} MB.")
                 except Exception as e:
                     logger.error(f"Error during DB cleanup: {e}")
 
@@ -195,8 +200,8 @@ if __name__ == "__main__":
                     logger.debug(f"Queue cleanup: {e}")
 
         logger.info("Scheduling background tasks...")
-        app.loop.create_task(db_cleanup())
-        app.loop.create_task(state_cleanup())
+        asyncio.create_task(db_cleanup())
+        asyncio.create_task(state_cleanup())
 
     except Exception as e:
         logger.warning(f"Could not schedule background tasks: {e}")
@@ -211,7 +216,7 @@ if __name__ == "__main__":
                 logger.info("Cleanup complete. No orphaned files found.")
 
         logger.info("Running automated orphaned file cleanup...")
-        app.loop.create_task(async_cleanup_orphaned())
+        asyncio.create_task(async_cleanup_orphaned())
     except Exception as e:
         logger.warning(f"Error during orphaned file cleanup: {e}")
 

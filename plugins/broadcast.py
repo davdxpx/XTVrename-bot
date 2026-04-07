@@ -65,7 +65,7 @@ async def broadcast_callback(client, callback_query):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="broadcast_preview"
+                                "← Back to Preview", callback_data="broadcast_preview"
                             )
                         ]
                     ]
@@ -186,7 +186,7 @@ async def broadcast_message_handler(client, message):
                     [
                         [
                             InlineKeyboardButton(
-                                "🔙 Back to Menu", callback_data="broadcast_preview"
+                                "← Back to Preview", callback_data="broadcast_preview"
                             )
                         ]
                     ]
@@ -210,7 +210,7 @@ async def broadcast_message_handler(client, message):
                 [
                     [
                         InlineKeyboardButton(
-                            "🔙 Back to Menu", callback_data="broadcast_preview"
+                            "← Back to Preview", callback_data="broadcast_preview"
                         )
                     ]
                 ]
