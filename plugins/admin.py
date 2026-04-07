@@ -63,6 +63,13 @@ def get_admin_main_menu(pro_session, public_mode):
                 ),
             ]
         )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "📁 𝕏Files Settings", callback_data="admin_myfiles_settings"
+                ),
+            ]
+        )
     else:
         keyboard.append(
             [
@@ -100,7 +107,7 @@ def get_admin_main_menu(pro_session, public_mode):
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "📁 /myfiles Settings", callback_data="admin_myfiles_settings"
+                    "📁 𝕏Files Settings", callback_data="admin_myfiles_settings"
                 ),
             ]
         )
@@ -238,7 +245,7 @@ async def admin_callback(client, callback_query):
     debug(f"Admin callback: {data} from user {user_id}")
 
     if data == "admin_myfiles_settings":
-        text = "📁 **/myfiles Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
+        text = "📁 **𝕏Files Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
         buttons = [
             [InlineKeyboardButton("🗄️ Database Channels", callback_data="admin_myfiles_db_channels")],
         ]
