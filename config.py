@@ -48,6 +48,25 @@ class Config:
 
     DEFAULT_CHANNEL = "@XTVglobal"
 
+    @classmethod
+    def validate(cls):
+        """Validate required configuration at startup."""
+        errors = []
+        if not cls.BOT_TOKEN:
+            errors.append("BOT_TOKEN is required (get one from @BotFather)")
+        if not cls.API_ID:
+            errors.append("API_ID is required (get one from my.telegram.org)")
+        if not cls.API_HASH:
+            errors.append("API_HASH is required (get one from my.telegram.org)")
+        if not cls.MAIN_URI:
+            errors.append("MAIN_URI is required (MongoDB connection string)")
+        if errors:
+            raise SystemExit(
+                "Configuration errors:\n" + "\n".join(f"  - {e}" for e in errors)
+            )
+
+
+Config.validate()
 
 if not os.path.exists(Config.DOWNLOAD_DIR):
     os.makedirs(Config.DOWNLOAD_DIR)

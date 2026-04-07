@@ -1,6 +1,7 @@
 # --- Imports ---
 import time
-import math
+import asyncio
+from pyrogram.errors import FloodWait
 from utils.XTVengine import XTVEngine
 
 # === Helper Functions ===
@@ -10,10 +11,18 @@ async def progress_for_pyrogram(
     now = time.time()
     diff = now - start_time
 
+    # Adaptive throttle based on file size
+    if total < 50 * 1024 * 1024:        # < 50MB
+        throttle = 5.0
+    elif total < 500 * 1024 * 1024:      # < 500MB
+        throttle = 8.0
+    else:                                 # >= 500MB
+        throttle = 12.0
+
     if current == total:
-        pass
+        pass  # Always update on completion
     elif hasattr(message, "last_update"):
-        if (now - getattr(message, "last_update")) < 8.0:
+        if (now - getattr(message, "last_update")) < throttle:
             return
     else:
         setattr(message, "last_update", now)
@@ -22,7 +31,6 @@ async def progress_for_pyrogram(
 
     percentage = current * 100 / total
     speed = current / diff if diff > 0 else 0
-    elapsed_time = round(diff) * 1000
 
     if speed > 0:
         time_to_completion = round((total - current) / speed) * 1000
@@ -45,25 +53,22 @@ async def progress_for_pyrogram(
     text += f"**Progress:**  `{percentage:.1f}%`\n"
     text += f"[{bar}]\n\n"
 
-    text += f"**💾 Size:** `{current_fmt}` / `{total_fmt}`\n"
-    text += f"**🚀 Speed:** `{speed_fmt}/s`\n"
-    text += f"**⏳ ETA:** `{estimated_total_time}`\n"
+    text += f"**Size:** `{current_fmt}` / `{total_fmt}`\n"
+    text += f"**Speed:** `{speed_fmt}/s`\n"
+    text += f"**ETA:** `{estimated_total_time}`\n"
 
     if is_priority:
-        text += f"\n🚀 **Priority Queue:** `Active`\n"
+        text += f"\n**Priority Queue:** `Active`\n"
 
     text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
     text += f"{XTVEngine.get_signature(mode=mode)}"
 
-    from pyrogram.errors import FloodWait
-    import asyncio
-
     try:
         await message.edit(text=text)
     except FloodWait as e:
-
         setattr(message, "last_update", now + e.value)
-    except Exception as e:
+    except Exception:
+        # Message may have been deleted or is otherwise uneditable
         pass
 
 # --------------------------------------------------------------------------

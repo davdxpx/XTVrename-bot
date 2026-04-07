@@ -1,15 +1,20 @@
 # --- Imports ---
+import time
+import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import Config
 from utils.log import get_logger
-import ssl
 import certifi
 
 logger = get_logger("database")
 
 # === Classes ===
 class Database:
+    _SETTINGS_CACHE_TTL = 60  # seconds
+
     def __init__(self):
+        self._settings_cache = {}  # doc_id -> (timestamp, doc)
+
         if not Config.MAIN_URI:
             logger.warning("MAIN_URI is not set in environment variables.")
             self.client = None
@@ -22,12 +27,12 @@ class Database:
                     Config.MAIN_URI, tlsCAFile=certifi.where()
                 )
             except Exception as e:
-                logger.warning(
-                    f"Failed to connect with certifi, trying with tlsAllowInvalidCertificates=True: {e}"
+                logger.error(
+                    f"MongoDB SSL connection failed: {e}\n"
+                    "  Fix: Ensure your MongoDB URI uses a valid TLS certificate,\n"
+                    "  or update certifi: pip install --upgrade certifi"
                 )
-                self.client = AsyncIOMotorClient(
-                    Config.MAIN_URI, tlsAllowInvalidCertificates=True
-                )
+                raise
 
             self.db = self.client[Config.DB_NAME]
             self.settings = self.db["user_settings"]
@@ -36,6 +41,26 @@ class Database:
             self.pending_payments = self.db["pending_payments"]
             self.files = self.db["files"]
             self.folders = self.db["folders"]
+
+    def _invalidate_settings_cache(self, user_id=None):
+        doc_id = self._get_doc_id(user_id)
+        self._settings_cache.pop(doc_id, None)
+
+    async def ensure_indexes(self):
+        if self.db is None:
+            return
+        try:
+            await self.users.create_index("user_id", unique=True)
+            await self.files.create_index([("status", 1), ("expires_at", 1)])
+            await self.files.create_index("user_id")
+            await self.folders.create_index("user_id")
+            await self.daily_stats.create_index([("user_id", 1), ("date", 1)])
+            await self.daily_stats.create_index("date")
+            await self.pending_payments.create_index("user_id")
+            await self.pending_payments.create_index("status")
+            logger.info("Database indexes ensured.")
+        except Exception as e:
+            logger.warning(f"Could not create indexes: {e}")
 
     def _get_doc_id(self, user_id=None):
         if Config.PUBLIC_MODE and user_id is not None:
@@ -73,7 +98,6 @@ class Database:
                 await self.settings.update_one({"_id": doc_id}, {"$set": doc}, upsert=True)
 
                 user_doc = await self.users.find_one({"user_id": user_id})
-                import time
                 now = time.time()
                 if not user_doc:
                     new_user = {
@@ -147,6 +171,14 @@ class Database:
             return None
 
         doc_id = self._get_doc_id(user_id)
+
+        # Check TTL cache first
+        now = time.time()
+        if doc_id in self._settings_cache:
+            cached_time, cached_doc = self._settings_cache[doc_id]
+            if now - cached_time < self._SETTINGS_CACHE_TTL:
+                return cached_doc
+
         try:
             doc = await self.settings.find_one({"_id": doc_id})
             if not doc:
@@ -162,7 +194,9 @@ class Database:
                     "preferred_separator": ".",
                 }
                 await self.settings.insert_one(default_settings)
+                self._settings_cache[doc_id] = (now, default_settings)
                 return default_settings
+            self._settings_cache[doc_id] = (now, doc)
             return doc
         except Exception as e:
             logger.error(f"Error fetching settings for {doc_id}: {e}")
@@ -176,6 +210,7 @@ class Database:
             await self.settings.update_one(
                 {"_id": doc_id}, {"$set": {f"templates.{key}": value}}, upsert=True
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating template for {doc_id}: {e}")
 
@@ -194,6 +229,7 @@ class Database:
                 },
                 upsert=True,
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating thumbnail for {doc_id}: {e}")
 
@@ -223,6 +259,7 @@ class Database:
             await self.settings.update_one(
                 {"_id": doc_id}, {"$set": {"thumbnail_mode": mode}}, upsert=True
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating thumbnail mode for {doc_id}: {e}")
 
@@ -248,6 +285,7 @@ class Database:
                 {"$set": {f"filename_templates.{key}": value}},
                 upsert=True,
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating filename template for {doc_id}: {e}")
 
@@ -265,6 +303,7 @@ class Database:
             await self.settings.update_one(
                 {"_id": doc_id}, {"$set": {"channel": value}}, upsert=True
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating channel for {doc_id}: {e}")
 
@@ -282,6 +321,7 @@ class Database:
             await self.settings.update_one(
                 {"_id": doc_id}, {"$set": {"preferred_language": value}}, upsert=True
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating preferred language for {doc_id}: {e}")
 
@@ -299,6 +339,7 @@ class Database:
             await self.settings.update_one(
                 {"_id": doc_id}, {"$set": {"preferred_separator": value}}, upsert=True
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating preferred separator for {doc_id}: {e}")
 
@@ -316,6 +357,7 @@ class Database:
             await self.settings.update_one(
                 {"_id": doc_id}, {"$set": {"workflow_mode": mode}}, upsert=True
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating workflow mode for {doc_id}: {e}")
 
@@ -333,6 +375,7 @@ class Database:
             await self.settings.update_one(
                 {"_id": doc_id}, {"$set": {"setup_completed": completed}}, upsert=True
             )
+            self._invalidate_settings_cache(user_id)
         except Exception as e:
             logger.error(f"Error updating setup_completed for {doc_id}: {e}")
 
@@ -716,7 +759,6 @@ class Database:
         if self.settings is None:
             return 0.0
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
@@ -732,7 +774,6 @@ class Database:
         if self.settings is None:
             return True, "", {}
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         incoming_mb = file_size_bytes / (1024 * 1024)
 
@@ -756,7 +797,6 @@ class Database:
         daily_egress_mb_limit = config.get("daily_egress_mb", 0)
         daily_file_count_limit = config.get("daily_file_count", 0)
 
-        import time
         now = time.time()
 
         user_doc = await self.get_user(user_id)
@@ -833,7 +873,6 @@ class Database:
         if self.settings is None:
             return
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         incoming_mb = file_size_bytes / (1024 * 1024)
 
@@ -873,7 +912,6 @@ class Database:
         if self.settings is None:
             return
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         incoming_mb = file_size_bytes / (1024 * 1024)
 
@@ -897,7 +935,6 @@ class Database:
         if self.settings is None:
             return
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
@@ -920,7 +957,6 @@ class Database:
         if self.settings is None:
             return
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         processed_mb = processed_file_size_bytes / (1024 * 1024)
         reserved_mb = reserved_file_size_bytes / (1024 * 1024)
@@ -981,7 +1017,6 @@ class Database:
         if self.settings is None:
             return [], 0
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
@@ -1012,7 +1047,6 @@ class Database:
         if self.settings is None:
             return {}
 
-        import datetime
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
@@ -1114,7 +1148,6 @@ class Database:
     async def ensure_user(self, user_id: int, first_name: str, username: str = None, last_name: str = None, language_code: str = None, is_bot: bool = False):
         if self.users is None:
             return
-        import time
         now = time.time()
 
         user_doc = await self.users.find_one({"user_id": user_id})
@@ -1208,7 +1241,6 @@ class Database:
     async def add_premium_user(self, user_id: int, days: float, plan: str = "standard"):
         if self.users is None:
             return
-        import time
         now = time.time()
 
         user_doc = await self.get_user(user_id)
@@ -1267,7 +1299,6 @@ class Database:
     async def add_pending_payment(self, payment_id: str, user_id: int, plan: str, duration_months: int, amount_str: str, method: str):
         if self.pending_payments is None:
             return
-        import time
         doc = {
             "_id": payment_id,
             "user_id": user_id,

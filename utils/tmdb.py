@@ -1,14 +1,51 @@
 # --- Imports ---
+import time
+import asyncio
 import aiohttp
 from config import Config
+from utils.log import get_logger
+
+logger = get_logger("utils.tmdb")
 
 # === Classes ===
 class TMDb:
     BASE_URL = "https://api.themoviedb.org/3"
     IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+    _CACHE_TTL = 600  # 10 minutes for search/detail results
+    _MAX_RETRIES = 3
 
     def __init__(self):
         self.api_key = Config.TMDB_API_KEY
+        self._session = None
+        self._cache = {}  # key -> (timestamp, data)
+
+    async def _get_session(self):
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=15, connect=5)
+            self._session = aiohttp.ClientSession(timeout=timeout)
+        return self._session
+
+    async def close(self):
+        if self._session and not self._session.closed:
+            await self._session.close()
+            self._session = None
+
+    def _get_cached(self, cache_key):
+        if cache_key in self._cache:
+            cached_time, cached_data = self._cache[cache_key]
+            if time.time() - cached_time < self._CACHE_TTL:
+                return cached_data
+            del self._cache[cache_key]
+        return None
+
+    def _set_cached(self, cache_key, data):
+        self._cache[cache_key] = (time.time(), data)
+        # Evict old entries if cache grows too large
+        if len(self._cache) > 500:
+            now = time.time()
+            expired = [k for k, (t, _) in self._cache.items() if now - t > self._CACHE_TTL]
+            for k in expired:
+                del self._cache[k]
 
     async def _request(self, endpoint, params=None, language="en-US"):
         if params is None:
@@ -19,16 +56,39 @@ class TMDb:
         params["api_key"] = self.api_key
         params["language"] = language
 
-        async with aiohttp.ClientSession() as session:
+        cache_key = f"{endpoint}:{sorted(params.items())}"
+        cached = self._get_cached(cache_key)
+        if cached is not None:
+            return cached
+
+        session = await self._get_session()
+
+        for attempt in range(self._MAX_RETRIES):
             try:
                 async with session.get(
                     f"{self.BASE_URL}{endpoint}", params=params
                 ) as resp:
                     if resp.status == 200:
-                        return await resp.json()
+                        data = await resp.json()
+                        self._set_cached(cache_key, data)
+                        return data
+                    if resp.status == 429:  # Rate limited
+                        retry_after = int(resp.headers.get("Retry-After", 2))
+                        logger.warning(f"TMDb rate limited, retrying in {retry_after}s...")
+                        await asyncio.sleep(retry_after)
+                        continue
+                    logger.warning(f"TMDb API returned {resp.status} for {endpoint}")
                     return None
-            except Exception as e:
-                return None
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                if attempt < self._MAX_RETRIES - 1:
+                    wait = 2 ** attempt
+                    logger.warning(f"TMDb request failed (attempt {attempt + 1}): {e}, retrying in {wait}s...")
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error(f"TMDb request failed after {self._MAX_RETRIES} attempts: {e}")
+                    return None
+
+        return None
 
     async def search_movie(self, query, language="en-US"):
         data = await self._request("/search/movie", {"query": query}, language)

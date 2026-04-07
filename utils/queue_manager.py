@@ -1,8 +1,7 @@
 # --- Imports ---
-import asyncio
 import uuid
 import time
-from typing import Dict, List, Any, Optional
+from typing import Dict, Optional
 
 # === Classes ===
 class QueueItem:
@@ -34,10 +33,8 @@ class BatchQueue:
         if not item:
             return None
 
-        earlier_items = [i for i in self.items.values() if i.sort_key < item.sort_key]
-
-        for earlier in sorted(earlier_items, key=lambda x: x.sort_key):
-            if earlier.status in ["processing", "done_user"]:
+        for earlier in self.items.values():
+            if earlier.sort_key < item.sort_key and earlier.status in ["processing", "done_user"]:
                 return earlier
 
         return None
@@ -46,6 +43,8 @@ class BatchQueue:
         return all(item.status in ["done", "done_dumb", "done_user", "failed"] for item in self.items.values())
 
 class QueueManager:
+    _BATCH_MAX_AGE = 3600  # 1 hour
+
     def __init__(self):
         self.batches: Dict[str, BatchQueue] = {}
 
@@ -79,54 +78,16 @@ class QueueManager:
                 if error:
                     item.error = error
 
-    def get_blocking_item(self, batch_id: str, item_id: str) -> Optional[QueueItem]:
-        if batch_id in self.batches:
-            return self.batches[batch_id].is_blocked(item_id)
-        return None
-
-    def is_batch_complete(self, batch_id: str) -> bool:
-        if batch_id in self.batches:
-            return self.batches[batch_id].is_batch_complete()
-        return True
-
-    def get_batch_summary(self, batch_id: str, usage_text: str, group_link: str = None) -> str:
-        if batch_id not in self.batches:
-            if group_link:
-                return f"✅ Batch Processing Complete!\n\nProcessed: successfully.\n\n🔗 Share Link for this Batch:\n{group_link}\n\n📊 Usage: {usage_text.replace('Today: ', '')}"
-            return f"✅ Batch Processing Complete!\n\nProcessed: successfully.\n\n📊 Usage: {usage_text.replace('Today: ', '')}"
-
-        batch = self.batches[batch_id]
-        success_items = []
-        failed_items = []
-
-        for item in sorted(batch.items.values(), key=lambda x: x.sort_key):
-            if item.status == "failed":
-                failed_items.append(item.display_name)
-            else:
-                success_items.append(item.display_name)
-
-        total = len(batch.items)
-        success_count = len(success_items)
-        failed_count = len(failed_items)
-
-        text = f"✅ Batch Processing Complete!\n\n"
-        text += f"Processed: {success_count}/{total} files successfully.\n"
-
-        if success_items:
-            if len(success_items) <= 5:
-                items_str = ", ".join(success_items)
-                text += f"Included: {items_str}\n"
-            else:
-                text += f"Included: {success_items[0]} ... {success_items[-1]}\n"
-
-        if failed_items:
-            text += f"Failed: {failed_count} files.\n"
-
-        if group_link:
-            text += f"\n🔗 Share Link for this Batch:\n{group_link}\n"
-
-        text += f"\n📊 Usage: {usage_text.replace('Today: ', '')}"
-        return text
+    def cleanup_completed(self):
+        """Remove completed or expired batches to prevent memory leaks."""
+        now = time.time()
+        to_remove = [
+            bid for bid, batch in self.batches.items()
+            if batch.is_batch_complete() or (now - batch.created_at > self._BATCH_MAX_AGE)
+        ]
+        for bid in to_remove:
+            del self.batches[bid]
+        return len(to_remove)
 
 queue_manager = QueueManager()
 

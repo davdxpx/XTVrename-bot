@@ -6,12 +6,11 @@ import logging
 logger = logging.getLogger("utils.archive")
 
 # === Helper Functions ===
-async def is_archive(filename: str) -> bool:
-
+def is_archive(filename: str) -> bool:
     if not filename:
         return False
     ext = os.path.splitext(filename)[1].lower()
-    return ext in [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"]
+    return ext in (".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz")
 
 async def check_password_protected(archive_path: str) -> bool:
 

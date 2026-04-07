@@ -30,33 +30,43 @@ class ConsoleFormatter(logging.Formatter):
         logging.CRITICAL: Colors.RED + Colors.BOLD,
     }
 
+    # Cache formatters per level to avoid re-creating on every .format() call
+    _cached_formatters = {}
+
     def format(self, record):
-        emoji = self.FORMATS.get(record.levelno, "")
-        color = self.COLOR_MAP.get(record.levelno, Colors.RESET)
+        if record.levelno not in self._cached_formatters:
+            emoji = self.FORMATS.get(record.levelno, "")
+            color = self.COLOR_MAP.get(record.levelno, Colors.RESET)
+            log_fmt = (
+                f"{Colors.BLUE}[%(asctime)s]{Colors.RESET} "
+                f"{color}{emoji}%(levelname)-8s{Colors.RESET} :: "
+                f"{color}%(message)s{Colors.RESET}"
+            )
+            self._cached_formatters[record.levelno] = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
 
-        log_fmt = (
-            f"{Colors.BLUE}[%(asctime)s]{Colors.RESET} "
-            f"{color}{emoji}%(levelname)-8s{Colors.RESET} :: "
-            f"{color}%(message)s{Colors.RESET}"
-        )
+        return self._cached_formatters[record.levelno].format(record)
 
-        formatter = logging.Formatter(log_fmt, datefmt="%H:%M:%S")
-        return formatter.format(record)
+# Set third-party log levels once at module load
+logging.getLogger("pyrogram").setLevel(logging.ERROR)
+logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# Shared handler instance
+_console_handler = None
 
 # === Helper Functions ===
 def get_logger(name):
     from config import Config
+    global _console_handler
+
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG if Config.DEBUG_MODE else logging.INFO)
 
     if not logger.handlers:
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setFormatter(ConsoleFormatter())
-        logger.addHandler(ch)
-
-    logging.getLogger("pyrogram").setLevel(logging.ERROR)
-    logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+        if _console_handler is None:
+            _console_handler = logging.StreamHandler(sys.stdout)
+            _console_handler.setFormatter(ConsoleFormatter())
+        logger.addHandler(_console_handler)
 
     return logger
 

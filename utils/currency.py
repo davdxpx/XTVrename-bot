@@ -1,12 +1,30 @@
 import aiohttp
+import asyncio
 import time
-import math
+import re
 from utils.log import get_logger
 
 logger = get_logger("utils.currency")
 
 _CACHE = {}
 _CACHE_TIMEOUT = 86400  # 1 day
+_session = None
+
+
+async def _get_session():
+    global _session
+    if _session is None or _session.closed:
+        timeout = aiohttp.ClientTimeout(total=15, connect=5)
+        _session = aiohttp.ClientSession(timeout=timeout)
+    return _session
+
+
+async def close_session():
+    global _session
+    if _session and not _session.closed:
+        await _session.close()
+        _session = None
+
 
 async def get_exchange_rate(base_currency: str, target_currency: str = "USD") -> float:
     """Fetches the exchange rate from a public API, with caching."""
@@ -21,18 +39,19 @@ async def get_exchange_rate(base_currency: str, target_currency: str = "USD") ->
     if cache_key in _CACHE and now - _CACHE[cache_key]["time"] < _CACHE_TIMEOUT:
         return _CACHE[cache_key]["rate"]
 
+    session = await _get_session()
+
     try:
         url = f"https://open.er-api.com/v6/latest/{base_currency}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    rates = data.get("rates", {})
-                    rate = rates.get(target_currency)
-                    if rate:
-                        _CACHE[cache_key] = {"rate": rate, "time": now}
-                        return rate
-    except Exception as e:
+        async with session.get(url) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                rates = data.get("rates", {})
+                rate = rates.get(target_currency)
+                if rate:
+                    _CACHE[cache_key] = {"rate": rate, "time": now}
+                    return rate
+    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
         logger.error(f"Failed to fetch exchange rate for {base_currency} to {target_currency}: {e}")
 
     # Fallback to older cached value if available
@@ -70,7 +89,6 @@ async def convert_to_usd_str(price_string: str) -> str:
         return ""
 
     try:
-        import re
         match = re.search(r"([\d\.]+)\s*([A-Z]+|\$|€|£|₹|₽)?", price_string)
         if not match:
             return price_string

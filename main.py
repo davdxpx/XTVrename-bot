@@ -18,6 +18,10 @@
 """
 
 # --- Imports ---
+import os
+import time
+import asyncio
+import datetime
 from pyrogram import Client, idle
 from config import Config
 from utils.log import get_logger
@@ -59,6 +63,36 @@ register_tool_handlers(app, tools.SubtitleExtractor)
 
 user_bot = None
 
+
+def _sync_cleanup_orphaned_files():
+    """Synchronous file cleanup — run via asyncio.to_thread to avoid blocking."""
+    download_dir = Config.DOWNLOAD_DIR
+    if not os.path.exists(download_dir):
+        return 0, 0
+
+    now = time.time()
+    cutoff = now - (24 * 3600)  # 24 hours
+    cleaned_count = 0
+    freed_space = 0
+
+    for root, _, files in os.walk(download_dir):
+        for f in files:
+            if f == "thumb.jpg":
+                continue
+            file_path = os.path.join(root, f)
+            try:
+                mtime = os.path.getmtime(file_path)
+                if mtime < cutoff:
+                    size = os.path.getsize(file_path)
+                    os.remove(file_path)
+                    cleaned_count += 1
+                    freed_space += size
+            except OSError as e:
+                logger.warning(f"Error cleaning file {file_path}: {e}")
+
+    return cleaned_count, freed_space
+
+
 if __name__ == "__main__":
     if not Config.BOT_TOKEN:
         logger.error("BOT_TOKEN is not set!")
@@ -67,6 +101,7 @@ if __name__ == "__main__":
     logger.info("Starting 𝕏TV MediaStudio™...")
     app.start()
 
+    # --- Database migrations ---
     try:
         from database import db
         logger.info("Running DB migrations...")
@@ -75,9 +110,17 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"Error during DB migration: {e}")
 
+    # --- Database indexes ---
     try:
         from database import db
-        import asyncio
+        logger.info("Ensuring database indexes...")
+        app.loop.run_until_complete(db.ensure_indexes())
+    except Exception as e:
+        logger.warning(f"Error creating indexes: {e}")
+
+    # --- Channel peer caching ---
+    try:
+        from database import db
 
         async def cache_channels():
             links = await db.get_all_dumb_channel_links()
@@ -117,78 +160,62 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"Error during Channel caching: {e}")
 
+    # --- Background tasks ---
     try:
-        import os
-        import time
-        from config import Config
-
-        # DB Expiration logic
-        import asyncio
         from database import db
-        import datetime
 
         async def db_cleanup():
             while True:
-                now = datetime.datetime.utcnow()
                 try:
-                    # Find all temporary files that have expired
-                    cursor = db.files.find({"status": "temporary", "expires_at": {"$lt": now}})
-                    expired_files = await cursor.to_list(length=None)
-
-                    if expired_files:
-                        logger.info(f"Found {len(expired_files)} expired temporary files. Cleaning up...")
-                        # Delete them from DB
-                        await db.files.delete_many({"status": "temporary", "expires_at": {"$lt": now}})
-
+                    now = datetime.datetime.utcnow()
+                    # Delete expired temporary files directly — no need to load into memory
+                    result = await db.files.delete_many(
+                        {"status": "temporary", "expires_at": {"$lt": now}}
+                    )
+                    if result.deleted_count:
+                        logger.info(f"Cleaned up {result.deleted_count} expired temporary files.")
                 except Exception as e:
                     logger.error(f"Error during DB cleanup: {e}")
 
-                # Run the cleanup every 6 hours
-                await asyncio.sleep(21600)
+                await asyncio.sleep(21600)  # Every 6 hours
 
-        try:
-            logger.info("Scheduling automated DB cleanup task...")
-            app.loop.create_task(db_cleanup())
-        except Exception as e:
-            logger.warning(f"Could not schedule DB cleanup tasks: {e}")
+        async def state_cleanup():
+            """Periodically clean up expired user sessions and queue batches."""
+            while True:
+                await asyncio.sleep(1800)  # Every 30 minutes
+                try:
+                    from utils.state import cleanup_expired as state_cleanup_fn
+                    state_cleanup_fn()
+                except Exception as e:
+                    logger.debug(f"State cleanup: {e}")
+                try:
+                    from utils.queue_manager import queue_manager
+                    queue_manager.cleanup_completed()
+                except Exception as e:
+                    logger.debug(f"Queue cleanup: {e}")
 
-        def cleanup_orphaned_files():
-            logger.info("Running automated orphaned file cleanup...")
-            download_dir = Config.DOWNLOAD_DIR
-            if not os.path.exists(download_dir):
-                return
+        logger.info("Scheduling background tasks...")
+        app.loop.create_task(db_cleanup())
+        app.loop.create_task(state_cleanup())
 
-            now = time.time()
-            cutoff = now - (24 * 3600)  # 24 hours
-            cleaned_count = 0
-            freed_space = 0
+    except Exception as e:
+        logger.warning(f"Could not schedule background tasks: {e}")
 
-            for root, _, files in os.walk(download_dir):
-                for f in files:
-                    # Ignore standard static files
-                    if f == "thumb.jpg":
-                        continue
-                    file_path = os.path.join(root, f)
-                    try:
-                        mtime = os.path.getmtime(file_path)
-                        if mtime < cutoff:
-                            size = os.path.getsize(file_path)
-                            os.remove(file_path)
-                            cleaned_count += 1
-                            freed_space += size
-                            logger.debug(f"Cleaned orphaned file: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"Error cleaning file {file_path}: {e}")
-
+    # --- Orphaned file cleanup (async, non-blocking) ---
+    try:
+        async def async_cleanup_orphaned():
+            cleaned_count, freed_space = await asyncio.to_thread(_sync_cleanup_orphaned_files)
             if cleaned_count > 0:
                 logger.info(f"Cleanup complete. Removed {cleaned_count} files, freed {freed_space / (1024*1024):.2f} MB.")
             else:
                 logger.info("Cleanup complete. No orphaned files found.")
 
-        cleanup_orphaned_files()
+        logger.info("Running automated orphaned file cleanup...")
+        app.loop.create_task(async_cleanup_orphaned())
     except Exception as e:
         logger.warning(f"Error during orphaned file cleanup: {e}")
 
+    # --- XTV Pro userbot ---
     try:
         from database import db
 
@@ -224,43 +251,61 @@ if __name__ == "__main__":
         logger.error(f"Failed to initialize Userbot from DB: {e}")
         app.user_bot = None
 
+    # --- Startup diagnostics ---
     admins_count = len(Config.ADMIN_IDS)
-    tmdb_status = "✅ Configured" if Config.TMDB_API_KEY else "❌ Missing"
-    db_status = "✅ Configured" if Config.MAIN_URI else "❌ Missing"
-    xtv_pro_status = "🟢 Enabled (4GB Support)" if app.user_bot else "🔴 Disabled (2GB Limit)"
+    tmdb_status = "Configured" if Config.TMDB_API_KEY else "Missing"
+    db_status = "Configured" if Config.MAIN_URI else "Missing"
+    xtv_pro_status = "Enabled (4GB Support)" if getattr(app, 'user_bot', None) else "Disabled (2GB Limit)"
 
     startup_msg = (
         f"\n{'='*60}\n"
-        f"🚀 𝕏TV MediaStudio™ {Config.VERSION} Initialization\n"
+        f"  𝕏TV MediaStudio {Config.VERSION} Initialization\n"
         f"{'-'*60}\n"
-        f"⚙️  Core Settings:\n"
-        f"   • Debug Mode  : {'🟢 ON' if Config.DEBUG_MODE else '🔴 OFF'}\n"
-        f"   • Public Mode : {'🟢 ON' if Config.PUBLIC_MODE else '🔴 OFF'}\n"
-        f"   • 𝕏TV Pro™    : {xtv_pro_status}\n"
+        f"  Core Settings:\n"
+        f"   - Debug Mode  : {'ON' if Config.DEBUG_MODE else 'OFF'}\n"
+        f"   - Public Mode : {'ON' if Config.PUBLIC_MODE else 'OFF'}\n"
+        f"   - XTV Pro     : {xtv_pro_status}\n"
         f"\n"
-        f"👥 Access Control:\n"
-        f"   • CEO ID      : {Config.CEO_ID if Config.CEO_ID else 'Not Set'}\n"
-        f"   • Admins      : {admins_count} configured\n"
+        f"  Access Control:\n"
+        f"   - CEO ID      : {Config.CEO_ID if Config.CEO_ID else 'Not Set'}\n"
+        f"   - Admins      : {admins_count} configured\n"
         f"\n"
-        f"🔗 Integrations:\n"
-        f"   • Database    : {db_status}\n"
-        f"   • TMDb API    : {tmdb_status}\n"
+        f"  Integrations:\n"
+        f"   - Database    : {db_status}\n"
+        f"   - TMDb API    : {tmdb_status}\n"
         f"\n"
-        f"📁 Storage:\n"
-        f"   • Down Dir    : ./{Config.DOWNLOAD_DIR}\n"
-        f"   • Def Channel : {Config.DEFAULT_CHANNEL}\n"
+        f"  Storage:\n"
+        f"   - Down Dir    : ./{Config.DOWNLOAD_DIR}\n"
+        f"   - Def Channel : {Config.DEFAULT_CHANNEL}\n"
         f"{'='*60}"
     )
     logger.info(startup_msg)
     idle()
 
+    # --- Graceful shutdown ---
+    logger.info("Shutting down...")
+
+    # Close persistent HTTP sessions
+    try:
+        from utils.tmdb import tmdb
+        app.loop.run_until_complete(tmdb.close())
+    except Exception as e:
+        logger.debug(f"TMDb session cleanup: {e}")
+
+    try:
+        from utils.currency import close_session as close_currency_session
+        app.loop.run_until_complete(close_currency_session())
+    except Exception as e:
+        logger.debug(f"Currency session cleanup: {e}")
+
     if user_bot:
         try:
             user_bot.stop()
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Error stopping userbot: {e}")
 
     app.stop()
+    logger.info("𝕏TV MediaStudio shut down cleanly.")
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

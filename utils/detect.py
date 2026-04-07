@@ -73,12 +73,12 @@ def analyze_filename(filename):
         if guess.get("language"):
             try:
                 language = str(guess.get("language"))
-            except:
+            except (TypeError, ValueError):
                 pass
         elif guess.get("subtitle_language"):
             try:
                 language = str(guess.get("subtitle_language"))
-            except:
+            except (TypeError, ValueError):
                 pass
 
         extracted_specials = []

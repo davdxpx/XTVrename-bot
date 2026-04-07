@@ -1599,7 +1599,7 @@ async def handle_file_upload(client, message):
     if not file_name:
         file_name = "unknown.mkv"
 
-    if await is_archive(file_name):
+    if is_archive(file_name):
         await handle_archive_upload(client, message, user_id, file_name, state)
         return
 
@@ -1969,7 +1969,7 @@ async def handle_auto_detection(client, message):
     if not file_name:
         file_name = "unknown_file.bin"
 
-    if await is_archive(file_name):
+    if is_archive(file_name):
         await handle_archive_upload(client, message, message.from_user.id, file_name, None)
         return
 

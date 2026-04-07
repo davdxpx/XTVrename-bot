@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import time
 import logging
 
 LANGUAGE_MAP = {
@@ -23,7 +24,36 @@ LANGUAGE_MAP = {
 }
 
 # === Helper Functions ===
+def sanitize_metadata(value: str, max_length: int = 500) -> str:
+    """Strip control characters and limit length for safe FFmpeg metadata injection."""
+    if not isinstance(value, str):
+        value = str(value)
+    value = value[:max_length]
+    # Remove null bytes and control characters (keep printable + newline)
+    return ''.join(c for c in value if c == '\n' or (ord(c) >= 32 and ord(c) != 127))
+
+
+_probe_cache = {}  # filepath -> (timestamp, result)
+_PROBE_CACHE_TTL = 300  # 5 minutes
+
+
+def clear_probe_cache(filepath=None):
+    """Clear probe cache for a specific file or all files."""
+    if filepath:
+        _probe_cache.pop(filepath, None)
+    else:
+        _probe_cache.clear()
+
+
 async def probe_file(filepath):
+    # Check cache first
+    now = time.time()
+    if filepath in _probe_cache:
+        cached_time, cached_result = _probe_cache[filepath]
+        if now - cached_time < _PROBE_CACHE_TTL:
+            return cached_result, None
+        del _probe_cache[filepath]
+
     cmd = [
         "ffprobe",
         "-v",
@@ -43,7 +73,15 @@ async def probe_file(filepath):
             error_msg = stderr.decode().strip() or "ffprobe process failed"
             return None, error_msg
         try:
-            return json.loads(stdout), None
+            result = json.loads(stdout)
+            # Cache successful probes
+            _probe_cache[filepath] = (now, result)
+            # Evict old entries if cache grows too large
+            if len(_probe_cache) > 100:
+                expired = [k for k, (t, _) in _probe_cache.items() if now - t > _PROBE_CACHE_TTL]
+                for k in expired:
+                    del _probe_cache[k]
+            return result, None
         except json.JSONDecodeError as e:
             return None, f"JSON Decode Error: {e}"
     except asyncio.TimeoutError:
@@ -112,14 +150,14 @@ async def generate_ffmpeg_command(
                 metadata_args.extend(
                     [
                         f"-metadata:s:v:{out_video_idx}",
-                        f"title={metadata['video_title']}",
+                        f"title={sanitize_metadata(metadata['video_title'])}",
                     ]
                 )
             out_video_idx += 1
 
         elif codec_type == "audio":
             if "audio_title" in metadata:
-                title = metadata["audio_title"].replace("{lang}", lang_name)
+                title = sanitize_metadata(metadata["audio_title"]).replace("{lang}", lang_name)
                 metadata_args.extend(
                     [f"-metadata:s:a:{out_audio_idx}", f"title={title}"]
                 )
@@ -127,7 +165,7 @@ async def generate_ffmpeg_command(
 
         elif codec_type == "subtitle":
             if "subtitle_title" in metadata:
-                title = metadata["subtitle_title"].replace("{lang}", lang_name)
+                title = sanitize_metadata(metadata["subtitle_title"]).replace("{lang}", lang_name)
                 metadata_args.extend(
                     [f"-metadata:s:s:{out_subtitle_idx}", f"title={title}"]
                 )
@@ -142,15 +180,15 @@ async def generate_ffmpeg_command(
 
     global_meta = []
     if "title" in metadata:
-        global_meta.extend(["-metadata", f"title={metadata['title']}"])
+        global_meta.extend(["-metadata", f"title={sanitize_metadata(metadata['title'])}"])
     if "author" in metadata:
-        global_meta.extend(["-metadata", f"author={metadata['author']}"])
+        global_meta.extend(["-metadata", f"author={sanitize_metadata(metadata['author'])}"])
     if "artist" in metadata:
-        global_meta.extend(["-metadata", f"artist={metadata['artist']}"])
+        global_meta.extend(["-metadata", f"artist={sanitize_metadata(metadata['artist'])}"])
     if "encoded_by" in metadata:
-        global_meta.extend(["-metadata", f"encoded_by={metadata['encoded_by']}"])
+        global_meta.extend(["-metadata", f"encoded_by={sanitize_metadata(metadata['encoded_by'])}"])
     if "copyright" in metadata:
-        global_meta.extend(["-metadata", f"copyright={metadata['copyright']}"])
+        global_meta.extend(["-metadata", f"copyright={sanitize_metadata(metadata['copyright'])}"])
 
     cmd.extend(maps)
 

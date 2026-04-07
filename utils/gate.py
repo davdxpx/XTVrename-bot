@@ -69,12 +69,16 @@ async def send_force_sub_gate(client, message, config):
     if msg:
         update_data(user_id, "force_sub_msg_id", msg.id)
 
+_MAX_WELCOMED = 10000
 welcomed_users = set()
 
 async def check_and_send_welcome(client, message, config):
     user_id = message.from_user.id
 
     if user_id not in welcomed_users:
+        # Prevent unbounded growth
+        if len(welcomed_users) >= _MAX_WELCOMED:
+            welcomed_users.clear()
         welcomed_users.add(user_id)
 
         has_setup = await db.has_completed_setup(user_id)

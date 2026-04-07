@@ -1,0 +1,19 @@
+[project]
+name = "xtv-mediastudio"
+version = "1.4.0"
+requires-python = ">=3.9"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "SIM"]
+# E501: line too long (handled by formatter, existing code is long)
+# E402: module level import not at top (Pyrogram plugin pattern)
+# F401: unused imports (plugins register via decorators)
+# E722: bare except (gradually being fixed)
+ignore = ["E501", "E402", "F401", "E722"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "database", "utils", "plugins", "tools"]
