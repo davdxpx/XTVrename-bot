@@ -983,7 +983,7 @@ async def admin_callback(client, callback_query):
         await db.update_feature_toggle(feature, new_state)
         await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} feature.", show_alert=True)
         # Re-render the menu
-        callback_query.data = f"admin_premium_features_{plan_name}"
+        callback_query.data = f"admin_features_media_{plan_name}"
         await admin_callback(client, callback_query)
         return
 
@@ -1087,6 +1087,65 @@ async def admin_callback(client, callback_query):
 
         elif data.startswith("admin_premium_features_"):
             plan_name = data.replace("admin_premium_features_", "")
+
+            buttons = [
+                [InlineKeyboardButton("🌟 Account Perks", callback_data=f"admin_features_perks_{plan_name}")],
+                [InlineKeyboardButton("🛠️ Media Tools", callback_data=f"admin_features_media_{plan_name}")],
+                [InlineKeyboardButton("🔒 Privacy Settings", callback_data=f"admin_features_privacy_{plan_name}")],
+                [InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")]
+            ]
+
+            if plan_name == "free":
+                text = (
+                    "⚙️ **Free Plan Features**\n\n"
+                    "Select a category to configure **Baseline Features**.\n"
+                    "> *Note: Free Plan media tools apply globally by default.*"
+                )
+            else:
+                text = (
+                    f"⚙️ **{plan_name.capitalize()} Plan Features**\n\n"
+                    "Select a category to configure **Premium Overrides**."
+                )
+
+            try:
+                await callback_query.message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(buttons)
+                )
+            except MessageNotModified:
+                pass
+            return
+
+        elif data.startswith("admin_features_perks_"):
+            plan_name = data.replace("admin_features_perks_", "")
+            config = await db.get_public_config()
+            plan_key = f"premium_{plan_name}"
+            plan_settings = config.get(plan_key, {})
+            features = plan_settings.get("features", {})
+
+            def emoji(state): return "✅" if state else "❌"
+
+            pq = features.get("priority_queue", False)
+            bs = features.get("batch_sharing", False)
+            access_4gb = features.get("xtv_pro_4gb", False)
+
+            buttons = [
+                [InlineKeyboardButton(f"{emoji(access_4gb)} 🚀 4GB Access", callback_data=f"admin_premium_feat_{plan_name}_xtv_pro_4gb")],
+                [InlineKeyboardButton(f"{emoji(pq)} ⚡ Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue"),
+                 InlineKeyboardButton(f"{emoji(bs)} 📦 Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")],
+                [InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")]
+            ]
+
+            text = f"🌟 **Account Perks ({plan_name.capitalize()})**\n\nConfigure account perks for this tier:"
+
+            try:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except MessageNotModified:
+                pass
+            return
+
+        elif data.startswith("admin_features_media_"):
+            plan_name = data.replace("admin_features_media_", "")
             config = await db.get_public_config()
             plan_key = f"premium_{plan_name}"
             plan_settings = config.get(plan_key, {})
@@ -1095,21 +1154,7 @@ async def admin_callback(client, callback_query):
 
             def emoji(state): return "✅" if state else "❌"
 
-            # 1. Account Perks
-            pq = features.get("priority_queue", False)
-            bs = features.get("batch_sharing", False)
-            access_4gb = features.get("xtv_pro_4gb", False)
-
-            buttons = [
-                [InlineKeyboardButton("─── 🌟 Account Perks ───", callback_data="noop")],
-                [InlineKeyboardButton(f"{emoji(access_4gb)} 🚀 4GB Access", callback_data=f"admin_premium_feat_{plan_name}_xtv_pro_4gb")],
-                [InlineKeyboardButton(f"{emoji(pq)} ⚡ Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue"),
-                 InlineKeyboardButton(f"{emoji(bs)} 📦 Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")]
-            ]
-
-            # 2. Media Tools
-            buttons.append([InlineKeyboardButton("─── 🛠️ Media Tools ───", callback_data="noop")])
-
+            buttons = []
             if plan_name == "free":
                 se = global_toggles.get("subtitle_extractor", True)
                 wm = global_toggles.get("watermarker", True)
@@ -1146,45 +1191,27 @@ async def admin_callback(client, callback_query):
                 if not media_tools_row1 and not media_tools_row2:
                     buttons.append([InlineKeyboardButton("✅ All tools globally enabled", callback_data="noop")])
 
-            # 3. Privacy
-            ps = features.get("privacy_settings", False)
-            buttons.append([InlineKeyboardButton("─── 🔒 Privacy ───", callback_data="noop")])
-            buttons.append([InlineKeyboardButton(f"{emoji(ps)} 🔒 Privacy Settings", callback_data=f"admin_premium_feat_{plan_name}_privacy_settings")])
+            buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")])
 
-            buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")])
-
-            if plan_name == "free":
-                text = (
-                    "⚙️ **Free Plan Features**\n\n"
-                    "Configure the **Baseline Features** that apply to all default users.\n"
-                    "> *Note: Free Plan media tools (Converter, Editor, etc.) apply globally by default. If you disable them here, they will only be accessible via Premium overrides.*"
-                )
-            else:
-                text = (
-                    f"⚙️ **{plan_name.capitalize()} Plan Features**\n\n"
-                    "Configure the **Premium Overrides** for this tier.\n"
-                    "> *Note: Toggling features here grants access to items that are otherwise locked in the Free tier.*"
-                )
+            text = f"🛠️ **Media Tools ({plan_name.capitalize()})**\n\nConfigure media tools for this tier:"
 
             try:
-                await callback_query.message.edit_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(buttons)
-                )
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
             except MessageNotModified:
                 pass
+            return
+
+        elif data.startswith("admin_features_privacy_"):
+            plan_name = data.replace("admin_features_privacy_", "")
+            # Route to the existing privacy menu
+            callback_query.data = f"admin_privacy_menu_{plan_name}"
+            await admin_callback(client, callback_query)
             return
 
         elif data.startswith("admin_premium_feat_"):
             parts = data.replace("admin_premium_feat_", "").split("_", 1)
             plan_name = parts[0]
             feature_name = parts[1]
-
-            if feature_name == "privacy_settings":
-                # Expand into a new menu
-                callback_query.data = f"admin_privacy_menu_{plan_name}"
-                await admin_callback(client, callback_query)
-                return
 
             config = await db.get_public_config()
             plan_key = f"premium_{plan_name}"
@@ -1197,7 +1224,14 @@ async def admin_callback(client, callback_query):
 
             await db.update_public_config(plan_key, plan_settings)
 
-            callback_query.data = f"admin_premium_features_{plan_name}"
+            # Deep routing to stay inside the appropriate sub-menu
+            if feature_name in ["xtv_pro_4gb", "priority_queue", "batch_sharing"]:
+                callback_query.data = f"admin_features_perks_{plan_name}"
+            elif feature_name == "privacy_settings":
+                callback_query.data = f"admin_privacy_menu_{plan_name}"
+            else:
+                callback_query.data = f"admin_features_media_{plan_name}"
+
             await admin_callback(client, callback_query)
             return
 
@@ -1211,14 +1245,23 @@ async def admin_callback(client, callback_query):
 
             def emoji(state): return "✅" if state else "❌"
 
+            ps = features.get("privacy_settings", False)
+
             buttons = [
-                [InlineKeyboardButton(f"{emoji(privacy.get('hide_display_name', False))} Hide Display Name", callback_data=f"admin_privacy_toggle_{plan_name}_hide_display_name")],
-                [InlineKeyboardButton(f"{emoji(privacy.get('hide_forward_tags', False))} Hide Forward Tags", callback_data=f"admin_privacy_toggle_{plan_name}_hide_forward_tags")],
-                [InlineKeyboardButton(f"{emoji(privacy.get('link_anonymity', False))} Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")],
-                [InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")]
+                [InlineKeyboardButton(f"{emoji(ps)} 🔒 Enable Privacy Settings", callback_data=f"admin_premium_feat_{plan_name}_privacy_settings")],
             ]
 
-            text = f"🔒 **Privacy Feature Access ({plan_name.capitalize()})**\n\nToggle which privacy controls are **available** for users on this plan to configure in their /settings:"
+            if ps:
+                buttons.extend([
+                    [InlineKeyboardButton("─── 🔒 Available Controls ───", callback_data="noop")],
+                    [InlineKeyboardButton(f"{emoji(privacy.get('hide_display_name', False))} Hide Display Name", callback_data=f"admin_privacy_toggle_{plan_name}_hide_display_name")],
+                    [InlineKeyboardButton(f"{emoji(privacy.get('hide_forward_tags', False))} Hide Forward Tags", callback_data=f"admin_privacy_toggle_{plan_name}_hide_forward_tags")],
+                    [InlineKeyboardButton(f"{emoji(privacy.get('link_anonymity', False))} Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")]
+                ])
+
+            buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_premium_features_{plan_name}")])
+
+            text = f"🔒 **Privacy Settings ({plan_name.capitalize()})**\n\nToggle which privacy controls are **available** for users on this plan to configure in their /settings:"
 
             try:
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
