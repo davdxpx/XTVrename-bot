@@ -12,6 +12,116 @@ from bson.objectid import ObjectId
 logger = get_logger("plugins.myfiles")
 
 # === Helper Functions ===
+
+async def safe_edit_or_send(client, callback_query, text, markup, photo=None):
+    """
+    Handles transition between media messages and text messages gracefully.
+    If it's a transition between text <-> media, or different aspect ratio medias,
+    it uses a Send-Then-Delete approach.
+    """
+    try:
+        if photo:
+            # We are transitioning TO a photo message
+            if callback_query.message.photo:
+                # Editing photo to photo - wait, actually we are sending photo
+                from pyrogram.types import InputMediaPhoto
+                try:
+                    await callback_query.message.edit_media(
+                        media=InputMediaPhoto(photo, caption=text),
+                        reply_markup=markup
+                    )
+                except MessageNotModified:
+                    pass
+                except Exception:
+                    # Send then delete
+                    new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
+                    try:
+                        await callback_query.message.delete()
+                    except:
+                        pass
+            else:
+                # Text to Photo: Send new, then delete old
+                new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
+                try:
+                    await callback_query.message.delete()
+                except:
+                    pass
+        else:
+            # We are transitioning TO a text message
+            if callback_query.message.photo:
+                # Photo to Text: Send new, then delete old
+                new_msg = await client.send_message(chat_id=callback_query.message.chat.id, text=text, reply_markup=markup)
+                try:
+                    await callback_query.message.delete()
+                except:
+                    pass
+            else:
+                # Text to Text: Just edit
+                try:
+                    await callback_query.message.edit_text(text, reply_markup=markup)
+                except MessageNotModified:
+                    pass
+    except Exception as e:
+        logger.error(f"Error in safe_edit_or_send: {e}")
+
+async def get_query_and_title(user_id: int, back_data: str):
+    """
+    Parses structural view callbacks and returns (filter_query, menu_title).
+    Used to DRY up pagination and send-all logic.
+    """
+    if back_data == "myfiles_main":
+        filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
+        title = "🕒 **Recent Files**"
+    elif back_data.startswith("myfiles_cat_"):
+        folder_type = back_data.replace("myfiles_cat_", "")
+        filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
+        title = f"📁 **{folder_type.capitalize()} Folders**"
+    elif back_data.startswith("myfiles_folder_"):
+        folder_id = back_data.replace("myfiles_folder_", "")
+        filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
+        folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
+        title = f"📁 **{folder['name'] if folder else 'Folder'}**"
+    elif back_data.startswith("mf_sea_"):
+        parts = back_data.replace("mf_sea_", "").split("_")
+        folder_id = parts[0]
+        season = parts[1]
+        filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
+        folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
+
+        if season.isdigit():
+            season_val = int(season)
+            str_season_val = str(season_val)
+            zfill_season_val = str_season_val.zfill(2)
+            filter_query["$or"] = [
+                {"season": season_val},
+                {"season": str_season_val},
+                {"season": zfill_season_val},
+                {"season": f"S{str_season_val}"},
+                {"season": f"S{zfill_season_val}"},
+                {"season": f"s{str_season_val}"},
+                {"season": f"s{zfill_season_val}"},
+                {"guess_data.season": season_val},
+                {"guess_data.season": {"$in": [season_val]}},
+                {"tmdb_data.season": season_val},
+                {"tmdb_data.season": str_season_val},
+                {"tmdb_data.season": zfill_season_val},
+                {"file_name": {"$regex": f"[sS]0?{season_val}\\b"}},
+            ]
+        else:
+            filter_query["$and"] = [
+                {"season": {"$exists": False}},
+                {"guess_data.season": {"$exists": False}},
+                {"tmdb_data.season": {"$exists": False}},
+                {"file_name": {"$not": {"$regex": r"[sS]\d{1,2}"}}}
+            ]
+
+        title = f"📁 **{folder['name'] if folder else 'Folder'} - Season {season}**"
+    else:
+        filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
+        title = "🕒 **Files**"
+
+    return filter_query, title
+
 async def set_myfiles_state(user_id: int, state_dict: dict):
     if not state_dict:
         await db.users.update_one({"user_id": user_id}, {"$unset": {"myfiles_state": ""}})
@@ -312,10 +422,19 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         state_dict["selected_files"] = selected_files
         await set_myfiles_state(user_id, state_dict)
 
+        # Flicker-Free Multi-Select UX: Just update the keyboard
         page = state_dict.get("current_page", 0)
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
-        callback_query.data = f"mf_pg_{page}_{back_data}"
-        await myfiles_callback(client, callback_query)
+        filter_query, _ = await get_query_and_title(user_id, back_data)
+
+        # Build the new keyboard markup
+        buttons, _ = await build_files_list_keyboard(user_id, filter_query, page=page, back_data=back_data)
+
+        try:
+            await callback_query.message.edit_reply_markup(InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
+
         return
 
     if data == "mf_ms_del":
@@ -409,16 +528,12 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
 
-        try:
-            await callback_query.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔗 Copy Link", copy_text=deep_link)],
-                    [InlineKeyboardButton("🔙 Back", callback_data=back_data)]
-                ])
-            )
-        except MessageNotModified:
-            pass
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Copy Link", copy_text=deep_link)],
+            [InlineKeyboardButton("🔙 Back", callback_data=back_data)]
+        ])
+
+        await safe_edit_or_send(client, callback_query, text, markup)
 
         state_dict["multi_select"] = False
         state_dict["selected_files"] = []
@@ -441,10 +556,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
         buttons.append([InlineKeyboardButton("🔙 Cancel", callback_data=back_data)])
 
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data.startswith("mf_ms_domov_"):
@@ -492,17 +604,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
     if data == "myfiles_main":
         text, markup = await get_myfiles_main_menu(user_id)
-        try:
-            if callback_query.message.photo:
-                try:
-                    await callback_query.message.delete()
-                except:
-                    pass
-                await client.send_message(user_id, text, reply_markup=markup)
-            else:
-                await callback_query.message.edit_text(text, reply_markup=markup)
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, markup)
         return
 
     if data == "myfiles_settings":
@@ -547,10 +649,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         buttons.append([InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")])
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")])
 
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data == "myfiles_toggle_grouping":
@@ -621,10 +720,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             buttons.append([InlineKeyboardButton(f"Link Anonymity: {emoji_anon}", callback_data="myfiles_toggle_link_anon")])
 
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_settings")])
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data == "myfiles_toggle_link_anon":
@@ -709,16 +805,12 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     if data == "myfiles_clear_perm":
-        try:
-            await callback_query.message.edit_text(
-                "⚠️ **Warning**\n\nAre you sure you want to delete ALL your permanent files? This cannot be undone.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Yes, Delete All", callback_data="myfiles_confirm_clear_perm")],
-                    [InlineKeyboardButton("❌ Cancel", callback_data="myfiles_settings")]
-                ])
-            )
-        except MessageNotModified:
-            pass
+        text = "⚠️ **Warning**\n\nAre you sure you want to delete ALL your permanent files? This cannot be undone."
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Yes, Delete All", callback_data="myfiles_confirm_clear_perm")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="myfiles_settings")]
+        ])
+        await safe_edit_or_send(client, callback_query, text, markup)
         return
 
     if data == "myfiles_confirm_clear_perm":
@@ -732,17 +824,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
         buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data="myfiles_main")
         text = f"🕒 **Recent Files** ({total} total)\n\n📌 = Permanent | ⏳ = Temporary"
-        try:
-            if callback_query.message.photo:
-                try:
-                    await callback_query.message.delete()
-                except:
-                    pass
-                await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
-            else:
-                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data in ["myfiles_cat_movies", "myfiles_cat_series", "myfiles_cat_music", "myfiles_cat_custom"]:
@@ -767,10 +849,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="myfiles_main")])
 
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data.startswith("myfiles_folder_"):
@@ -831,10 +910,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             total = sum(season_counts.values())
             text = f"📁 **{folder['name']}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary\n\nSelect a season:"
 
-            try:
-                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-            except MessageNotModified:
-                pass
+            await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
             return
 
         # Normal list
@@ -844,10 +920,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             buttons.insert(-2, [InlineKeyboardButton("🗑️ Delete Folder", callback_data=f"myfiles_del_folder_{folder_id}")])
 
         text = f"📁 **{folder['name']}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary"
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data.startswith("mf_sea_"):
@@ -893,10 +966,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"mf_sea_{folder_id}_{season}")
 
         text = f"📁 **{folder['name']} - Season {season}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary"
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data.startswith("mf_pg_"):
@@ -904,64 +974,12 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         page = max(0, int(parts[0]))
         back_data = "_".join(parts[1:])
 
-        if back_data == "myfiles_main":
-            filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
-            text = "🕒 **Recent Files**"
-        elif back_data.startswith("myfiles_cat_"):
-            folder_type = back_data.replace("myfiles_cat_", "")
-            filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
-            text = f"📁 **{folder_type.capitalize()} Folders**"
-        elif back_data.startswith("myfiles_folder_"):
-            folder_id = back_data.replace("myfiles_folder_", "")
-            filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
-            folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
-            text = f"📁 **{folder['name'] if folder else 'Folder'}**"
-        elif back_data.startswith("mf_sea_"):
-            season_parts = back_data.replace("mf_sea_", "").split("_")
-            folder_id = season_parts[0]
-            season = season_parts[1]
-            filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
-            folder = await db.folders.find_one({"_id": ObjectId(folder_id)})
-
-            if season.isdigit():
-                season_val = int(season)
-                str_season_val = str(season_val)
-                filter_query["$or"] = [
-                    {"season": season_val},
-                    {"season": str_season_val},
-                    {"guess_data.season": season_val},
-                    {"guess_data.season": {"$in": [season_val]}},
-                    {"tmdb_data.season": season_val},
-                    {"tmdb_data.season": str_season_val},
-                    {"file_name": {"$regex": f"[sS]0?{season_val}\\b"}},
-                ]
-            else:
-                filter_query["$and"] = [
-                    {"season": {"$exists": False}},
-                    {"guess_data.season": {"$exists": False}},
-                    {"tmdb_data.season": {"$exists": False}},
-                    {"file_name": {"$not": {"$regex": r"[sS]\d{1,2}"}}}
-                ]
-
-            text = f"📁 **{folder['name'] if folder else 'Folder'} - Season {season}**"
-        else:
-            filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
-            text = "🕒 **Files**"
+        filter_query, text = await get_query_and_title(user_id, back_data)
 
         buttons, total = await build_files_list_keyboard(user_id, filter_query, page=page, back_data=back_data)
         text += f" ({total} total)\n\n📌 = Permanent | ⏳ = Temporary"
 
-        try:
-            if callback_query.message.photo:
-                try:
-                    await callback_query.message.delete()
-                except:
-                    pass
-                await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
-            else:
-                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data.startswith("myfiles_file_"):
@@ -1003,51 +1021,14 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         reply_markup = InlineKeyboardMarkup(buttons)
 
-        try:
-            if poster:
-                from pyrogram.types import InputMediaPhoto
-                try:
-                    await callback_query.message.edit_media(
-                        media=InputMediaPhoto(poster, caption=text),
-                        reply_markup=reply_markup
-                    )
-                except Exception:
-                    try:
-                        await callback_query.message.delete()
-                    except:
-                        pass
-                    await client.send_photo(
-                        chat_id=user_id,
-                        photo=poster,
-                        caption=text,
-                        reply_markup=reply_markup
-                    )
-            else:
-                if callback_query.message.photo:
-                    try:
-                        await callback_query.message.delete()
-                    except:
-                        pass
-                    await client.send_message(
-                        chat_id=user_id,
-                        text=text,
-                        reply_markup=reply_markup
-                    )
-                else:
-                    await callback_query.message.edit_text(text, reply_markup=reply_markup)
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, reply_markup, photo=poster)
         return
 
     if data == "myfiles_create_folder":
         await set_myfiles_state(user_id, {"state": "awaiting_folder_name"})
-        try:
-            await callback_query.message.edit_text(
-                "📁 **Create New Folder**\n\nPlease enter a name for the new folder:",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="myfiles_cat_custom")]])
-            )
-        except MessageNotModified:
-            pass
+        text = "📁 **Create New Folder**\n\nPlease enter a name for the new folder:"
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="myfiles_cat_custom")]])
+        await safe_edit_or_send(client, callback_query, text, markup)
         return
 
     if data.startswith("myfiles_del_folder_"):
@@ -1066,19 +1047,13 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             await myfiles_callback(client, callback_query)
             return
 
-        try:
-            await callback_query.message.edit_text(
-                f"⚠️ **Warning**\n\nThe folder **{folder['name']}** contains `{count}` files.\n"
-                "Do you want to keep the files (they will be moved to the main directory), or delete the files as well?",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📁 Keep Files", callback_data=f"mf_df_keep_{folder_id}")],
-                    [InlineKeyboardButton("🗑️ Delete Files Too", callback_data=f"mf_df_del_{folder_id}")],
-                    [InlineKeyboardButton("❌ Cancel", callback_data=f"myfiles_folder_{folder_id}")]
-                ])
-            )
-            await callback_query.answer()
-        except MessageNotModified:
-            pass
+        text = f"⚠️ **Warning**\n\nThe folder **{folder['name']}** contains `{count}` files.\nDo you want to keep the files (they will be moved to the main directory), or delete the files as well?"
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📁 Keep Files", callback_data=f"mf_df_keep_{folder_id}")],
+            [InlineKeyboardButton("🗑️ Delete Files Too", callback_data=f"mf_df_del_{folder_id}")],
+            [InlineKeyboardButton("❌ Cancel", callback_data=f"myfiles_folder_{folder_id}")]
+        ])
+        await safe_edit_or_send(client, callback_query, text, markup)
         return
 
     if data.startswith("mf_df_keep_"):
@@ -1105,13 +1080,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         f = await db.files.find_one({"_id": ObjectId(file_id)})
         current_name = f.get("file_name", "") if f else ""
-        try:
-            await callback_query.message.edit_text(
-                f"✏️ **Rename File**\n\nCurrent Name: `{current_name}`\n\nPlease send the new name for the file:",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"myfiles_file_{file_id}")]])
-            )
-        except MessageNotModified:
-            pass
+        text = f"✏️ **Rename File**\n\nCurrent Name: `{current_name}`\n\nPlease send the new name for the file:"
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"myfiles_file_{file_id}")]])
+        await safe_edit_or_send(client, callback_query, text, markup)
         return
 
     if data.startswith("myfiles_move_"):
@@ -1130,10 +1101,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         buttons.append([InlineKeyboardButton("🔙 Cancel", callback_data=f"myfiles_file_{file_id}")])
 
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
         return
 
     if data.startswith("mf_mov_"):
@@ -1190,13 +1158,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             f"Anyone with this link can start the bot and receive this file."
         )
 
-        try:
-            await callback_query.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to File", callback_data=f"myfiles_file_{file_id}")]])
-            )
-        except MessageNotModified:
-            pass
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to File", callback_data=f"myfiles_file_{file_id}")]])
+        await safe_edit_or_send(client, callback_query, text, markup)
         return
 
     if data.startswith("myfiles_delfile_"):
@@ -1270,42 +1233,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         state_dict = await get_myfiles_state(user_id)
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
 
-        filter_query = {"user_id": user_id} if Config.PUBLIC_MODE else {}
-
-        real_back_data = back_data
-        if real_back_data.startswith("myfiles_folder_"):
-            folder_id = real_back_data.replace("myfiles_folder_", "")
-            filter_query["folder_id"] = ObjectId(folder_id)
-        elif real_back_data.startswith("mf_sea_"):
-            parts = real_back_data.replace("mf_sea_", "").split("_")
-            folder_id = parts[0]
-            season = parts[1]
-            filter_query["folder_id"] = ObjectId(folder_id)
-            if season.isdigit():
-                season_val = int(season)
-                str_season_val = str(season_val)
-                filter_query["$or"] = [
-                    {"season": season_val},
-                    {"season": str_season_val},
-                    {"guess_data.season": season_val},
-                    {"guess_data.season": {"$in": [season_val]}},
-                    {"tmdb_data.season": season_val},
-                    {"tmdb_data.season": str_season_val},
-                    {"file_name": {"$regex": f"[sS]0?{season_val}\\b"}},
-                ]
-            else:
-                filter_query["$and"] = [
-                    {"season": {"$exists": False}},
-                    {"guess_data.season": {"$exists": False}},
-                    {"tmdb_data.season": {"$exists": False}},
-                    {"file_name": {"$not": {"$regex": r"[sS]\d{1,2}"}}}
-                ]
-        elif back_data.startswith("myfiles_cat_"):
-            # They pressed send all on a category view? Usually send all is only on files list
-            pass
+        filter_query, _ = await get_query_and_title(user_id, back_data)
 
         # Use sort order from state
-        state_dict = await get_myfiles_state(user_id)
         sort_order = state_dict.get("sort_order", "newest")
 
         if sort_order == "oldest":
