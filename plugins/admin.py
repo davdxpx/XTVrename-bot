@@ -305,93 +305,15 @@ async def admin_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "admin_per_plan_limits":
-        config = await db.get_public_config()
-
-        limits = config.get("myfiles_limits", {})
-        free_lm = limits.get("free", {})
-        std_lm = limits.get("standard", {})
-        dlx_lm = limits.get("deluxe", {})
-
-        def f(v): return "Unlimited" if v == -1 else v
-
-        # Free limits
-        free_egress = config.get("daily_egress_mb", 0)
-        free_files = config.get("daily_file_count", 0)
-
-        # Premium limits
-        std_settings = config.get("premium_standard", {})
-        dlx_settings = config.get("premium_deluxe", {})
-
-        std_egress = std_settings.get("daily_egress_mb", 0)
-        std_files = std_settings.get("daily_file_count", 0)
-
-        dlx_egress = dlx_settings.get("daily_egress_mb", 0)
-        dlx_files = dlx_settings.get("daily_file_count", 0)
-
-        global_toggles = await db.get_feature_toggles()
-        def get_features_str(plan_key):
-            plan_settings = config.get(plan_key, {})
-            features = plan_settings.get("features", {})
-            feat_list = []
-
-            # Global toggles apply to everyone if enabled, otherwise check plan override
-            if global_toggles.get("subtitle_extractor", True) or features.get("subtitle_extractor", False):
-                feat_list.append("Subtitle Extractor")
-            if global_toggles.get("watermarker", True) or features.get("watermarker", False):
-                feat_list.append("Watermarker")
-            if global_toggles.get("file_converter", True) or features.get("file_converter", False):
-                feat_list.append("File Converter")
-            if global_toggles.get("audio_editor", True) or features.get("audio_editor", False):
-                feat_list.append("Audio Editor")
-            if features.get("priority_queue", False):
-                feat_list.append("Priority Queue")
-            if features.get("batch_sharing", False):
-                feat_list.append("Batch Sharing")
-
-            # Formatting as bullet points
-            return "\n".join([f"  • {feat}" for feat in feat_list]) if feat_list else "  • None"
-
         text = (
-            "⚙️ **Per Plan Settings**\n\n"
-            "> Overview of all tier configurations including limitations, features, and pricing.\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "🆓 **Free Plan**\n\n"
-            f"📌 Permanent Slots : `{f(free_lm.get('permanent_limit', 0))}`\n"
-            f"📁 Custom Folders  : `{f(free_lm.get('folder_limit', 0))}`\n"
-            f"⏳ Temp Expiration : `{f(free_lm.get('expiry_days', 0))} days`\n"
-            f"📦 Daily Egress: `{f(free_egress)}` MB\n"
-            f"📄 Daily Files: `{f(free_files)}` files\n\n"
-            "✨ **Features:**\n"
-            f"{get_features_str('free_placeholder')}\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "🌟 **Standard Plan**\n\n"
-            f"📌 Permanent Slots : `{f(std_lm.get('permanent_limit', 0))}`\n"
-            f"📁 Custom Folders  : `{f(std_lm.get('folder_limit', 0))}`\n"
-            f"⏳ Temp Expiration : `{f(std_lm.get('expiry_days', 0))} days`\n"
-            f"📦 Daily Egress: `{f(std_egress)}` MB\n"
-            f"📄 Daily Files: `{f(std_files)}` files\n\n"
-            "✨ **Features:**\n"
-            f"{get_features_str('premium_standard')}\n\n"
-            f"💵 **Price (Fiat):** `{std_settings.get('price_string', '0 USD')}`\n"
-            f"⭐ **Price (Stars):** `{std_settings.get('stars_price', 0)}` Stars\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "💎 **Deluxe Plan**\n\n"
-            f"📌 Permanent Slots : `{f(dlx_lm.get('permanent_limit', 0))}`\n"
-            f"📁 Custom Folders  : `{f(dlx_lm.get('folder_limit', 0))}`\n"
-            f"⏳ Temp Expiration : `{f(dlx_lm.get('expiry_days', 0))} days`\n"
-            f"📦 Daily Egress: `{f(dlx_egress)}` MB\n"
-            f"📄 Daily Files: `{f(dlx_files)}` files\n\n"
-            "✨ **Features:**\n"
-            f"{get_features_str('premium_deluxe')}\n\n"
-            f"💵 **Price (Fiat):** `{dlx_settings.get('price_string', '0 USD')}`\n"
-            f"⭐ **Price (Stars):** `{dlx_settings.get('stars_price', 0)}` Stars\n"
-            "━━━━━━━━━━━━━━━━━━━━"
+            "⚙️ **Per-Plan Settings**\n\n"
+            "> Select a subscription tier below to view its current quotas, features, pricing, and to modify its settings."
         )
 
         buttons = [
-            [InlineKeyboardButton("✏️ Edit Free Plan", callback_data="admin_edit_plan_free")],
-            [InlineKeyboardButton("✏️ Edit Standard Plan", callback_data="admin_edit_plan_standard")],
-            [InlineKeyboardButton("✏️ Edit Deluxe Plan", callback_data="admin_edit_plan_deluxe")],
+            [InlineKeyboardButton("🆓 Manage Free Plan", callback_data="admin_edit_plan_free")],
+            [InlineKeyboardButton("🌟 Manage Standard Plan", callback_data="admin_edit_plan_standard")],
+            [InlineKeyboardButton("💎 Manage Deluxe Plan", callback_data="admin_edit_plan_deluxe")],
             [InlineKeyboardButton("← Back", callback_data="admin_limits_menu")]
         ]
 
@@ -401,6 +323,72 @@ async def admin_callback(client, callback_query):
             pass
     elif data.startswith("admin_edit_plan_"):
         plan_name = data.replace("admin_edit_plan_", "")
+
+        config = await db.get_public_config()
+        limits = config.get("myfiles_limits", {})
+        plan_lm = limits.get(plan_name, {})
+
+        def f(v): return "Unlimited" if v == -1 else v
+
+        global_toggles = await db.get_feature_toggles()
+
+        def get_features_str(plan_key):
+            plan_settings = config.get(plan_key, {})
+            features = plan_settings.get("features", {})
+            feat_list = []
+
+            # Global toggles apply to everyone if enabled, otherwise check plan override
+            if global_toggles.get("subtitle_extractor", True) or features.get("subtitle_extractor", False):
+                feat_list.append("💬 Subtitle Extractor")
+            if global_toggles.get("watermarker", True) or features.get("watermarker", False):
+                feat_list.append("🎨 Image Watermarker")
+            if global_toggles.get("file_converter", True) or features.get("file_converter", False):
+                feat_list.append("🔄 File Converter")
+            if global_toggles.get("audio_editor", True) or features.get("audio_editor", False):
+                feat_list.append("🎵 Audio Editor")
+            if features.get("priority_queue", False):
+                feat_list.append("🚀 Priority Queue")
+            if features.get("batch_sharing", False):
+                feat_list.append("🔗 Batch Sharing")
+            if features.get("xtv_pro_4gb", False):
+                feat_list.append("⚡ XTV Pro 4GB Bypass")
+
+            return "\n".join([f"  • {feat}" for feat in feat_list]) if feat_list else "  • None"
+
+        if plan_name == "free":
+            plan_emoji = "🆓"
+            plan_title = "Free Plan"
+            egress_mb = config.get("daily_egress_mb", 0)
+            file_count = config.get("daily_file_count", 0)
+            features_text = get_features_str('free_placeholder')
+            price_text = ""
+        else:
+            plan_emoji = "🌟" if plan_name == "standard" else "💎"
+            plan_title = f"{plan_name.capitalize()} Plan"
+            plan_settings = config.get(f"premium_{plan_name}", {})
+            egress_mb = plan_settings.get("daily_egress_mb", 0)
+            file_count = plan_settings.get("daily_file_count", 0)
+            features_text = get_features_str(f"premium_{plan_name}")
+            price_text = (
+                f"\n💵 **Price (Fiat):** `{plan_settings.get('price_string', '0 USD')}`\n"
+                f"⭐ **Price (Stars):** `{plan_settings.get('stars_price', 0)}` Stars\n"
+            )
+
+        text = (
+            f"⚙️ **Edit {plan_title} Settings**\n\n"
+            f"> Configure the quotas, features, and prices for this tier.\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"{plan_emoji} **{plan_title}**\n\n"
+            f"📌 Permanent Slots : `{f(plan_lm.get('permanent_limit', 0))}`\n"
+            f"📁 Custom Folders  : `{f(plan_lm.get('folder_limit', 0))}`\n"
+            f"⏳ Temp Expiration : `{f(plan_lm.get('expiry_days', 0))} days`\n"
+            f"📦 Daily Egress: `{f(egress_mb)}` MB\n"
+            f"📄 Daily Files: `{f(file_count)}` files\n\n"
+            f"✨ **Features:**\n"
+            f"{features_text}\n"
+            f"{price_text}"
+            f"━━━━━━━━━━━━━━━━━━━━"
+        )
 
         buttons = [
             [InlineKeyboardButton("📌 Edit Permanent Limit", callback_data=f"prompt_myfiles_lim_{plan_name}_permanent")],
@@ -423,13 +411,6 @@ async def admin_callback(client, callback_query):
 
         buttons.append([InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")])
         buttons.append([InlineKeyboardButton("← Back", callback_data="admin_per_plan_limits")])
-
-        text = (
-            f"⚙️ **Edit {plan_name.capitalize()} Plan Settings**\n\n"
-            f"> Configure the quotas, features, and prices for this tier.\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"Select a setting to modify:"
-        )
 
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
