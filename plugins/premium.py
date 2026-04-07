@@ -56,7 +56,7 @@ async def generate_premium_dashboard(user_id, client):
             f"> **Plan:** `{plan_display}`\n"
             f"> **Status:** `Active ✅`\n"
             f"> **Expiry:** `{exp_text}`\n\n"
-            f"**MyFiles Limits:**\n"
+            f"**𝕏Files Limits:**\n"
             f"> **Permanent Files:** `Up to {perm_str}`\n"
             f"> **Custom Folders:** `Up to {folder_str}`\n\n"
             f"✨ *Thank you for supporting 𝕏TV! Enjoy your exclusive benefits, priority processing, and enhanced limits.*\n\n"
@@ -65,7 +65,7 @@ async def generate_premium_dashboard(user_id, client):
 
         buttons = [
             [InlineKeyboardButton("⚙️ Custom Defaults", callback_data="premium_settings")],
-            [InlineKeyboardButton("📁 MyFiles Storage", callback_data="myfiles_main")],
+            [InlineKeyboardButton("📁 𝕏Files Storage", callback_data="myfiles_main")],
             [InlineKeyboardButton("🚀 Priority Queue", callback_data="premium_priority")],
             [InlineKeyboardButton("🔄 Refresh Status", callback_data="user_premium_menu")]
         ]
@@ -148,7 +148,7 @@ async def generate_premium_dashboard(user_id, client):
         f"⭐ **Premium Standard**\n\n"
         f"📂 Daily Egress Limit: `{std_egress}`\n"
         f"📑 Daily File Limit: `{std_files}`\n"
-        f"🗂 MyFiles Folders: `{std_folder_str}`\n"
+        f"🗂 𝕏Files Folders: `{std_folder_str}`\n"
         f"📦 Perm Storage: `{std_perm_str}`\n\n"
         f"**Perks:**\n"
     )
@@ -167,7 +167,7 @@ async def generate_premium_dashboard(user_id, client):
             f"💎 **Premium Deluxe**\n\n"
             f"📂 Daily Egress Limit: `{dlx_egress}`\n"
             f"📑 Daily File Limit: `{dlx_files}`\n"
-            f"🗂 MyFiles Folders: `{dlx_folder_str}`\n"
+            f"🗂 𝕏Files Folders: `{dlx_folder_str}`\n"
             f"📦 Perm Storage: `{dlx_perm_str}`\n\n"
             f"**Perks:**\n"
             f"(All Standard Perks, plus:)\n"
