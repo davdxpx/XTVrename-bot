@@ -92,8 +92,8 @@ class QueueManager:
     def get_batch_summary(self, batch_id: str, usage_text: str, group_link: str = None) -> str:
         if batch_id not in self.batches:
             if group_link:
-                return f"✅ **Batch Processing Complete!**\n\n🔗 **Group Link:** `{group_link}`\n\n📊 **Usage:** {usage_text}"
-            return f"✅ **Batch Processing Complete!**\n\n📊 **Usage:** {usage_text}"
+                return f"✅ Batch Processing Complete!\n\nProcessed: successfully.\n\n🔗 Share Link for this Batch:\n{group_link}\n\n📊 Usage: {usage_text.replace('Today: ', '')}"
+            return f"✅ Batch Processing Complete!\n\nProcessed: successfully.\n\n📊 Usage: {usage_text.replace('Today: ', '')}"
 
         batch = self.batches[batch_id]
         success_items = []
@@ -109,24 +109,23 @@ class QueueManager:
         success_count = len(success_items)
         failed_count = len(failed_items)
 
-        text = f"✅ **Batch Processing Complete!**\n\n"
-        text += f"**Processed:** `{success_count}/{total}` files successfully.\n"
+        text = f"✅ Batch Processing Complete!\n\n"
+        text += f"Processed: {success_count}/{total} files successfully.\n"
 
         if success_items:
-
             if len(success_items) <= 5:
                 items_str = ", ".join(success_items)
-                text += f"**Included:** `{items_str}`\n"
+                text += f"Included: {items_str}\n"
             else:
-                text += f"**Included:** `{success_items[0]} ... {success_items[-1]}`\n"
+                text += f"Included: {success_items[0]} ... {success_items[-1]}\n"
 
         if failed_items:
-            text += f"**Failed:** `{failed_count}` files.\n"
+            text += f"Failed: {failed_count} files.\n"
 
         if group_link:
-            text += f"\n🔗 **Share Link:**\n`{group_link}`\n"
+            text += f"\n🔗 Share Link for this Batch:\n{group_link}\n"
 
-        text += f"\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
+        text += f"\n📊 Usage: {usage_text.replace('Today: ', '')}"
         return text
 
 queue_manager = QueueManager()

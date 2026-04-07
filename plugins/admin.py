@@ -145,15 +145,6 @@ async def get_admin_access_limits_menu():
     if Config.PUBLIC_MODE:
         buttons.append([InlineKeyboardButton("📋 Per-Plan Settings", callback_data="admin_per_plan_limits")])
         buttons.append([InlineKeyboardButton("🌍 Global Daily Egress Limit", callback_data="admin_global_limit")])
-        pro_session = await db.get_pro_session()
-        if pro_session:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        "🚀 XTV Pro 4GB Access", callback_data="admin_4gb_access"
-                    )
-                ]
-            )
     else:
         buttons.append(
             [
@@ -981,41 +972,6 @@ async def admin_callback(client, callback_query):
             pass
         return
 
-    if data == "admin_4gb_access" and Config.PUBLIC_MODE:
-        config = await db.get_public_config()
-        current_val = config.get("xtv_pro_4gb_access", "all")
-
-        display = {
-            "all": "Everyone",
-            "premium_all": "All Premium Users",
-            "premium_deluxe": "Premium Deluxe Only"
-        }
-
-        try:
-            await callback_query.message.edit_text(
-                f"🚀 **XTV Pro™ 4GB Access**\n\n"
-                f"Who is allowed to bypass the 2GB limit (up to 4GB)?\n"
-                f"Current Setting: **{display.get(current_val, 'Unknown')}**\n\n"
-                f"Select an option below:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"{'✅ ' if current_val == 'all' else ''}Everyone", callback_data="set_4gb_access_all")],
-                    [InlineKeyboardButton(f"{'✅ ' if current_val == 'premium_all' else ''}All Premium Users", callback_data="set_4gb_access_premium_all")],
-                    [InlineKeyboardButton(f"{'✅ ' if current_val == 'premium_deluxe' else ''}Premium Deluxe Only", callback_data="set_4gb_access_premium_deluxe")],
-                    [InlineKeyboardButton("← Back", callback_data="admin_access_limits")]
-                ])
-            )
-        except MessageNotModified:
-            pass
-        return
-
-    if data.startswith("set_4gb_access_") and Config.PUBLIC_MODE:
-        access_level = data.replace("set_4gb_access_", "")
-        await db.update_public_config("xtv_pro_4gb_access", access_level)
-        await callback_query.answer("4GB Access updated!", show_alert=True)
-        callback_query.data = "admin_4gb_access"
-        await admin_callback(client, callback_query)
-        return
-
     if data.startswith("admin_toggle_"):
         parts = data.replace("admin_toggle_", "").rsplit("_", 1)
         feature = parts[0]
@@ -1139,51 +1095,76 @@ async def admin_callback(client, callback_query):
 
             def emoji(state): return "✅" if state else "❌"
 
+            # 1. Account Perks
             pq = features.get("priority_queue", False)
             bs = features.get("batch_sharing", False)
-            ps = features.get("privacy_settings", False)
+            access_4gb = features.get("xtv_pro_4gb", False)
 
             buttons = [
-                [InlineKeyboardButton(f"{emoji(pq)} Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue")],
-                [InlineKeyboardButton(f"{emoji(bs)} Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")],
-                [InlineKeyboardButton(f"{emoji(ps)} Privacy Settings", callback_data=f"admin_premium_feat_{plan_name}_privacy_settings")]
+                [InlineKeyboardButton("─── 🌟 Account Perks ───", callback_data="noop")],
+                [InlineKeyboardButton(f"{emoji(access_4gb)} 🚀 4GB Access", callback_data=f"admin_premium_feat_{plan_name}_xtv_pro_4gb")],
+                [InlineKeyboardButton(f"{emoji(pq)} ⚡ Priority Queue", callback_data=f"admin_premium_feat_{plan_name}_priority_queue"),
+                 InlineKeyboardButton(f"{emoji(bs)} 📦 Batch Sharing", callback_data=f"admin_premium_feat_{plan_name}_batch_sharing")]
             ]
 
+            # 2. Media Tools
+            buttons.append([InlineKeyboardButton("─── 🛠️ Media Tools ───", callback_data="noop")])
+
             if plan_name == "free":
-                fc = global_toggles.get("file_converter", True)
-                buttons.append([InlineKeyboardButton(f"{emoji(fc)} File Converter", callback_data=f"admin_toggle_file_converter_{plan_name}")])
-
-                ae = global_toggles.get("audio_editor", True)
-                buttons.append([InlineKeyboardButton(f"{emoji(ae)} Audio Editor", callback_data=f"admin_toggle_audio_editor_{plan_name}")])
-
-                wm = global_toggles.get("watermarker", True)
-                buttons.append([InlineKeyboardButton(f"{emoji(wm)} Watermarker", callback_data=f"admin_toggle_watermarker_{plan_name}")])
-
                 se = global_toggles.get("subtitle_extractor", True)
-                buttons.append([InlineKeyboardButton(f"{emoji(se)} Subtitle Extractor", callback_data=f"admin_toggle_subtitle_extractor_{plan_name}")])
+                wm = global_toggles.get("watermarker", True)
+                fc = global_toggles.get("file_converter", True)
+                ae = global_toggles.get("audio_editor", True)
+
+                buttons.append([
+                    InlineKeyboardButton(f"{emoji(se)} 🎬 Subtitle Extractor", callback_data=f"admin_toggle_subtitle_extractor_{plan_name}"),
+                    InlineKeyboardButton(f"{emoji(wm)} 🖼 Watermarker", callback_data=f"admin_toggle_watermarker_{plan_name}")
+                ])
+                buttons.append([
+                    InlineKeyboardButton(f"{emoji(fc)} 🔄 Converter", callback_data=f"admin_toggle_file_converter_{plan_name}"),
+                    InlineKeyboardButton(f"{emoji(ae)} 🎵 Audio Editor", callback_data=f"admin_toggle_audio_editor_{plan_name}")
+                ])
             else:
-                if not global_toggles.get("file_converter", True):
-                    fc = features.get("file_converter", False)
-                    buttons.append([InlineKeyboardButton(f"{emoji(fc)} File Converter", callback_data=f"admin_premium_feat_{plan_name}_file_converter")])
-
-                if not global_toggles.get("audio_editor", True):
-                    ae = features.get("audio_editor", False)
-                    buttons.append([InlineKeyboardButton(f"{emoji(ae)} Audio Editor", callback_data=f"admin_premium_feat_{plan_name}_audio_editor")])
-
-                if not global_toggles.get("watermarker", True):
-                    wm = features.get("watermarker", False)
-                    buttons.append([InlineKeyboardButton(f"{emoji(wm)} Watermarker", callback_data=f"admin_premium_feat_{plan_name}_watermarker")])
+                media_tools_row1 = []
+                media_tools_row2 = []
 
                 if not global_toggles.get("subtitle_extractor", True):
                     se = features.get("subtitle_extractor", False)
-                    buttons.append([InlineKeyboardButton(f"{emoji(se)} Subtitle Extractor", callback_data=f"admin_premium_feat_{plan_name}_subtitle_extractor")])
+                    media_tools_row1.append(InlineKeyboardButton(f"{emoji(se)} 🎬 Subtitle Extractor", callback_data=f"admin_premium_feat_{plan_name}_subtitle_extractor"))
+                if not global_toggles.get("watermarker", True):
+                    wm = features.get("watermarker", False)
+                    media_tools_row1.append(InlineKeyboardButton(f"{emoji(wm)} 🖼 Watermarker", callback_data=f"admin_premium_feat_{plan_name}_watermarker"))
+                if not global_toggles.get("file_converter", True):
+                    fc = features.get("file_converter", False)
+                    media_tools_row2.append(InlineKeyboardButton(f"{emoji(fc)} 🔄 Converter", callback_data=f"admin_premium_feat_{plan_name}_file_converter"))
+                if not global_toggles.get("audio_editor", True):
+                    ae = features.get("audio_editor", False)
+                    media_tools_row2.append(InlineKeyboardButton(f"{emoji(ae)} 🎵 Audio Editor", callback_data=f"admin_premium_feat_{plan_name}_audio_editor"))
+
+                if media_tools_row1: buttons.append(media_tools_row1)
+                if media_tools_row2: buttons.append(media_tools_row2)
+                if not media_tools_row1 and not media_tools_row2:
+                    buttons.append([InlineKeyboardButton("✅ All tools globally enabled", callback_data="noop")])
+
+            # 3. Privacy
+            ps = features.get("privacy_settings", False)
+            buttons.append([InlineKeyboardButton("─── 🔒 Privacy ───", callback_data="noop")])
+            buttons.append([InlineKeyboardButton(f"{emoji(ps)} 🔒 Privacy Settings", callback_data=f"admin_premium_feat_{plan_name}_privacy_settings")])
 
             buttons.append([InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")])
 
             if plan_name == "free":
-                text = f"⚙️ **Free Plan Features**\n\nToggle features. Note: Free Plan media features (Converter, Editor, etc.) apply globally by default. If you disable them here, you can re-enable them individually on Premium plans."
+                text = (
+                    "⚙️ **Free Plan Features**\n\n"
+                    "Configure the **Baseline Features** that apply to all default users.\n"
+                    "> *Note: Free Plan media tools (Converter, Editor, etc.) apply globally by default. If you disable them here, they will only be accessible via Premium overrides.*"
+                )
             else:
-                text = f"⚙️ **{plan_name.capitalize()} Plan Features**\n\nToggle which features users on this plan can access (overrides global limits):"
+                text = (
+                    f"⚙️ **{plan_name.capitalize()} Plan Features**\n\n"
+                    "Configure the **Premium Overrides** for this tier.\n"
+                    "> *Note: Toggling features here grants access to items that are otherwise locked in the Free tier.*"
+                )
 
             try:
                 await callback_query.message.edit_text(

@@ -1476,29 +1476,33 @@ class TaskProcessor:
                                     plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
 
                                     plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-                                    privacy_feat = plan_features.get("privacy", {})
-                                    allow_anon = privacy_feat.get("link_anonymity", False)
+                                    batch_sharing_enabled = plan_features.get("batch_sharing", False)
+                                    is_global_admin = (self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS)
 
-                                    user_settings = await db.get_settings(self.user_id)
-                                    use_anon = False
-                                    if user_settings and "link_anonymity" in user_settings:
-                                        use_anon = user_settings["link_anonymity"]
+                                    if batch_sharing_enabled or is_global_admin or plan == "global":
+                                        privacy_feat = plan_features.get("privacy", {})
+                                        allow_anon = privacy_feat.get("link_anonymity", False)
 
-                                    if allow_anon and use_anon:
-                                        group_id = f"{uuid.uuid4().hex[:16]}"
-                                    else:
-                                        group_id = f"{self.user_id}_{int(datetime.datetime.utcnow().timestamp())}"
+                                        user_settings = await db.get_settings(self.user_id)
+                                        use_anon = False
+                                        if user_settings and "link_anonymity" in user_settings:
+                                            use_anon = user_settings["link_anonymity"]
 
-                                    await db.db.file_groups.insert_one({
-                                        "group_id": group_id,
-                                        "user_id": self.user_id,
-                                        "files": success_ids,
-                                        "created_at": datetime.datetime.utcnow()
-                                    })
+                                        if allow_anon and use_anon:
+                                            group_id = f"{uuid.uuid4().hex[:16]}"
+                                        else:
+                                            group_id = f"{self.user_id}_{int(datetime.datetime.utcnow().timestamp())}"
 
-                                    bot_me = await self.client.get_me()
-                                    bot_username = bot_me.username
-                                    deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
+                                        await db.db.file_groups.insert_one({
+                                            "group_id": group_id,
+                                            "user_id": self.user_id,
+                                            "files": success_ids,
+                                            "created_at": datetime.datetime.utcnow()
+                                        })
+
+                                        bot_me = await self.client.get_me()
+                                        bot_username = bot_me.username
+                                        deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
 
                             summary_msg = queue_manager.get_batch_summary(batch_id, usage_text, deep_link)
                             await self.client.send_message(

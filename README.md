@@ -71,7 +71,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ### 🔹 Professional Metadata Injection
 *   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
-*   **Branding**: Sets "Encoded by @XTVglobal" and custom audio/subtitle track titles.
+*   **Branding**: Sets e.g. "Encoded by @YourChannel" and custom audio/subtitle track titles.
 *   **Thumbnail Embedding**: Embeds custom or poster-based thumbnails into video files. Natively toggleable through the interactive settings menu (Auto-detect, Custom, or Deactivated).
 *   **Album Support**: Handles multiple file uploads (albums) concurrently without issues.
 
