@@ -16,25 +16,15 @@ def get_user_main_menu():
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton(
-                    "🖼 Manage Thumbnail", callback_data="user_thumb_menu"
-                ),
-                InlineKeyboardButton(
-                    "📋 Templates", callback_data="user_templates_menu"
-                ),
+                InlineKeyboardButton("🖼 Thumbnail", callback_data="user_thumb_menu"),
+                InlineKeyboardButton("📋 Templates", callback_data="user_templates_menu"),
             ],
             [
-                InlineKeyboardButton(
-                    "📺 Dumb Channels", callback_data="dumb_user_menu"
-                ),
-                InlineKeyboardButton(
-                    "⚙️ General Settings", callback_data="user_general_settings_menu"
-                ),
+                InlineKeyboardButton("📺 Channels", callback_data="dumb_user_menu"),
+                InlineKeyboardButton("⚙️ General", callback_data="user_general_settings_menu"),
             ],
             [
-                InlineKeyboardButton(
-                    "👀 View Current Settings", callback_data="user_view"
-                )
+                InlineKeyboardButton("👀 View Current Config", callback_data="user_view"),
             ],
             [InlineKeyboardButton("❌ Close", callback_data="user_cancel")],
         ]
@@ -136,9 +126,10 @@ async def settings_panel(client, message):
         return
 
     await message.reply_text(
-        "🛠 **Personal Settings Panel** 🛠\n\n"
-        "Welcome to your personal settings.\n"
-        "Here you can customize templates and thumbnails for your own files.",
+        "⚙️ **Settings**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Manage your templates, thumbnails,\n"
+        "channels, and general preferences.",
         reply_markup=get_user_main_menu(),
     )
 

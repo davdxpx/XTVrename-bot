@@ -78,6 +78,57 @@ class QueueManager:
                 if error:
                     item.error = error
 
+    def is_batch_complete(self, batch_id: str) -> bool:
+        batch = self.batches.get(batch_id)
+        if not batch:
+            return False
+        return batch.is_batch_complete()
+
+    def get_blocking_item(self, batch_id: str, item_id: str) -> Optional[QueueItem]:
+        batch = self.batches.get(batch_id)
+        if not batch:
+            return None
+        return batch.is_blocked(item_id)
+
+    def get_batch_summary(self, batch_id: str, usage_text: str = "", deep_link: str = None) -> str:
+        batch = self.batches.get(batch_id)
+        if not batch:
+            return "✅ **Batch Complete**"
+
+        total = len(batch.items)
+        success = sum(1 for i in batch.items.values() if i.status in ["done", "done_dumb", "done_user"])
+        failed = sum(1 for i in batch.items.values() if i.status == "failed")
+
+        lines = [f"✅ **Batch Complete** — {success}/{total} processed"]
+
+        if failed:
+            lines[0] += f" ({failed} failed)"
+
+        # List processed items sorted by sort_key
+        sorted_items = sorted(batch.items.values(), key=lambda x: x.sort_key)
+        file_lines = []
+        for item in sorted_items:
+            if item.status in ["done", "done_dumb", "done_user"]:
+                file_lines.append(f"  • {item.display_name}")
+            elif item.status == "failed":
+                err = f" — {item.error}" if item.error else ""
+                file_lines.append(f"  • ~~{item.display_name}~~{err}")
+
+        if file_lines:
+            lines.append("")
+            lines.append("📂 **Included:**")
+            lines.extend(file_lines)
+
+        if deep_link:
+            lines.append("")
+            lines.append(f"🔗 **Share:** `{deep_link}`")
+
+        if usage_text:
+            lines.append("")
+            lines.append(f"📊 {usage_text}")
+
+        return "\n".join(lines)
+
     def cleanup_completed(self):
         """Remove completed or expired batches to prevent memory leaks."""
         now = time.time()

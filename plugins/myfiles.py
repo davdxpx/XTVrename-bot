@@ -343,7 +343,21 @@ async def myfiles_text_handler(client: Client, message: Message):
             "created_at": datetime.datetime.utcnow()
         })
 
-        await message.reply_text(f"✅ Folder **{folder_name}** created successfully.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Folders", callback_data="myfiles_cat_custom")]]))
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        prompt_msg_id = state_info.get("prompt_msg_id")
+        confirm_text = f"✅ Folder **{folder_name}** created successfully."
+        confirm_markup = InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Folders", callback_data="myfiles_cat_custom")]])
+        if prompt_msg_id:
+            try:
+                await client.edit_message_text(chat_id=message.chat.id, message_id=prompt_msg_id, text=confirm_text, reply_markup=confirm_markup)
+            except Exception:
+                await client.send_message(message.chat.id, confirm_text, reply_markup=confirm_markup)
+        else:
+            await client.send_message(message.chat.id, confirm_text, reply_markup=confirm_markup)
         await set_myfiles_state(user_id, {})
 
         # Stop propagation to prevent flow.py from processing this text
@@ -389,34 +403,32 @@ async def myfiles_text_handler(client: Client, message: Message):
 
         await db.files.update_one({"_id": ObjectId(file_id)}, {"$set": {"file_name": new_name}})
 
-        await message.reply_text(f"✅ File renamed to `{new_name}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to File", callback_data=f"myfiles_file_{file_id}")]]))
-        await set_myfiles_state(user_id, {})
+        # Delete user's input message for clean chat
+        try:
+            await message.delete()
+        except Exception:
+            pass
 
-        from pyrogram import StopPropagation
-        raise StopPropagation
-
-    if state == "awaiting_setting_input":
-        setting_key = state_info.get("setting_key")
-        import time as _time
-        state_ts = state_info.get("timestamp", 0)
-        if state_ts and _time.time() - state_ts > 600:
-            await set_myfiles_state(user_id, {})
-            await message.reply_text("Input session expired. Please try again.")
-            from pyrogram import StopPropagation
-            raise StopPropagation
-
-        value = message.text.strip()
-        if setting_key == "channel":
-            if not value.startswith("@") and not value.lstrip("-").isdigit():
-                await message.reply_text("Invalid channel. Please send a username starting with @ or a channel ID.")
-                from pyrogram import StopPropagation
-                raise StopPropagation
-            await db.update_setting("channel", value, user_id)
-            await message.reply_text(f"✅ Default channel updated to `{value}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to General Settings", callback_data="settings_cat_general")]]))
+        # Edit the bot's prompt message with confirmation
+        prompt_msg_id = state_info.get("prompt_msg_id")
+        prompt_chat_id = state_info.get("prompt_chat_id", message.chat.id)
+        confirmation_text = f"✅ File renamed to `{new_name}`."
+        confirmation_markup = InlineKeyboardMarkup([[InlineKeyboardButton("← Back to File", callback_data=f"myfiles_file_{file_id}")]])
+        if prompt_msg_id:
+            try:
+                await client.edit_message_text(
+                    chat_id=prompt_chat_id,
+                    message_id=prompt_msg_id,
+                    text=confirmation_text,
+                    reply_markup=confirmation_markup,
+                )
+            except Exception:
+                await client.send_message(message.chat.id, confirmation_text, reply_markup=confirmation_markup)
         else:
-            await message.reply_text("Unknown setting.")
+            await client.send_message(message.chat.id, confirmation_text, reply_markup=confirmation_markup)
 
         await set_myfiles_state(user_id, {})
+
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -689,7 +701,6 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         text = "⚙️ **Settings**\n\nSelect a category to configure:"
 
         buttons = [
-            [InlineKeyboardButton("🌐 General Settings", callback_data="settings_cat_general")],
             [InlineKeyboardButton("🎬 File Processing", callback_data="settings_cat_processing")],
             [InlineKeyboardButton("📁 MyFiles Preferences", callback_data="settings_cat_myfiles")],
             [InlineKeyboardButton("🔔 Notifications", callback_data="settings_cat_notifications")],
@@ -728,37 +739,6 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     # === SETTINGS CATEGORY HANDLERS ===
-
-    if data == "settings_cat_general":
-        s = await db.get_settings(user_id)
-        lang = s.get("preferred_language", "en-US") if s else "en-US"
-        sep = s.get("preferred_separator", ".") if s else "."
-        channel = s.get("channel", Config.DEFAULT_CHANNEL) if s else Config.DEFAULT_CHANNEL
-        wf_mode = s.get("workflow_mode", "smart_media_mode") if s else "smart_media_mode"
-        thumb_mode = s.get("thumbnail_mode", "none") if s else "none"
-
-        sep_labels = {".": "Dot (.)", " ": "Space ( )", "_": "Underscore (_)", "-": "Dash (-)"}
-        wf_labels = {"smart_media_mode": "Smart Media", "quick_mode": "Quick Mode"}
-        thumb_labels = {"none": "None", "custom": "Custom", "auto": "Auto"}
-
-        text = (
-            "🌐 **General Settings**\n\n"
-            f"**Language:** `{lang}`\n"
-            f"**Separator:** {sep_labels.get(sep, sep)}\n"
-            f"**Default Channel:** `{channel}`\n"
-            f"**Workflow Mode:** {wf_labels.get(wf_mode, wf_mode)}\n"
-            f"**Thumbnail Mode:** {thumb_labels.get(thumb_mode, thumb_mode)}"
-        )
-        buttons = [
-            [InlineKeyboardButton(f"🌍 Language: {lang}", callback_data="stg_sel_preferred_language")],
-            [InlineKeyboardButton(f"✂️ Separator: {sep_labels.get(sep, sep)}", callback_data="stg_sel_preferred_separator")],
-            [InlineKeyboardButton(f"📺 Channel: {channel}", callback_data="stg_input_channel")],
-            [InlineKeyboardButton(f"🔄 Workflow: {wf_labels.get(wf_mode, wf_mode)}", callback_data="stg_sel_workflow_mode")],
-            [InlineKeyboardButton(f"🖼️ Thumbnail: {thumb_labels.get(thumb_mode, thumb_mode)}", callback_data="stg_sel_thumbnail_mode")],
-            [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
-        ]
-        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
-        return
 
     if data == "settings_cat_processing":
         s = await db.get_settings(user_id)
@@ -853,19 +833,22 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         show_sizes = s.get("display_show_file_sizes", True) if s else True
         show_dates = s.get("display_show_dates", True) if s else True
         show_icons = s.get("display_show_type_icons", True) if s else True
+        show_poster = s.get("display_show_poster", False) if s else False
 
         text = (
             "🖥️ **Display Settings**\n\n"
             f"**Compact List:** {'ON' if compact else 'OFF'} — Show condensed file listings\n"
             f"**Show File Sizes:** {'ON' if show_sizes else 'OFF'} — Display file size info\n"
             f"**Show Upload Dates:** {'ON' if show_dates else 'OFF'} — Display upload timestamps\n"
-            f"**File Type Icons:** {'ON' if show_icons else 'OFF'} — Show type indicators"
+            f"**File Type Icons:** {'ON' if show_icons else 'OFF'} — Show type indicators\n"
+            f"**Show Poster:** {'ON' if show_poster else 'OFF'} — Display movie/series poster in file details"
         )
         buttons = [
             [InlineKeyboardButton(f"📋 Compact List: {'✅ ON' if compact else '❌ OFF'}", callback_data="stg_toggle_display_compact_list")],
             [InlineKeyboardButton(f"📏 File Sizes: {'✅ ON' if show_sizes else '❌ OFF'}", callback_data="stg_toggle_display_show_file_sizes")],
             [InlineKeyboardButton(f"📅 Upload Dates: {'✅ ON' if show_dates else '❌ OFF'}", callback_data="stg_toggle_display_show_dates")],
             [InlineKeyboardButton(f"🏷️ Type Icons: {'✅ ON' if show_icons else '❌ OFF'}", callback_data="stg_toggle_display_show_type_icons")],
+            [InlineKeyboardButton(f"🖼️ Show Poster: {'✅ ON' if show_poster else '❌ OFF'}", callback_data="stg_toggle_display_show_poster")],
             [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
         ]
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
@@ -940,6 +923,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             "notify_quota_warning": True, "notify_daily_digest": False,
             "display_compact_list": False, "display_show_file_sizes": True,
             "display_show_dates": True, "display_show_type_icons": True,
+            "display_show_poster": False,
             "privacy_hide_username": False, "privacy_auto_expire_links": False,
         }
         if key not in toggle_defaults:
@@ -962,6 +946,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             "display_show_file_sizes": "settings_cat_display",
             "display_show_dates": "settings_cat_display",
             "display_show_type_icons": "settings_cat_display",
+            "display_show_poster": "settings_cat_display",
             "privacy_hide_username": "settings_cat_privacy",
             "privacy_auto_expire_links": "settings_cat_privacy",
         }
@@ -973,16 +958,6 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data.startswith("stg_sel_"):
         key = data.replace("stg_sel_", "")
         select_options = {
-            "preferred_language": {
-                "en-US": "🇺🇸 English (US)", "de-DE": "🇩🇪 Deutsch", "es-ES": "🇪🇸 Espa\u00f1ol",
-                "fr-FR": "🇫🇷 Fran\u00e7ais", "pt-BR": "🇧🇷 Portugu\u00eas", "ja-JP": "🇯🇵 \u65e5\u672c\u8a9e",
-                "ko-KR": "🇰🇷 \ud55c\uad6d\uc5b4", "zh-CN": "🇨🇳 \u4e2d\u6587", "ar-SA": "🇸🇦 \u0627\u0644\u0639\u0631\u0628\u064a\u0629",
-                "hi-IN": "🇮🇳 \u0939\u093f\u0928\u094d\u0926\u0940", "ru-RU": "🇷🇺 \u0420\u0443\u0441\u0441\u043a\u0438\u0439",
-                "it-IT": "🇮🇹 Italiano", "tr-TR": "🇹🇷 T\u00fcrk\u00e7e",
-            },
-            "preferred_separator": {".": "Dot (.)", " ": "Space ( )", "_": "Underscore (_)", "-": "Dash (-)"},
-            "workflow_mode": {"smart_media_mode": "Smart Media Mode", "quick_mode": "Quick Mode"},
-            "thumbnail_mode": {"none": "None", "custom": "Custom", "auto": "Auto"},
             "default_quality": {"480p": "480p", "720p": "720p", "1080p": "1080p", "2160p": "2160p (4K)", "original": "Original"},
             "default_media_type": {"auto": "Auto-Detect", "movie": "Movie", "series": "Series", "general": "General"},
             "myfiles_default_sort": {"newest": "Newest First", "oldest": "Oldest First", "a-z": "A-Z"},
@@ -1002,8 +977,6 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             buttons.append([InlineKeyboardButton(f"{label}{marker}", callback_data=f"stg_opt_{key}_{val}")])
 
         cat_back = {
-            "preferred_language": "settings_cat_general", "preferred_separator": "settings_cat_general",
-            "workflow_mode": "settings_cat_general", "thumbnail_mode": "settings_cat_general",
             "default_quality": "settings_cat_processing", "default_media_type": "settings_cat_processing",
             "myfiles_default_sort": "settings_cat_myfiles", "myfiles_files_per_page": "settings_cat_myfiles",
             "privacy_link_expiry_duration": "settings_cat_privacy",
@@ -1019,7 +992,6 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data.startswith("stg_opt_"):
         remainder = data.replace("stg_opt_", "")
         known_keys = [
-            "preferred_language", "preferred_separator", "workflow_mode", "thumbnail_mode",
             "default_quality", "default_media_type", "myfiles_default_sort",
             "myfiles_files_per_page", "privacy_link_expiry_duration",
         ]
@@ -1041,28 +1013,12 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         await callback_query.answer("Setting updated.", show_alert=False)
 
         cat_back = {
-            "preferred_language": "settings_cat_general", "preferred_separator": "settings_cat_general",
-            "workflow_mode": "settings_cat_general", "thumbnail_mode": "settings_cat_general",
             "default_quality": "settings_cat_processing", "default_media_type": "settings_cat_processing",
             "myfiles_default_sort": "settings_cat_myfiles", "myfiles_files_per_page": "settings_cat_myfiles",
             "privacy_link_expiry_duration": "settings_cat_privacy",
         }
         callback_query.data = cat_back.get(key, "myfiles_settings")
         await myfiles_callback(client, callback_query)
-        return
-
-    # === SETTINGS TEXT INPUT HANDLER ===
-    if data.startswith("stg_input_"):
-        key = data.replace("stg_input_", "")
-        if key == "channel":
-            current = await db.get_setting("channel", Config.DEFAULT_CHANNEL, user_id)
-            await set_myfiles_state(user_id, {"state": "awaiting_setting_input", "setting_key": key, "timestamp": __import__('time').time()})
-            text = f"📺 **Set Default Channel**\n\nCurrent: `{current}`\n\nSend the new channel username (e.g. @MyChannel):"
-            markup = InlineKeyboardMarkup([[InlineKeyboardButton("← Cancel", callback_data="settings_cat_general")]])
-            await safe_edit_or_send(client, callback_query, text, markup)
-            return
-
-        await callback_query.answer("Unknown input setting.", show_alert=True)
         return
 
     if data == "myfiles_toggle_link_anon":
@@ -1259,7 +1215,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             return
 
         # Normal list
-        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"myfiles_cat_{folder.get('type', 'custom')}")
+        buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"myfiles_folder_{folder_id}")
 
         if folder.get('type') == 'custom':
             buttons.insert(-2, [InlineKeyboardButton("🗑️ Delete Folder", callback_data=f"myfiles_del_folder_{folder_id}")])
@@ -1308,8 +1264,11 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         name = f.get("file_name", "Unknown")
         status = f.get("status", "temporary")
         expires = f.get("expires_at")
-        poster = f.get("poster_url")
         media_type = f.get("media_type")
+
+        # Check if user has poster display enabled
+        show_poster = await db.get_setting("display_show_poster", False, user_id)
+        poster = f.get("poster_url") if show_poster else None
 
         text = (
             f"📄 **{name}**\n\n"
@@ -1341,7 +1300,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     if data == "myfiles_create_folder":
-        await set_myfiles_state(user_id, {"state": "awaiting_folder_name"})
+        await set_myfiles_state(user_id, {"state": "awaiting_folder_name", "prompt_msg_id": callback_query.message.id})
         text = "📁 **Create New Folder**\n\nPlease enter a name for the new folder:"
         markup = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="myfiles_cat_custom")]])
         await safe_edit_or_send(client, callback_query, text, markup)
@@ -1393,7 +1352,12 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data.startswith("myfiles_rename_"):
         file_id = data.replace("myfiles_rename_", "")
         import time as _time
-        await set_myfiles_state(user_id, {"state": f"awaiting_rename_{file_id}", "timestamp": _time.time()})
+        await set_myfiles_state(user_id, {
+            "state": f"awaiting_rename_{file_id}",
+            "timestamp": _time.time(),
+            "prompt_msg_id": callback_query.message.id,
+            "prompt_chat_id": callback_query.message.chat.id,
+        })
 
         f = await db.files.find_one({"_id": ObjectId(file_id)})
         current_name = f.get("file_name", "") if f else ""
@@ -1510,7 +1474,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
             config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
             limits = config.get("myfiles_limits", {}).get(plan, {})
-            perm_limit = limits.get("permanent_limit", 50)
+            perm_limit = limits.get("permanent_limit", 50 if Config.PUBLIC_MODE else -1)
 
             if perm_limit != -1:
                 query_filter = {"user_id": user_id, "status": "permanent"} if Config.PUBLIC_MODE else {"status": "permanent"}
