@@ -78,6 +78,11 @@ class QueueManager:
                 if error:
                     item.error = error
 
+    def get_blocking_item(self, batch_id: str, item_id: str) -> Optional['QueueItem']:
+        if batch_id in self.batches:
+            return self.batches[batch_id].is_blocked(item_id)
+        return None
+
     def is_batch_complete(self, batch_id: str) -> bool:
         if batch_id in self.batches:
             return self.batches[batch_id].is_batch_complete()
