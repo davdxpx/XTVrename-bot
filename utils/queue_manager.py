@@ -78,6 +78,11 @@ class QueueManager:
                 if error:
                     item.error = error
 
+    def is_batch_complete(self, batch_id: str) -> bool:
+        if batch_id in self.batches:
+            return self.batches[batch_id].is_batch_complete()
+        return True
+
     def cleanup_completed(self):
         """Remove completed or expired batches to prevent memory leaks."""
         now = time.time()
