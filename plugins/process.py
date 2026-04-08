@@ -1422,15 +1422,18 @@ class TaskProcessor:
                                 name = re.sub(r'[\._\s]{2,}', " ", name)
                                 name = name.strip('._ ')
                                 return name
-                            internal_name = clean_sys_filename(base_name, system_filename_template) + ext
+
+                            file_ext = os.path.splitext(self.output_path)[1].lower() if self.output_path else ".mkv"
+                            internal_name = clean_sys_filename(base_name, system_filename_template) + file_ext
                         elif self.title:
+                            file_ext = os.path.splitext(self.output_path)[1].lower() if self.output_path else ".mkv"
                             if self.media_type == "series":
                                 ep_str = "".join([f"E{int(e):02d}" for e in self.episode]) if isinstance(self.episode, list) else f"E{self.episode:02d}" if self.episode else ""
-                                internal_name = f"{self.title} S{self.season:02d}{ep_str}{ext}"
+                                internal_name = f"{self.title} S{self.season:02d}{ep_str}{file_ext}"
                             elif self.year:
-                                internal_name = f"{self.title} ({self.year}){ext}"
+                                internal_name = f"{self.title} ({self.year}){file_ext}"
                             else:
-                                internal_name = f"{self.title}{ext}"
+                                internal_name = f"{self.title}{file_ext}"
                     except Exception as e:
                         logger.warning(f"Error applying system filename template: {e}")
 
