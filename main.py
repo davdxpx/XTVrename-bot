@@ -200,8 +200,8 @@ if __name__ == "__main__":
                     logger.debug(f"Queue cleanup: {e}")
 
         logger.info("Scheduling background tasks...")
-        asyncio.create_task(db_cleanup())
-        asyncio.create_task(state_cleanup())
+        app.loop.create_task(db_cleanup())
+        app.loop.create_task(state_cleanup())
 
     except Exception as e:
         logger.warning(f"Could not schedule background tasks: {e}")
@@ -230,7 +230,7 @@ if __name__ == "__main__":
                 logger.info(f"Recovered {count} stale flow sessions from DB.")
 
         logger.info("Checking for stale flow sessions...")
-        asyncio.create_task(recover_stale_sessions())
+        app.loop.create_task(recover_stale_sessions())
     except Exception as e:
         logger.warning(f"Error recovering stale sessions: {e}")
 
@@ -244,7 +244,7 @@ if __name__ == "__main__":
                 logger.info("Cleanup complete. No orphaned files found.")
 
         logger.info("Running automated orphaned file cleanup...")
-        asyncio.create_task(async_cleanup_orphaned())
+        app.loop.create_task(async_cleanup_orphaned())
     except Exception as e:
         logger.warning(f"Error during orphaned file cleanup: {e}")
 
