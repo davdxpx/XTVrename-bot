@@ -2959,7 +2959,8 @@ async def handle_admin_text(client, message):
         markup = []
         for u in results[:10]:
             uid = u.get("user_id")
-            name = u.get("first_name", "Unknown")[:15]
+            name = u.get("first_name") or "Unknown"
+            name = name[:15]
             uname = f"(@{u.get('username')})" if u.get("username") else ""
             markup.append([InlineKeyboardButton(f"{name} {uname} ({uid})", callback_data=f"view_user|{uid}")])
 

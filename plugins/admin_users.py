@@ -94,7 +94,8 @@ async def list_users(client, callback):
     else:
         for u in users:
             uid = u.get("user_id")
-            name = u.get("first_name", "Unknown")[:15]
+            name = u.get("first_name") or "Unknown"
+            name = name[:15]
             uname = f"(@{u.get('username')})" if u.get("username") else ""
             status = "🚫" if u.get("banned") else ("💎" if u.get("is_premium") else "👤")
 
@@ -176,7 +177,7 @@ async def view_user_profile(client, callback):
 
     text = (
         f"**👤 User Profile: {target_id}**\n\n"
-        f"📛 **Name:** {user.get('first_name', 'Unknown')}\n"
+        f"📛 **Name:** {user.get('first_name') or 'Unknown'}\n"
         f"🔗 **Username:** {username}\n"
         f"📅 **Joined:** {joined_date}\n"
         f"⏱ **Last Active:** {last_active}\n"
