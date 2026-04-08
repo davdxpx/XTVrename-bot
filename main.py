@@ -135,9 +135,9 @@ if __name__ == "__main__":
             for link in links:
                 tasks.append(cache_link(link))
 
-            config = await db.get_public_config()
-            force_sub_channels = config.get("force_sub_channels", [])
-            legacy_ch = config.get("force_sub_channel")
+            config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+            force_sub_channels = config.get("force_sub_channels", []) if config else []
+            legacy_ch = config.get("force_sub_channel") if config else None
 
             async def cache_id(ch_id):
                 try:
@@ -151,6 +151,19 @@ if __name__ == "__main__":
                         tasks.append(cache_id(ch["id"]))
             elif legacy_ch:
                 tasks.append(cache_id(legacy_ch))
+
+            # Cache database channels (prevents PeerIdInvalid after redeploy)
+            db_channels = config.get("database_channels", {}) if config else {}
+            for plan_name, ch_id in db_channels.items():
+                if ch_id:
+                    tasks.append(cache_id(ch_id))
+
+            # Cache default channel from settings
+            settings_doc = await db.settings.find_one({"_id": "global_settings"})
+            if settings_doc:
+                default_ch = settings_doc.get("channel")
+                if default_ch:
+                    tasks.append(cache_link(default_ch))
 
             if tasks:
                 await asyncio.gather(*tasks)

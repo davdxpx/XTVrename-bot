@@ -493,7 +493,45 @@ async def admin_callback(client, callback_query):
                 f"For the **{plan.capitalize()}** Tier.\n\n"
                 f"Please send a number in the chat (e.g. `50` or `30`).\n"
                 f"> 💡 *Tip: Send `-1` to set this limit to UNLIMITED.*",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]])
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("∞ Set Unlimited", callback_data=f"set_unlimited_myfiles_lim_{plan}_{field}")],
+                    [InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]
+                ])
+            )
+        except MessageNotModified:
+            pass
+        return
+
+    if data.startswith("set_unlimited_myfiles_lim_"):
+        parts = data.replace("set_unlimited_myfiles_lim_", "").split("_")
+        plan = parts[0]
+        field = parts[1]
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        limits = config.get("myfiles_limits", {})
+        if plan not in limits:
+            limits[plan] = {}
+
+        if field == "permanent":
+            limits[plan]["permanent_limit"] = -1
+        elif field == "folder":
+            limits[plan]["folder_limit"] = -1
+        elif field == "expiry":
+            limits[plan]["expiry_days"] = -1
+
+        if Config.PUBLIC_MODE:
+            await db.update_public_config("myfiles_limits", limits)
+        else:
+            await db.settings.update_one({"_id": "global_settings"}, {"$set": {"myfiles_limits": limits}}, upsert=True)
+
+        admin_sessions.pop(user_id, None)
+        cancel_cb = "admin_myfiles_edit_limits_global" if plan == "global" else f"admin_edit_plan_{plan}"
+        display_names = {"permanent": "Permanent Storage Slots", "folder": "Custom Folder Limit", "expiry": "Temporary File Expiry"}
+        name = display_names.get(field, field)
+        try:
+            await callback_query.message.edit_text(
+                f"✅ **{plan.capitalize()}** {name} set to **Unlimited**.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=cancel_cb)]])
             )
         except MessageNotModified:
             pass
@@ -502,56 +540,129 @@ async def admin_callback(client, callback_query):
     if data == "admin_myfiles_cleanup":
         text = (
             "🧹 **DB Cleanup Tools**\n\n"
-            "Run maintenance tasks to clear up storage."
+            "Run maintenance tasks to clear up storage.\n"
+            "Select a cleanup operation:"
         )
-        buttons = [
-            [InlineKeyboardButton("🧹 Clear Free Expired", callback_data="admin_myfiles_clean_free")],
-            [InlineKeyboardButton("🧹 Clear Donator Expired", callback_data="admin_myfiles_clean_donator")],
-            [InlineKeyboardButton("← Back to MyFiles Settings", callback_data="admin_myfiles_settings")]
-        ]
+        buttons = []
+        if Config.PUBLIC_MODE:
+            buttons.append([InlineKeyboardButton("🧹 Clear Free Expired", callback_data="admin_myfiles_clean_free")])
+            buttons.append([InlineKeyboardButton("🧹 Clear Donator Expired", callback_data="admin_myfiles_clean_donator")])
+            buttons.append([InlineKeyboardButton("🧹 Clear All Expired (All Plans)", callback_data="admin_clean_all_expired")])
+            buttons.append([InlineKeyboardButton("🗑️ Purge Orphaned Files", callback_data="admin_clean_orphaned_files")])
+            buttons.append([InlineKeyboardButton("🗑️ Purge Empty Folders", callback_data="admin_clean_empty_folders")])
+            buttons.append([InlineKeyboardButton("📊 Storage Stats", callback_data="admin_clean_storage_stats")])
+        else:
+            buttons.append([InlineKeyboardButton("🧹 Clear All Expired Temp Files", callback_data="admin_clean_all_expired")])
+            buttons.append([InlineKeyboardButton("🗑️ Purge Orphaned Files", callback_data="admin_clean_orphaned_files")])
+            buttons.append([InlineKeyboardButton("🗑️ Purge Empty Folders", callback_data="admin_clean_empty_folders")])
+            buttons.append([InlineKeyboardButton("🗑️ Clear Stale Flow Sessions", callback_data="admin_clean_stale_sessions")])
+            buttons.append([InlineKeyboardButton("📊 Storage Stats", callback_data="admin_clean_storage_stats")])
+        buttons.append([InlineKeyboardButton("← Back to MyFiles Settings", callback_data="admin_myfiles_settings")])
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
             pass
         return
 
-    if data == "admin_myfiles_clean_free" or data == "admin_myfiles_clean_donator":
-        try:
-            await callback_query.answer("Cleanup job started in background.", show_alert=True)
+    if data in ("admin_myfiles_clean_free", "admin_myfiles_clean_donator", "admin_clean_all_expired",
+                "admin_clean_orphaned_files", "admin_clean_empty_folders", "admin_clean_stale_sessions",
+                "admin_clean_storage_stats"):
+        import asyncio
+        import datetime
 
-            import asyncio
-            import datetime
+        if data == "admin_clean_storage_stats":
+            perm_count = await db.files.count_documents({"status": "permanent"})
+            temp_count = await db.files.count_documents({"status": "temporary"})
+            now = datetime.datetime.utcnow()
+            expired_count = await db.files.count_documents({"status": "temporary", "expires_at": {"$lt": now}})
+            folder_count = await db.folders.count_documents({})
+            empty_folders = 0
+            async for folder in db.folders.find():
+                fcount = await db.files.count_documents({"folder_id": folder["_id"]})
+                if fcount == 0:
+                    empty_folders += 1
+            stale_sessions = await db.users.count_documents({"flow_session": {"$exists": True}})
 
-            async def run_admin_cleanup():
-                now = datetime.datetime.utcnow()
-                count = 0
-                if data == "admin_myfiles_clean_free":
-                    # Get all free users
-                    cursor = db.users.find({"$or": [{"is_premium": False}, {"premium_plan": "free"}]})
-                    free_users = await cursor.to_list(length=None)
-                    free_ids = [u["user_id"] for u in free_users]
+            text = (
+                "📊 **Storage Statistics**\n\n"
+                f"**Permanent Files:** `{perm_count}`\n"
+                f"**Temporary Files:** `{temp_count}`\n"
+                f"**Expired Temp Files:** `{expired_count}`\n"
+                f"**Total Folders:** `{folder_count}`\n"
+                f"**Empty Folders:** `{empty_folders}`\n"
+                f"**Stale Flow Sessions:** `{stale_sessions}`"
+            )
+            try:
+                await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("← Back to Cleanup", callback_data="admin_myfiles_cleanup")]
+                ]))
+            except MessageNotModified:
+                pass
+            return
 
-                    if free_ids:
-                        res = await db.files.delete_many({"user_id": {"$in": free_ids}, "status": "temporary", "expires_at": {"$lt": now}})
-                        count = res.deleted_count
-                else:
-                    # Donators
-                    cursor = db.users.find({"is_premium": False, "premium_plan": "donator"})
-                    donators = await cursor.to_list(length=None)
-                    donator_ids = [u["user_id"] for u in donators]
+        await callback_query.answer("Cleanup job started in background.", show_alert=True)
 
-                    if donator_ids:
-                        res = await db.files.delete_many({"user_id": {"$in": donator_ids}, "status": "temporary", "expires_at": {"$lt": now}})
-                        count = res.deleted_count
+        async def run_admin_cleanup():
+            now = datetime.datetime.utcnow()
+            count = 0
+            job_name = ""
 
-                try:
-                    await client.send_message(user_id, f"✅ **Cleanup Job Complete**\n\nDeleted {count} expired temporary files.")
-                except Exception:
-                    pass
+            if data == "admin_myfiles_clean_free":
+                job_name = "Free Expired Temp"
+                cursor = db.users.find({"$or": [{"is_premium": False}, {"premium_plan": "free"}]})
+                free_users = await cursor.to_list(length=None)
+                free_ids = [u["user_id"] for u in free_users]
+                if free_ids:
+                    res = await db.files.delete_many({"user_id": {"$in": free_ids}, "status": "temporary", "expires_at": {"$lt": now}})
+                    count = res.deleted_count
 
-            asyncio.create_task(run_admin_cleanup())
-        except MessageNotModified:
-            pass
+            elif data == "admin_myfiles_clean_donator":
+                job_name = "Donator Expired Temp"
+                cursor = db.users.find({"is_premium": False, "premium_plan": "donator"})
+                donators = await cursor.to_list(length=None)
+                donator_ids = [u["user_id"] for u in donators]
+                if donator_ids:
+                    res = await db.files.delete_many({"user_id": {"$in": donator_ids}, "status": "temporary", "expires_at": {"$lt": now}})
+                    count = res.deleted_count
+
+            elif data == "admin_clean_all_expired":
+                job_name = "All Expired Temp"
+                res = await db.files.delete_many({"status": "temporary", "expires_at": {"$lt": now}})
+                count = res.deleted_count
+
+            elif data == "admin_clean_orphaned_files":
+                job_name = "Orphaned Files (no folder match)"
+                folder_ids = set()
+                async for folder in db.folders.find():
+                    folder_ids.add(folder["_id"])
+                if folder_ids:
+                    res = await db.files.delete_many({
+                        "folder_id": {"$ne": None, "$nin": list(folder_ids)}
+                    })
+                    count = res.deleted_count
+
+            elif data == "admin_clean_empty_folders":
+                job_name = "Empty Folders"
+                async for folder in db.folders.find():
+                    fcount = await db.files.count_documents({"folder_id": folder["_id"]})
+                    if fcount == 0:
+                        await db.folders.delete_one({"_id": folder["_id"]})
+                        count += 1
+
+            elif data == "admin_clean_stale_sessions":
+                job_name = "Stale Flow Sessions"
+                res = await db.users.update_many(
+                    {"flow_session": {"$exists": True}},
+                    {"$unset": {"flow_session": "", "flow_session_updated": ""}}
+                )
+                count = res.modified_count
+
+            try:
+                await client.send_message(user_id, f"✅ **Cleanup Complete: {job_name}**\n\nProcessed: {count} items.")
+            except Exception:
+                pass
+
+        asyncio.create_task(run_admin_cleanup())
         return
 
     if data.startswith("dumb_"):
