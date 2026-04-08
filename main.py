@@ -206,6 +206,34 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"Could not schedule background tasks: {e}")
 
+    # --- Recover stale flow sessions from DB ---
+    try:
+        from database import db
+
+        async def recover_stale_sessions():
+            cursor = db.users.find({"flow_session": {"$exists": True}})
+            count = 0
+            async for user_doc in cursor:
+                uid = user_doc.get("user_id")
+                if uid:
+                    try:
+                        await app.send_message(
+                            uid,
+                            "The bot was restarted and your active renaming session was lost.\n"
+                            "Please start again by sending a file or using /start."
+                        )
+                    except Exception:
+                        pass
+                    await db.clear_flow_session(uid)
+                    count += 1
+            if count:
+                logger.info(f"Recovered {count} stale flow sessions from DB.")
+
+        logger.info("Checking for stale flow sessions...")
+        asyncio.create_task(recover_stale_sessions())
+    except Exception as e:
+        logger.warning(f"Error recovering stale sessions: {e}")
+
     # --- Orphaned file cleanup (async, non-blocking) ---
     try:
         async def async_cleanup_orphaned():

@@ -38,6 +38,16 @@ def get_data(user_id):
 def clear_session(user_id):
     user_data.pop(user_id, None)
     _timestamps.pop(user_id, None)
+    _db_persist_pending.discard(user_id)
+
+_db_persist_pending = set()
+
+def mark_for_db_persist(user_id):
+    """Mark a session as needing DB persistence (for crash recovery)."""
+    _db_persist_pending.add(user_id)
+
+def needs_db_persist(user_id):
+    return user_id in _db_persist_pending
 
 def cleanup_expired():
     """Remove all expired sessions. Called periodically from main.py."""

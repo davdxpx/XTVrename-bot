@@ -46,6 +46,46 @@ class Database:
         doc_id = self._get_doc_id(user_id)
         self._settings_cache.pop(doc_id, None)
 
+    async def get_setting(self, key, default=None, user_id=None):
+        settings = await self.get_settings(user_id)
+        return settings.get(key, default) if settings else default
+
+    async def update_setting(self, key, value, user_id=None):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            await self.settings.update_one(
+                {"_id": doc_id}, {"$set": {key: value}}, upsert=True
+            )
+            self._invalidate_settings_cache(user_id)
+        except Exception as e:
+            logger.error(f"Error updating setting {key} for {doc_id}: {e}")
+
+    async def save_flow_session(self, user_id: int, session_data: dict):
+        if self.users is None:
+            return
+        import time as _time
+        await self.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"flow_session": session_data, "flow_session_updated": _time.time()}},
+            upsert=True
+        )
+
+    async def get_flow_session(self, user_id: int):
+        if self.users is None:
+            return None
+        doc = await self.users.find_one({"user_id": user_id})
+        return doc.get("flow_session") if doc else None
+
+    async def clear_flow_session(self, user_id: int):
+        if self.users is None:
+            return
+        await self.users.update_one(
+            {"user_id": user_id},
+            {"$unset": {"flow_session": "", "flow_session_updated": ""}}
+        )
+
     async def ensure_indexes(self):
         if self.db is None:
             return

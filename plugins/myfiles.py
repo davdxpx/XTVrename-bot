@@ -11,6 +11,19 @@ from bson.objectid import ObjectId
 
 logger = get_logger("plugins.myfiles")
 
+_mf_debounce = {}
+
+def _debounce_mf(user_id: int, callback_id: str) -> bool:
+    """Returns True if this callback should be skipped (rapid-fire duplicate)."""
+    import time as _t
+    key = f"{user_id}:{callback_id}"
+    now = _t.time()
+    last = _mf_debounce.get(key, 0)
+    if now - last < 0.5:
+        return True
+    _mf_debounce[key] = now
+    return False
+
 # === Helper Functions ===
 
 async def safe_edit_or_send(client, callback_query, text, markup, photo=None):
@@ -338,14 +351,72 @@ async def myfiles_text_handler(client: Client, message: Message):
         raise StopPropagation
 
     if state.startswith("awaiting_rename_"):
+        import re as _re
+        import time as _time
+
         file_id = state.replace("awaiting_rename_", "")
+
+        state_ts = state_info.get("timestamp", 0)
+        if state_ts and _time.time() - state_ts > 600:
+            await set_myfiles_state(user_id, {})
+            await message.reply_text("Your rename session has expired. Please try again.")
+            from pyrogram import StopPropagation
+            raise StopPropagation
+
         new_name = message.text.strip()
+
+        if not new_name:
+            await message.reply_text("Name cannot be empty. Please enter a valid name.")
+            from pyrogram import StopPropagation
+            raise StopPropagation
+
+        if len(new_name) > 255:
+            await message.reply_text("Name is too long (max 255 characters). Please enter a shorter name.")
+            from pyrogram import StopPropagation
+            raise StopPropagation
+
+        if _re.search(r'[<>:"/\\|?*\x00-\x1f]', new_name):
+            await message.reply_text("Name contains invalid characters. Please avoid: < > : \" / \\ | ? *")
+            from pyrogram import StopPropagation
+            raise StopPropagation
+
+        f = await db.files.find_one({"_id": ObjectId(file_id)})
+        if not f:
+            await message.reply_text("File no longer exists.")
+            await set_myfiles_state(user_id, {})
+            from pyrogram import StopPropagation
+            raise StopPropagation
 
         await db.files.update_one({"_id": ObjectId(file_id)}, {"$set": {"file_name": new_name}})
 
         await message.reply_text(f"✅ File renamed to `{new_name}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to File", callback_data=f"myfiles_file_{file_id}")]]))
         await set_myfiles_state(user_id, {})
 
+        from pyrogram import StopPropagation
+        raise StopPropagation
+
+    if state == "awaiting_setting_input":
+        setting_key = state_info.get("setting_key")
+        import time as _time
+        state_ts = state_info.get("timestamp", 0)
+        if state_ts and _time.time() - state_ts > 600:
+            await set_myfiles_state(user_id, {})
+            await message.reply_text("Input session expired. Please try again.")
+            from pyrogram import StopPropagation
+            raise StopPropagation
+
+        value = message.text.strip()
+        if setting_key == "channel":
+            if not value.startswith("@") and not value.lstrip("-").isdigit():
+                await message.reply_text("Invalid channel. Please send a username starting with @ or a channel ID.")
+                from pyrogram import StopPropagation
+                raise StopPropagation
+            await db.update_setting("channel", value, user_id)
+            await message.reply_text(f"✅ Default channel updated to `{value}`.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to General Settings", callback_data="settings_cat_general")]]))
+        else:
+            await message.reply_text("Unknown setting.")
+
+        await set_myfiles_state(user_id, {})
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -362,10 +433,17 @@ async def myfiles_command(client: Client, message: Message):
     text, markup = await get_myfiles_main_menu(user_id)
     await message.reply_text(text, reply_markup=markup)
 
-@Client.on_callback_query(filters.regex(r"^(myfiles_|mf_mov_|mf_df_|mf_pg_|mf_st|mf_ms|mf_sea_|mf_sa)"))
+@Client.on_callback_query(filters.regex(r"^(myfiles_|mf_mov_|mf_df_|mf_pg_|mf_st|mf_ms|mf_sea_|mf_sa|settings_cat_|stg_)"))
 async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     data = callback_query.data
     user_id = callback_query.from_user.id
+
+    if _debounce_mf(user_id, data):
+        try:
+            await callback_query.answer()
+        except Exception:
+            pass
+        return
 
     # Fast-dismiss loading spinner except where we specifically want an alert.
     # We will answer below if we need a custom text.
@@ -608,44 +686,25 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
     if data == "myfiles_settings":
-        user_settings = await db.get_settings(user_id)
-        auto_perm = True
-        if user_settings and "myfiles_auto_permanent" in user_settings:
-            auto_perm = user_settings["myfiles_auto_permanent"]
+        text = "⚙️ **Settings**\n\nSelect a category to configure:"
 
-        grouping_enabled = False
-        if Config.PUBLIC_MODE:
-            user_doc = await db.get_user(user_id)
-            grouping_enabled = user_doc.get("group_series_by_season", False)
-        else:
-            config = await db.settings.find_one({"_id": "global_settings"})
-            grouping_enabled = config.get("group_series_by_season", False)
-
-        emoji = "✅ ON" if auto_perm else "❌ OFF"
-        group_emoji = "✅ ON" if grouping_enabled else "❌ OFF"
-
-        text = (
-            "⚙️ **MyFiles Settings**\n\n"
-            "**Auto-Permanent Mode:** When enabled, files will automatically consume your permanent storage slots. "
-            "When disabled, files are saved as temporary by default, and you must manually mark them as permanent.\n\n"
-            "**Group Series by Season:** When enabled, files in Series folders will be dynamically grouped into virtual Season subfolders based on metadata."
-        )
         buttons = [
-            [InlineKeyboardButton(f"Auto-Permanent: {emoji}", callback_data="myfiles_toggle_auto")],
-            [InlineKeyboardButton(f"Group Series by Season: {group_emoji}", callback_data="myfiles_toggle_grouping")]
+            [InlineKeyboardButton("🌐 General Settings", callback_data="settings_cat_general")],
+            [InlineKeyboardButton("🎬 File Processing", callback_data="settings_cat_processing")],
+            [InlineKeyboardButton("📁 MyFiles Preferences", callback_data="settings_cat_myfiles")],
+            [InlineKeyboardButton("🔔 Notifications", callback_data="settings_cat_notifications")],
+            [InlineKeyboardButton("🖥️ Display", callback_data="settings_cat_display")],
         ]
 
-        # Check if user has privacy settings
         user_doc = await db.get_user(user_id)
         is_premium = user_doc.get("is_premium", False) if user_doc else False
         plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
-
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-
         is_global_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
+
         if plan_features.get("privacy_settings", False) or plan == "global" or is_global_admin:
-            buttons.append([InlineKeyboardButton("🔒 Privacy Settings", callback_data="myfiles_privacy_settings")])
+            buttons.append([InlineKeyboardButton("🔒 Privacy Settings", callback_data="settings_cat_privacy")])
 
         buttons.append([InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")])
         buttons.append([InlineKeyboardButton("← Back to MyFiles", callback_data="myfiles_main")])
@@ -656,19 +715,163 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data == "myfiles_toggle_grouping":
         if Config.PUBLIC_MODE:
             user_doc = await db.get_user(user_id)
-            current = user_doc.get("group_series_by_season", False)
+            current = user_doc.get("group_series_by_season", True)
             await db.users.update_one({"user_id": user_id}, {"$set": {"group_series_by_season": not current}})
         else:
             config = await db.settings.find_one({"_id": "global_settings"})
-            current = config.get("group_series_by_season", False)
+            current = config.get("group_series_by_season", True)
             await db.settings.update_one({"_id": "global_settings"}, {"$set": {"group_series_by_season": not current}})
 
         await callback_query.answer("Grouping setting toggled.", show_alert=False)
-        callback_query.data = "myfiles_settings"
+        callback_query.data = "settings_cat_myfiles"
         await myfiles_callback(client, callback_query)
         return
 
-    if data == "myfiles_privacy_settings":
+    # === SETTINGS CATEGORY HANDLERS ===
+
+    if data == "settings_cat_general":
+        s = await db.get_settings(user_id)
+        lang = s.get("preferred_language", "en-US") if s else "en-US"
+        sep = s.get("preferred_separator", ".") if s else "."
+        channel = s.get("channel", Config.DEFAULT_CHANNEL) if s else Config.DEFAULT_CHANNEL
+        wf_mode = s.get("workflow_mode", "smart_media_mode") if s else "smart_media_mode"
+        thumb_mode = s.get("thumbnail_mode", "none") if s else "none"
+
+        sep_labels = {".": "Dot (.)", " ": "Space ( )", "_": "Underscore (_)", "-": "Dash (-)"}
+        wf_labels = {"smart_media_mode": "Smart Media", "quick_mode": "Quick Mode"}
+        thumb_labels = {"none": "None", "custom": "Custom", "auto": "Auto"}
+
+        text = (
+            "🌐 **General Settings**\n\n"
+            f"**Language:** `{lang}`\n"
+            f"**Separator:** {sep_labels.get(sep, sep)}\n"
+            f"**Default Channel:** `{channel}`\n"
+            f"**Workflow Mode:** {wf_labels.get(wf_mode, wf_mode)}\n"
+            f"**Thumbnail Mode:** {thumb_labels.get(thumb_mode, thumb_mode)}"
+        )
+        buttons = [
+            [InlineKeyboardButton(f"🌍 Language: {lang}", callback_data="stg_sel_preferred_language")],
+            [InlineKeyboardButton(f"✂️ Separator: {sep_labels.get(sep, sep)}", callback_data="stg_sel_preferred_separator")],
+            [InlineKeyboardButton(f"📺 Channel: {channel}", callback_data="stg_input_channel")],
+            [InlineKeyboardButton(f"🔄 Workflow: {wf_labels.get(wf_mode, wf_mode)}", callback_data="stg_sel_workflow_mode")],
+            [InlineKeyboardButton(f"🖼️ Thumbnail: {thumb_labels.get(thumb_mode, thumb_mode)}", callback_data="stg_sel_thumbnail_mode")],
+            [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
+        ]
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    if data == "settings_cat_processing":
+        s = await db.get_settings(user_id)
+        quality = s.get("default_quality", "720p") if s else "720p"
+        auto_tmdb = s.get("auto_tmdb_match", True) if s else True
+        def_type = s.get("default_media_type", "auto") if s else "auto"
+        preserve = s.get("preserve_original_filename", False) if s else False
+
+        type_labels = {"auto": "Auto-Detect", "movie": "Movie", "series": "Series", "general": "General"}
+
+        text = (
+            "🎬 **File Processing Settings**\n\n"
+            f"**Default Quality:** `{quality}`\n"
+            f"**Auto TMDb Match:** {'ON' if auto_tmdb else 'OFF'}\n"
+            f"**Default Media Type:** {type_labels.get(def_type, def_type)}\n"
+            f"**Preserve Original Filename:** {'ON' if preserve else 'OFF'}"
+        )
+        buttons = [
+            [InlineKeyboardButton(f"📐 Quality: {quality}", callback_data="stg_sel_default_quality")],
+            [InlineKeyboardButton(f"🔍 Auto TMDb: {'✅ ON' if auto_tmdb else '❌ OFF'}", callback_data="stg_toggle_auto_tmdb_match")],
+            [InlineKeyboardButton(f"📂 Default Type: {type_labels.get(def_type, def_type)}", callback_data="stg_sel_default_media_type")],
+            [InlineKeyboardButton(f"📎 Preserve Filename: {'✅ ON' if preserve else '❌ OFF'}", callback_data="stg_toggle_preserve_original_filename")],
+            [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
+        ]
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    if data == "settings_cat_myfiles":
+        s = await db.get_settings(user_id)
+        auto_perm = s.get("myfiles_auto_permanent", True) if s else True
+
+        grouping_enabled = True
+        if Config.PUBLIC_MODE:
+            user_doc = await db.get_user(user_id)
+            grouping_enabled = user_doc.get("group_series_by_season", True)
+        else:
+            gconfig = await db.settings.find_one({"_id": "global_settings"})
+            grouping_enabled = gconfig.get("group_series_by_season", True) if gconfig else True
+
+        sort_order = s.get("myfiles_default_sort", "newest") if s else "newest"
+        per_page = s.get("myfiles_files_per_page", 10) if s else 10
+        notify_expiry = s.get("myfiles_notify_expiry", False) if s else False
+
+        sort_labels = {"newest": "Newest First", "oldest": "Oldest First", "a-z": "A-Z"}
+
+        text = (
+            "📁 **MyFiles Preferences**\n\n"
+            f"**Auto-Permanent:** {'ON' if auto_perm else 'OFF'} — Files auto-consume permanent storage slots\n"
+            f"**Group by Season:** {'ON' if grouping_enabled else 'OFF'} — Group series files into virtual season folders\n"
+            f"**Sort Order:** {sort_labels.get(sort_order, sort_order)}\n"
+            f"**Files Per Page:** {per_page}\n"
+            f"**Expiry Notification:** {'ON' if notify_expiry else 'OFF'}"
+        )
+        buttons = [
+            [InlineKeyboardButton(f"📌 Auto-Permanent: {'✅ ON' if auto_perm else '❌ OFF'}", callback_data="myfiles_toggle_auto")],
+            [InlineKeyboardButton(f"📺 Group by Season: {'✅ ON' if grouping_enabled else '❌ OFF'}", callback_data="myfiles_toggle_grouping")],
+            [InlineKeyboardButton(f"🔀 Sort: {sort_labels.get(sort_order, sort_order)}", callback_data="stg_sel_myfiles_default_sort")],
+            [InlineKeyboardButton(f"📄 Files/Page: {per_page}", callback_data="stg_sel_myfiles_files_per_page")],
+            [InlineKeyboardButton(f"⏰ Expiry Alert: {'✅ ON' if notify_expiry else '❌ OFF'}", callback_data="stg_toggle_myfiles_notify_expiry")],
+            [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
+        ]
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    if data == "settings_cat_notifications":
+        s = await db.get_settings(user_id)
+        notify_complete = s.get("notify_process_complete", True) if s else True
+        notify_batch = s.get("notify_batch_summary", True) if s else True
+        notify_quota = s.get("notify_quota_warning", True) if s else True
+        notify_digest = s.get("notify_daily_digest", False) if s else False
+
+        text = (
+            "🔔 **Notification Settings**\n\n"
+            f"**Process Completion:** {'ON' if notify_complete else 'OFF'} — Notify when file processing finishes\n"
+            f"**Batch Summary:** {'ON' if notify_batch else 'OFF'} — Show summary after batch processing\n"
+            f"**Quota Warning:** {'ON' if notify_quota else 'OFF'} — Alert when approaching usage limits\n"
+            f"**Daily Digest:** {'ON' if notify_digest else 'OFF'} — Daily summary of activity"
+        )
+        buttons = [
+            [InlineKeyboardButton(f"✅ Process Complete: {'✅ ON' if notify_complete else '❌ OFF'}", callback_data="stg_toggle_notify_process_complete")],
+            [InlineKeyboardButton(f"📊 Batch Summary: {'✅ ON' if notify_batch else '❌ OFF'}", callback_data="stg_toggle_notify_batch_summary")],
+            [InlineKeyboardButton(f"⚠️ Quota Warning: {'✅ ON' if notify_quota else '❌ OFF'}", callback_data="stg_toggle_notify_quota_warning")],
+            [InlineKeyboardButton(f"📅 Daily Digest: {'✅ ON' if notify_digest else '❌ OFF'}", callback_data="stg_toggle_notify_daily_digest")],
+            [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
+        ]
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    if data == "settings_cat_display":
+        s = await db.get_settings(user_id)
+        compact = s.get("display_compact_list", False) if s else False
+        show_sizes = s.get("display_show_file_sizes", True) if s else True
+        show_dates = s.get("display_show_dates", True) if s else True
+        show_icons = s.get("display_show_type_icons", True) if s else True
+
+        text = (
+            "🖥️ **Display Settings**\n\n"
+            f"**Compact List:** {'ON' if compact else 'OFF'} — Show condensed file listings\n"
+            f"**Show File Sizes:** {'ON' if show_sizes else 'OFF'} — Display file size info\n"
+            f"**Show Upload Dates:** {'ON' if show_dates else 'OFF'} — Display upload timestamps\n"
+            f"**File Type Icons:** {'ON' if show_icons else 'OFF'} — Show type indicators"
+        )
+        buttons = [
+            [InlineKeyboardButton(f"📋 Compact List: {'✅ ON' if compact else '❌ OFF'}", callback_data="stg_toggle_display_compact_list")],
+            [InlineKeyboardButton(f"📏 File Sizes: {'✅ ON' if show_sizes else '❌ OFF'}", callback_data="stg_toggle_display_show_file_sizes")],
+            [InlineKeyboardButton(f"📅 Upload Dates: {'✅ ON' if show_dates else '❌ OFF'}", callback_data="stg_toggle_display_show_dates")],
+            [InlineKeyboardButton(f"🏷️ Type Icons: {'✅ ON' if show_icons else '❌ OFF'}", callback_data="stg_toggle_display_show_type_icons")],
+            [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
+        ]
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    if data == "settings_cat_privacy" or data == "myfiles_privacy_settings":
         user_doc = await db.get_user(user_id)
         is_premium = user_doc.get("is_premium", False) if user_doc else False
         plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
@@ -683,47 +886,183 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
             return
 
-        user_settings = await db.get_settings(user_id)
+        s = await db.get_settings(user_id)
 
         share_name = True
-        if user_settings and "share_display_name" in user_settings:
-            share_name = user_settings["share_display_name"]
+        if s and "share_display_name" in s:
+            share_name = s["share_display_name"]
         elif is_premium:
-            # Default to False for premium users
             share_name = False
 
-        hide_forward = False
-        if user_settings and "hide_forward_tags" in user_settings:
-            hide_forward = user_settings["hide_forward_tags"]
+        hide_forward = s.get("hide_forward_tags", False) if s else False
+        link_anon = s.get("link_anonymity", False) if s else False
+        hide_user = s.get("privacy_hide_username", False) if s else False
+        auto_expire = s.get("privacy_auto_expire_links", False) if s else False
+        expire_dur = s.get("privacy_link_expiry_duration", "24h") if s else "24h"
 
-        link_anon = False
-        if user_settings and "link_anonymity" in user_settings:
-            link_anon = user_settings["link_anonymity"]
-
-        emoji_name = "✅ ON" if share_name else "❌ OFF"
-        emoji_fwd = "✅ ON" if hide_forward else "❌ OFF"
-        emoji_anon = "✅ ON" if link_anon else "❌ OFF"
-
-        text = (
-            "🔒 **Privacy Settings**\n\n"
-        )
-
+        text = "🔒 **Privacy Settings**\n\n"
         buttons = []
 
         if privacy_feat.get("hide_display_name", False) or plan == "global" or is_global_admin:
-            text += "**Share Display Name:** When enabled, your name will be displayed when sharing your files with others via deep links.\n\n"
-            buttons.append([InlineKeyboardButton(f"Display Name on Shares: {emoji_name}", callback_data="myfiles_toggle_share_name")])
+            text += f"**Display Name on Shares:** {'ON' if share_name else 'OFF'} — Show your name on shared files\n\n"
+            buttons.append([InlineKeyboardButton(f"👤 Display Name: {'✅ ON' if share_name else '❌ OFF'}", callback_data="myfiles_toggle_share_name")])
 
         if privacy_feat.get("hide_forward_tags", False) or plan == "global" or is_global_admin:
-            text += "**Hide Forwarding Tags:** When enabled, forwarded files will not have 'Forwarded from' tags when shared via deep links.\n\n"
-            buttons.append([InlineKeyboardButton(f"Hide Forward Tags: {emoji_fwd}", callback_data="myfiles_toggle_hide_fwd")])
+            text += f"**Hide Forward Tags:** {'ON' if hide_forward else 'OFF'} — Remove 'Forwarded from' on shares\n\n"
+            buttons.append([InlineKeyboardButton(f"🏷️ Hide Forward Tags: {'✅ ON' if hide_forward else '❌ OFF'}", callback_data="myfiles_toggle_hide_fwd")])
 
         if privacy_feat.get("link_anonymity", False) or plan == "global" or is_global_admin:
-            text += "**Link Anonymity:** When enabled, batch share links use a secure, anonymous hash rather than embedding your account ID.\n\n"
-            buttons.append([InlineKeyboardButton(f"Link Anonymity: {emoji_anon}", callback_data="myfiles_toggle_link_anon")])
+            text += f"**Link Anonymity:** {'ON' if link_anon else 'OFF'} — Use anonymous hash in share links\n\n"
+            buttons.append([InlineKeyboardButton(f"🔗 Link Anonymity: {'✅ ON' if link_anon else '❌ OFF'}", callback_data="myfiles_toggle_link_anon")])
 
-        buttons.append([InlineKeyboardButton("← Back to MyFiles Settings", callback_data="myfiles_settings")])
+        text += f"**Hide Username:** {'ON' if hide_user else 'OFF'} — Hide username on shared content\n\n"
+        buttons.append([InlineKeyboardButton(f"🙈 Hide Username: {'✅ ON' if hide_user else '❌ OFF'}", callback_data="stg_toggle_privacy_hide_username")])
+
+        text += f"**Auto-Expire Links:** {'ON' if auto_expire else 'OFF'} — Share links expire automatically\n\n"
+        buttons.append([InlineKeyboardButton(f"⏳ Auto-Expire Links: {'✅ ON' if auto_expire else '❌ OFF'}", callback_data="stg_toggle_privacy_auto_expire_links")])
+
+        if auto_expire:
+            dur_labels = {"1h": "1 Hour", "6h": "6 Hours", "24h": "24 Hours", "7d": "7 Days", "30d": "30 Days"}
+            text += f"**Link Expiry Duration:** {dur_labels.get(expire_dur, expire_dur)}\n\n"
+            buttons.append([InlineKeyboardButton(f"⏱️ Expiry: {dur_labels.get(expire_dur, expire_dur)}", callback_data="stg_sel_privacy_link_expiry_duration")])
+
+        buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")])
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    # === GENERIC SETTINGS TOGGLE HANDLER ===
+    if data.startswith("stg_toggle_"):
+        key = data.replace("stg_toggle_", "")
+        toggle_defaults = {
+            "auto_tmdb_match": True, "preserve_original_filename": False,
+            "myfiles_notify_expiry": False,
+            "notify_process_complete": True, "notify_batch_summary": True,
+            "notify_quota_warning": True, "notify_daily_digest": False,
+            "display_compact_list": False, "display_show_file_sizes": True,
+            "display_show_dates": True, "display_show_type_icons": True,
+            "privacy_hide_username": False, "privacy_auto_expire_links": False,
+        }
+        if key not in toggle_defaults:
+            await callback_query.answer("Unknown setting.", show_alert=True)
+            return
+
+        current = await db.get_setting(key, toggle_defaults[key], user_id)
+        await db.update_setting(key, not current, user_id)
+        await callback_query.answer("Setting updated.", show_alert=False)
+
+        cat_map = {
+            "auto_tmdb_match": "settings_cat_processing",
+            "preserve_original_filename": "settings_cat_processing",
+            "myfiles_notify_expiry": "settings_cat_myfiles",
+            "notify_process_complete": "settings_cat_notifications",
+            "notify_batch_summary": "settings_cat_notifications",
+            "notify_quota_warning": "settings_cat_notifications",
+            "notify_daily_digest": "settings_cat_notifications",
+            "display_compact_list": "settings_cat_display",
+            "display_show_file_sizes": "settings_cat_display",
+            "display_show_dates": "settings_cat_display",
+            "display_show_type_icons": "settings_cat_display",
+            "privacy_hide_username": "settings_cat_privacy",
+            "privacy_auto_expire_links": "settings_cat_privacy",
+        }
+        callback_query.data = cat_map.get(key, "myfiles_settings")
+        await myfiles_callback(client, callback_query)
+        return
+
+    # === GENERIC SETTINGS SELECT HANDLER ===
+    if data.startswith("stg_sel_"):
+        key = data.replace("stg_sel_", "")
+        select_options = {
+            "preferred_language": {
+                "en-US": "🇺🇸 English (US)", "de-DE": "🇩🇪 Deutsch", "es-ES": "🇪🇸 Espa\u00f1ol",
+                "fr-FR": "🇫🇷 Fran\u00e7ais", "pt-BR": "🇧🇷 Portugu\u00eas", "ja-JP": "🇯🇵 \u65e5\u672c\u8a9e",
+                "ko-KR": "🇰🇷 \ud55c\uad6d\uc5b4", "zh-CN": "🇨🇳 \u4e2d\u6587", "ar-SA": "🇸🇦 \u0627\u0644\u0639\u0631\u0628\u064a\u0629",
+                "hi-IN": "🇮🇳 \u0939\u093f\u0928\u094d\u0926\u0940", "ru-RU": "🇷🇺 \u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+                "it-IT": "🇮🇹 Italiano", "tr-TR": "🇹🇷 T\u00fcrk\u00e7e",
+            },
+            "preferred_separator": {".": "Dot (.)", " ": "Space ( )", "_": "Underscore (_)", "-": "Dash (-)"},
+            "workflow_mode": {"smart_media_mode": "Smart Media Mode", "quick_mode": "Quick Mode"},
+            "thumbnail_mode": {"none": "None", "custom": "Custom", "auto": "Auto"},
+            "default_quality": {"480p": "480p", "720p": "720p", "1080p": "1080p", "2160p": "2160p (4K)", "original": "Original"},
+            "default_media_type": {"auto": "Auto-Detect", "movie": "Movie", "series": "Series", "general": "General"},
+            "myfiles_default_sort": {"newest": "Newest First", "oldest": "Oldest First", "a-z": "A-Z"},
+            "myfiles_files_per_page": {"5": "5", "8": "8", "10": "10", "15": "15", "20": "20"},
+            "privacy_link_expiry_duration": {"1h": "1 Hour", "6h": "6 Hours", "24h": "24 Hours", "7d": "7 Days", "30d": "30 Days"},
+        }
+        if key not in select_options:
+            await callback_query.answer("Unknown setting.", show_alert=True)
+            return
+
+        options = select_options[key]
+        current = await db.get_setting(key, list(options.keys())[0] if key != "myfiles_files_per_page" else "10", user_id)
+
+        buttons = []
+        for val, label in options.items():
+            marker = " ✓" if str(current) == str(val) else ""
+            buttons.append([InlineKeyboardButton(f"{label}{marker}", callback_data=f"stg_opt_{key}_{val}")])
+
+        cat_back = {
+            "preferred_language": "settings_cat_general", "preferred_separator": "settings_cat_general",
+            "workflow_mode": "settings_cat_general", "thumbnail_mode": "settings_cat_general",
+            "default_quality": "settings_cat_processing", "default_media_type": "settings_cat_processing",
+            "myfiles_default_sort": "settings_cat_myfiles", "myfiles_files_per_page": "settings_cat_myfiles",
+            "privacy_link_expiry_duration": "settings_cat_privacy",
+        }
+        buttons.append([InlineKeyboardButton("← Back", callback_data=cat_back.get(key, "myfiles_settings"))])
+
+        label_title = key.replace("_", " ").title()
+        text = f"⚙️ **Select {label_title}**\n\nCurrent: `{options.get(str(current), current)}`"
+        await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    # === GENERIC SETTINGS OPTION SELECT HANDLER ===
+    if data.startswith("stg_opt_"):
+        remainder = data.replace("stg_opt_", "")
+        known_keys = [
+            "preferred_language", "preferred_separator", "workflow_mode", "thumbnail_mode",
+            "default_quality", "default_media_type", "myfiles_default_sort",
+            "myfiles_files_per_page", "privacy_link_expiry_duration",
+        ]
+        key = None
+        value = None
+        for k in known_keys:
+            if remainder.startswith(k + "_"):
+                key = k
+                value = remainder[len(k) + 1:]
+                break
+        if not key:
+            await callback_query.answer("Unknown option.", show_alert=True)
+            return
+
+        if key == "myfiles_files_per_page":
+            value = int(value)
+
+        await db.update_setting(key, value, user_id)
+        await callback_query.answer("Setting updated.", show_alert=False)
+
+        cat_back = {
+            "preferred_language": "settings_cat_general", "preferred_separator": "settings_cat_general",
+            "workflow_mode": "settings_cat_general", "thumbnail_mode": "settings_cat_general",
+            "default_quality": "settings_cat_processing", "default_media_type": "settings_cat_processing",
+            "myfiles_default_sort": "settings_cat_myfiles", "myfiles_files_per_page": "settings_cat_myfiles",
+            "privacy_link_expiry_duration": "settings_cat_privacy",
+        }
+        callback_query.data = cat_back.get(key, "myfiles_settings")
+        await myfiles_callback(client, callback_query)
+        return
+
+    # === SETTINGS TEXT INPUT HANDLER ===
+    if data.startswith("stg_input_"):
+        key = data.replace("stg_input_", "")
+        if key == "channel":
+            current = await db.get_setting("channel", Config.DEFAULT_CHANNEL, user_id)
+            await set_myfiles_state(user_id, {"state": "awaiting_setting_input", "setting_key": key, "timestamp": __import__('time').time()})
+            text = f"📺 **Set Default Channel**\n\nCurrent: `{current}`\n\nSend the new channel username (e.g. @MyChannel):"
+            markup = InlineKeyboardMarkup([[InlineKeyboardButton("← Cancel", callback_data="settings_cat_general")]])
+            await safe_edit_or_send(client, callback_query, text, markup)
+            return
+
+        await callback_query.answer("Unknown input setting.", show_alert=True)
         return
 
     if data == "myfiles_toggle_link_anon":
@@ -806,7 +1145,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"myfiles_auto_permanent": not auto_perm}}, upsert=True)
         await callback_query.answer("Setting updated", show_alert=False)
-        callback_query.data = "myfiles_settings"
+        callback_query.data = "settings_cat_myfiles"
         await myfiles_callback(client, callback_query)
         return
 
@@ -870,10 +1209,10 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         # Check grouping setting
         if Config.PUBLIC_MODE:
             user_doc = await db.get_user(user_id)
-            grouping_enabled = user_doc.get("group_series_by_season", False)
+            grouping_enabled = user_doc.get("group_series_by_season", True)
         else:
             config = await db.settings.find_one({"_id": "global_settings"})
-            grouping_enabled = config.get("group_series_by_season", False)
+            grouping_enabled = config.get("group_series_by_season", True)
 
         if folder.get('type') == 'series' and grouping_enabled:
             # Group by season
@@ -939,36 +1278,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             await callback_query.answer("Folder not found.", show_alert=True)
             return
 
-        filter_query = {"user_id": user_id, "folder_id": ObjectId(folder_id)} if Config.PUBLIC_MODE else {"folder_id": ObjectId(folder_id)}
-
-        # We need to filter files by season in the DB query
-        # Since MongoDB can't easily filter by nested variant types directly for this specific guessit structure,
-        # we do a normal fetch and filter in python if necessary. But to support pagination, we should build a query if possible.
-        # Let's try to query by guess_data.season. Since it can be a list or int, we use $in or simple equality.
-
-        if season.isdigit():
-            season_val = int(season)
-            str_season_val = str(season_val)
-            # Match where explicit DB season is season_val, or tmdb_data.season is season_val
-            # or file_name contains S01 / S1
-            filter_query["$or"] = [
-                {"season": season_val},
-                {"season": str_season_val},
-                {"guess_data.season": season_val},
-                {"guess_data.season": {"$in": [season_val]}},
-                {"tmdb_data.season": season_val},
-                {"tmdb_data.season": str_season_val},
-                {"file_name": {"$regex": f"[sS]0?{season_val}\\b"}},
-            ]
-        else:
-            # Handle "Unknown" or non-digit seasons
-            filter_query["$and"] = [
-                {"season": {"$exists": False}},
-                {"guess_data.season": {"$exists": False}},
-                {"tmdb_data.season": {"$exists": False}},
-                {"file_name": {"$not": {"$regex": r"[sS]\d{1,2}"}}}
-            ]
-
+        filter_query, _ = await get_query_and_title(user_id, data)
         buttons, total = await build_files_list_keyboard(user_id, filter_query, page=0, back_data=f"mf_sea_{folder_id}_{season}")
 
         text = f"📁 **{folder['name']} - Season {season}** ({total} files)\n\n📌 = Permanent | ⏳ = Temporary"
@@ -1082,7 +1392,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
     if data.startswith("myfiles_rename_"):
         file_id = data.replace("myfiles_rename_", "")
-        await set_myfiles_state(user_id, {"state": f"awaiting_rename_{file_id}"})
+        import time as _time
+        await set_myfiles_state(user_id, {"state": f"awaiting_rename_{file_id}", "timestamp": _time.time()})
 
         f = await db.files.find_one({"_id": ObjectId(file_id)})
         current_name = f.get("file_name", "") if f else ""

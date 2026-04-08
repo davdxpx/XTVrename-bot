@@ -4,7 +4,7 @@ from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from utils.tmdb import tmdb
 from utils.auth import auth_filter
-from utils.state import set_state, get_state, update_data, get_data, clear_session
+from utils.state import set_state, get_state, update_data, get_data, clear_session, mark_for_db_persist
 from plugins.process import process_file
 from utils.detect import analyze_filename, auto_match_tmdb
 from config import Config
@@ -27,6 +27,66 @@ batch_tasks = {}
 
 batch_status_msgs = {}
 
+_processing_callbacks = {}
+_expiry_warnings = {}
+
+async def _persist_session_to_db(user_id: int):
+    """Save critical session data to DB for crash recovery."""
+    from database import db as _db
+    data = get_data(user_id)
+    if not data:
+        return
+    persist_data = {}
+    for key in ("state", "type", "title", "year", "season", "episode", "quality",
+                "tmdb_id", "poster", "language", "is_subtitle", "dumb_channel",
+                "dest_folder", "send_as", "general_name", "original_name"):
+        if key in data:
+            persist_data[key] = data[key]
+    if persist_data:
+        await _db.save_flow_session(user_id, persist_data)
+        mark_for_db_persist(user_id)
+
+async def _clear_persisted_session(user_id: int):
+    """Clear persisted session from DB."""
+    from database import db as _db
+    await _db.clear_flow_session(user_id)
+
+async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 3300):
+    """Warn user 5 minutes before the 1-hour session expiry."""
+    try:
+        await asyncio.sleep(delay_seconds)
+        state = get_state(user_id)
+        if state:
+            await client.send_message(
+                user_id,
+                "Your renaming session will expire in **5 minutes** due to inactivity.\n"
+                "Send a file or press Cancel to avoid losing your progress.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Cancel Session", callback_data="cancel_rename")]
+                ])
+            )
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        pass
+
+def _start_expiry_timer(client, user_id: int):
+    """Start or restart the expiry warning timer."""
+    if user_id in _expiry_warnings:
+        _expiry_warnings[user_id].cancel()
+    _expiry_warnings[user_id] = asyncio.create_task(_schedule_expiry_warning(client, user_id))
+
+def _debounce_callback(user_id: int, callback_id: str) -> bool:
+    """Returns True if this callback should be skipped (duplicate rapid-fire)."""
+    import time as _t
+    key = f"{user_id}:{callback_id}"
+    now = _t.time()
+    last = _processing_callbacks.get(key, 0)
+    if now - last < 0.5:
+        return True
+    _processing_callbacks[key] = now
+    return False
+
 # === Helper Functions ===
 def format_episode_str(episode):
     if isinstance(episode, list):
@@ -35,15 +95,63 @@ def format_episode_str(episode):
         return f"E{int(episode):02d}"
     return ""
 
-@Client.on_callback_query(filters.regex(r"^start_renaming$"))
+@Client.on_callback_query(filters.regex(r"^(start_renaming|force_start_renaming|cancel_override)$"))
 
 # --- Handlers ---
 async def handle_start_renaming(client, callback_query):
-    await callback_query.answer()
     user_id = callback_query.from_user.id
+    cb_data = callback_query.data
+
+    if _debounce_callback(user_id, cb_data):
+        await callback_query.answer()
+        return
+    await callback_query.answer()
+
+    if cb_data == "cancel_override":
+        try:
+            await callback_query.message.edit_text(
+                "Keeping your current session. You can continue where you left off.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel Session", callback_data="cancel_rename")]]
+                ),
+            )
+        except MessageNotModified:
+            pass
+        return
+
+    existing_state = get_state(user_id)
+    if existing_state and cb_data != "force_start_renaming":
+        state_labels = {
+            "awaiting_type": "selecting media type",
+            "awaiting_search_movie": "searching for a movie",
+            "awaiting_search_series": "searching for a series",
+            "awaiting_manual_title": "entering a title",
+            "awaiting_file_upload": "waiting for file upload",
+            "awaiting_destination_selection": "selecting a destination",
+            "awaiting_general_name": "entering a filename",
+            "awaiting_general_file": "uploading a file",
+        }
+        label = state_labels.get(existing_state, existing_state)
+        try:
+            await callback_query.message.edit_text(
+                f"**Active Session Detected**\n\n"
+                f"You have an active session: **{label}**.\n"
+                "Starting a new session will cancel the current one.\n\n"
+                "What would you like to do?",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Start New Session", callback_data="force_start_renaming")],
+                    [InlineKeyboardButton("← Keep Current", callback_data="cancel_override")],
+                ]),
+            )
+        except MessageNotModified:
+            pass
+        return
+
     logger.debug(f"Start renaming flow for {user_id}")
     clear_session(user_id)
+    await _clear_persisted_session(user_id)
     set_state(user_id, "awaiting_type")
+    _start_expiry_timer(client, user_id)
 
     try:
         await callback_query.message.edit_text(
@@ -535,6 +643,7 @@ async def handle_text_input(client, message):
             if message.text.isdigit():
                 file_sessions[msg_id]["episode"] = int(message.text)
                 set_state(user_id, "awaiting_file_upload")
+                asyncio.create_task(_persist_session_to_db(user_id))
                 await update_confirmation_message(client, msg_id, user_id)
                 await message.delete()
             else:
@@ -546,6 +655,7 @@ async def handle_text_input(client, message):
             if message.text.isdigit():
                 file_sessions[msg_id]["season"] = int(message.text)
                 set_state(user_id, "awaiting_file_upload")
+                asyncio.create_task(_persist_session_to_db(user_id))
                 await update_confirmation_message(client, msg_id, user_id)
                 await message.delete()
             else:
@@ -810,6 +920,7 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False, page=
             return
 
         set_state(user_id, "awaiting_file_upload")
+        asyncio.create_task(_persist_session_to_db(user_id))
         text = "✅ **Ready!**\n\nNow, **send me the file(s)** you want to rename."
         reply_markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
@@ -953,6 +1064,7 @@ async def handle_dumb_selection(client, callback_query):
         return
 
     set_state(user_id, "awaiting_file_upload")
+    asyncio.create_task(_persist_session_to_db(user_id))
     try:
         await callback_query.message.edit_text(
             f"✅ **Ready!**\n\n" f"Now, **send me the file(s)** you want to rename.",
@@ -1121,6 +1233,10 @@ async def handle_cancel(client, callback_query):
                 logger.warning(f"Failed to remove archive on cancel: {e}")
 
     clear_session(user_id)
+    await _clear_persisted_session(user_id)
+    if user_id in _expiry_warnings:
+        _expiry_warnings[user_id].cancel()
+        del _expiry_warnings[user_id]
     toggles = await db.get_feature_toggles()
     show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
 
@@ -1587,6 +1703,26 @@ async def handle_file_upload(client, message):
         elif state == "awaiting_convert_file":
             pass
         else:
+            state_labels = {
+                "awaiting_type": "selecting a media type",
+                "awaiting_search_movie": "searching for a movie",
+                "awaiting_search_series": "searching for a series",
+                "awaiting_manual_title": "entering a title manually",
+                "awaiting_dumb_channel_selection": "selecting a channel",
+                "awaiting_destination_selection": "selecting a destination folder",
+                "awaiting_general_name": "entering a new filename",
+                "awaiting_general_send_as": "choosing output format",
+                "awaiting_language_custom": "entering a language code",
+            }
+            label = state_labels.get(state, "a different step")
+            warning = await message.reply_text(
+                f"You're currently **{label}**.\n"
+                "Please complete that step first, or cancel to start over.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Cancel & Start Over", callback_data="cancel_rename")]
+                ]),
+                quote=True,
+            )
             return
 
     if message.photo:
