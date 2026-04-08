@@ -1297,11 +1297,20 @@ class TaskProcessor:
 
             try:
                 if db_channel_id:
-                    db_msg = await self.client.copy_message(
-                        chat_id=db_channel_id,
-                        from_chat_id=media_msg.chat.id,
-                        message_id=media_msg.id,
-                    )
+                    from pyrogram.errors import PeerIdInvalid
+                    try:
+                        db_msg = await self.client.copy_message(
+                            chat_id=db_channel_id,
+                            from_chat_id=media_msg.chat.id,
+                            message_id=media_msg.id,
+                        )
+                    except PeerIdInvalid:
+                        await self.client.get_chat(db_channel_id)
+                        db_msg = await self.client.copy_message(
+                            chat_id=db_channel_id,
+                            from_chat_id=media_msg.chat.id,
+                            message_id=media_msg.id,
+                        )
                     saved_file_id = db_msg.id
                 else:
                     # Fallback to the chat the user is in if no DB channel is configured
@@ -1413,15 +1422,18 @@ class TaskProcessor:
                                 name = re.sub(r'[\._\s]{2,}', " ", name)
                                 name = name.strip('._ ')
                                 return name
-                            internal_name = clean_sys_filename(base_name, system_filename_template) + ext
+
+                            file_ext = os.path.splitext(self.output_path)[1].lower() if self.output_path else ".mkv"
+                            internal_name = clean_sys_filename(base_name, system_filename_template) + file_ext
                         elif self.title:
+                            file_ext = os.path.splitext(self.output_path)[1].lower() if self.output_path else ".mkv"
                             if self.media_type == "series":
                                 ep_str = "".join([f"E{int(e):02d}" for e in self.episode]) if isinstance(self.episode, list) else f"E{self.episode:02d}" if self.episode else ""
-                                internal_name = f"{self.title} S{self.season:02d}{ep_str}{ext}"
+                                internal_name = f"{self.title} S{self.season:02d}{ep_str}{file_ext}"
                             elif self.year:
-                                internal_name = f"{self.title} ({self.year}){ext}"
+                                internal_name = f"{self.title} ({self.year}){file_ext}"
                             else:
-                                internal_name = f"{self.title}{ext}"
+                                internal_name = f"{self.title}{file_ext}"
                     except Exception as e:
                         logger.warning(f"Error applying system filename template: {e}")
 
@@ -1559,18 +1571,34 @@ class TaskProcessor:
                             pass
 
                     try:
-                        if is_tunneling:
-                            await self.client.copy_message(
-                                chat_id=dumb_channel,
-                                from_chat_id=self.tunnel_id,
-                                message_id=media_msg.id,
-                            )
-                        else:
-                            await self.client.copy_message(
-                                chat_id=dumb_channel,
-                                from_chat_id=media_msg.chat.id,
-                                message_id=media_msg.id,
-                            )
+                        from pyrogram.errors import PeerIdInvalid
+                        try:
+                            if is_tunneling:
+                                await self.client.copy_message(
+                                    chat_id=dumb_channel,
+                                    from_chat_id=self.tunnel_id,
+                                    message_id=media_msg.id,
+                                )
+                            else:
+                                await self.client.copy_message(
+                                    chat_id=dumb_channel,
+                                    from_chat_id=media_msg.chat.id,
+                                    message_id=media_msg.id,
+                                )
+                        except PeerIdInvalid:
+                            await self.client.get_chat(dumb_channel)
+                            if is_tunneling:
+                                await self.client.copy_message(
+                                    chat_id=dumb_channel,
+                                    from_chat_id=self.tunnel_id,
+                                    message_id=media_msg.id,
+                                )
+                            else:
+                                await self.client.copy_message(
+                                    chat_id=dumb_channel,
+                                    from_chat_id=media_msg.chat.id,
+                                    message_id=media_msg.id,
+                                )
                         queue_manager.update_status(batch_id, item_id, "done_dumb")
                     except Exception as e:
                         logger.error(
@@ -1637,7 +1665,7 @@ class TaskProcessor:
         return str(round(size, 2)) + " " + dic_power[n] + "B"
 
     async def _update_status(self, text: str):
-        from pyrogram.errors import FloodWait
+        from pyrogram.errors import FloodWait, MessageIdInvalid
         for attempt in range(3):
             try:
                 if self.status_msg:
@@ -1646,6 +1674,9 @@ class TaskProcessor:
             except FloodWait as e:
                 logger.warning(f"FloodWait in _update_status: sleeping for {e.value}s")
                 await asyncio.sleep(e.value + 1)
+            except MessageIdInvalid:
+                logger.warning("MessageIdInvalid in _update_status: message was likely deleted.")
+                return
             except Exception as e:
                 logger.warning(f"Failed to update status message: {e}")
                 return
