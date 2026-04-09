@@ -558,8 +558,8 @@ async def handle_trim_command(client, message):
     mock_cb.message = msg
     await handle_video_trimmer_menu(client, mock_cb)
 
-@Client.on_message(filters.command(["i", "info"]) & filters.private, group=0)
-async def handle_info_command(client, message):
+@Client.on_message(filters.command(["mi", "mediainfo"]) & filters.private, group=0)
+async def handle_mediainfo_command(client, message):
     user_id = message.from_user.id
 
     toggles = await db.get_feature_toggles()
@@ -974,7 +974,7 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/watermark` or `/w` — Add image watermark\n"
                 "• `/subtitle` or `/s` — Extract subtitles\n"
                 "• `/trim` or `/t` — Trim/cut video by timestamp\n"
-                "• `/info` or `/i` — Show detailed media file info\n"
+                "• `/mediainfo` or `/mi` — Show detailed media file info\n"
                 "• `/voice` or `/v` — Convert audio to voice note\n"
                 "• `/videonote` or `/vn` — Convert video to round note"
             )
@@ -995,7 +995,8 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/start` — Main menu & dashboard\n"
                 "• `/help` — Open this guide\n"
                 "• `/end` — Cancel current task & reset session\n"
-                "• `/settings` — Personal settings & templates"
+                "• `/settings` — Personal settings & templates\n"
+                "• `/info` — Bot info & support contact"
             )
         else:
             text = "Unknown command category."
@@ -1102,7 +1103,7 @@ async def handle_help_callbacks(client, callback_query):
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "**What it does:**\n"
                 "Shows detailed technical information about a media file: codecs, resolution, bitrate, duration, and all streams.\n\n"
-                "• **Shortcut:** `/i` or `/info`."
+                "• **Shortcut:** `/mi` or `/mediainfo`."
             )
         elif tool == "voice":
             text = (
