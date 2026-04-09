@@ -167,7 +167,7 @@ async def get_myfiles_main_menu(user_id: int):
 
         text = (
             "📁 **MyFiles**\n"
-            "_Your personal media vault. Permanent files stick around — temp files vanish after use._\n\n"
+            "__Your personal media vault. Permanent files stick around — temp files vanish after use.__\n\n"
             f"**Plan** · `{plan_label}`\n"
             f"**Permanent Storage** · `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage** · `{temp_count}` files\n\n"
@@ -184,7 +184,7 @@ async def get_myfiles_main_menu(user_id: int):
 
         text = (
             "📁 **Team MyFiles**\n"
-            "_Global storage across all users._\n\n"
+            "__Global storage across all users.__\n\n"
             f"**Permanent Storage** · `{perm_count} / {limit_str}` files\n"
             f"**Temporary Storage** · `{temp_count}` files\n\n"
             "Browse by category:"
@@ -624,7 +624,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
 
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Copy Link", copy_text=deep_link)],
+            [InlineKeyboardButton("🔗 Open Link", url=deep_link)],
             [InlineKeyboardButton("← Back", callback_data=back_data)]
         ])
 

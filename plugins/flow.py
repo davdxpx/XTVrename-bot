@@ -209,7 +209,7 @@ async def handle_type_general(client, callback_query):
         await callback_query.message.edit_text(
             "📄 **General Mode**\n\n"
             "Please **send me the file** you want to rename.\n"
-            "_(You can send any type of file: Documents, Videos, Audio, etc.)_",
+            "__(You can send any type of file: Documents, Videos, Audio, etc.)__",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
@@ -1187,7 +1187,7 @@ async def handle_gen_prompt_rename(client, callback_query):
     text = (
         "✏️ **Enter the new name for this file:**\n\n"
         "You can use variables like `{filename}`, `{Season_Episode}`, `{Quality}`, `{Year}`, `{Title}`.\n"
-        "_(The extension is added automatically)_\n\n"
+        "__(The extension is added automatically)__\n\n"
         f"Original Name: `{orig_name}`"
     )
 
