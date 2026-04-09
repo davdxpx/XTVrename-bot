@@ -162,12 +162,16 @@ async def get_myfiles_main_menu(user_id: int):
 
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
+        plan_emoji = {"free": "🆓", "standard": "⭐", "deluxe": "💎"}.get(plan, "")
+        plan_label = f"{plan_emoji} {plan.capitalize()}"
+
         text = (
-            "📁 **MyFiles Management**\n\n"
-            f"**Plan:** `{plan.capitalize()}`\n"
-            f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
-            f"**Temporary Storage:** `{temp_count}` files\n\n"
-            "Select a category to view your files:"
+            "📁 **MyFiles**\n"
+            "_Your personal media vault. Permanent files stick around — temp files vanish after use._\n\n"
+            f"**Plan** · `{plan_label}`\n"
+            f"**Saved** · `{perm_count} / {limit_str}` files\n"
+            f"**Temp** · `{temp_count}` files\n\n"
+            "What are you looking for?"
         )
     else:
         perm_count = await db.files.count_documents({"status": "permanent"})
@@ -179,10 +183,11 @@ async def get_myfiles_main_menu(user_id: int):
         limit_str = str(perm_limit) if perm_limit != -1 else "Unlimited"
 
         text = (
-            "📁 **Team MyFiles Management**\n\n"
-            f"**Permanent Storage:** `{perm_count} / {limit_str}` files\n"
-            f"**Temporary Storage:** `{temp_count}` files\n\n"
-            "Select a category to view files:"
+            "📁 **Team MyFiles**\n"
+            "_Global storage across all users._\n\n"
+            f"**Saved** · `{perm_count} / {limit_str}` files\n"
+            f"**Temp** · `{temp_count}` files\n\n"
+            "Browse by category:"
         )
 
     has_movies = await db.folders.count_documents({"user_id": user_id, "type": "movies"} if Config.PUBLIC_MODE else {"type": "movies"}) > 0

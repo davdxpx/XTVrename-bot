@@ -803,7 +803,7 @@ async def handle_help_callbacks(client, callback_query):
                 "• `{Season_Episode}` - Ex: S01E01\n"
                 "• `{Quality}` - Ex: 1080p\n"
                 "• `{Year}`, `{Title}`\n"
-                "*(Extensions are always added automatically)*",
+                "_(Extensions are always added automatically)_",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
@@ -821,7 +821,7 @@ async def handle_help_callbacks(client, callback_query):
                 "• `.mp3`, `.flac`, `.m4a`, `.wav`, `.aac`\n\n"
                 "**Supported Image Formats:**\n"
                 "• `.jpg`, `.png`, `.webp`, `.jpeg`\n\n"
-                "*(The bot can process any extension, but specific tools like the Converter or Audio Editor only work with media files!)*",
+                "_(The bot can process any extension, but specific tools like the Converter or Audio Editor only work with media files!)_",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
