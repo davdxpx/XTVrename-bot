@@ -535,11 +535,19 @@ async def handle_help_command_unique(client, message):
         "Please select a topic below to explore the guide:",
         reply_markup=InlineKeyboardMarkup(
             [
+                [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                 [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
-                [InlineKeyboardButton("📁 File Management", callback_data="help_file_management")],
-                [InlineKeyboardButton("🤖 Auto-Detect Magic", callback_data="help_auto_detect")],
-                [InlineKeyboardButton("📄 Personal & General Mode", callback_data="help_general")],
+                [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
+                 InlineKeyboardButton("🤖 Auto-Detect", callback_data="help_auto_detect")],
+                [InlineKeyboardButton("📄 Personal & General", callback_data="help_general"),
+                 InlineKeyboardButton("🏷️ Templates", callback_data="help_templates")],
+                [InlineKeyboardButton("📺 Dumb Channels", callback_data="help_dumb_channels"),
+                 InlineKeyboardButton("🔗 Bot Commands", callback_data="help_commands")],
                 [InlineKeyboardButton("⚙️ Settings & Info", callback_data="help_settings")],
+                [InlineKeyboardButton("🎞️ Formats & Codecs", callback_data="help_formats"),
+                 InlineKeyboardButton("📈 Quotas & Limits", callback_data="help_quotas")],
+                [InlineKeyboardButton("💎 Premium Plans", callback_data="help_premium")],
+                [InlineKeyboardButton("🔧 Troubleshooting", callback_data="help_troubleshooting")],
                 [InlineKeyboardButton("❌ Close", callback_data="help_close")],
             ]
         ),
@@ -641,14 +649,17 @@ async def handle_help_callbacks(client, callback_query):
                 "Please select a topic below to explore the guide:",
                 reply_markup=InlineKeyboardMarkup(
                     [
+                        [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                         [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
-                        [InlineKeyboardButton("📁 File Management", callback_data="help_file_management")],
-                        [InlineKeyboardButton("🤖 Auto-Detect Magic", callback_data="help_auto_detect")],
-                        [InlineKeyboardButton("📄 Personal & General Mode", callback_data="help_general")],
-                        [InlineKeyboardButton("📺 Dumb Channels Guide", callback_data="help_dumb_channels")],
+                        [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
+                         InlineKeyboardButton("🤖 Auto-Detect", callback_data="help_auto_detect")],
+                        [InlineKeyboardButton("📄 Personal & General", callback_data="help_general"),
+                         InlineKeyboardButton("🏷️ Templates", callback_data="help_templates")],
+                        [InlineKeyboardButton("📺 Dumb Channels", callback_data="help_dumb_channels"),
+                         InlineKeyboardButton("🔗 Bot Commands", callback_data="help_commands")],
                         [InlineKeyboardButton("⚙️ Settings & Info", callback_data="help_settings")],
-                        [InlineKeyboardButton("🎞️ Formats & Codecs", callback_data="help_formats")],
-                        [InlineKeyboardButton("📈 Quotas & Limits", callback_data="help_quotas")],
+                        [InlineKeyboardButton("🎞️ Formats & Codecs", callback_data="help_formats"),
+                         InlineKeyboardButton("📈 Quotas & Limits", callback_data="help_quotas")],
                         [InlineKeyboardButton("💎 Premium Plans", callback_data="help_premium")],
                         [InlineKeyboardButton("🔧 Troubleshooting", callback_data="help_troubleshooting")],
                         [InlineKeyboardButton("❌ Close", callback_data="help_close")],
@@ -673,6 +684,164 @@ async def handle_help_callbacks(client, callback_query):
                 "You can specify a channel to automatically receive Movies, Series, or Everything (Standard). Once setup, you can select these channels as destinations during processing.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
+        except MessageNotModified:
+            pass
+
+    elif data == "help_quickstart":
+        try:
+            await callback_query.message.edit_text(
+                "**🚀 Quick Start Guide**\n\n"
+                "> Get started in seconds.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**3 Simple Steps:**\n"
+                "1. **Send** any media file directly to this chat.\n"
+                "2. **Confirm** the detected metadata or customize it.\n"
+                "3. **Receive** your perfectly tagged and renamed file!\n\n"
+                "That's it! For advanced features, explore the other topics in this guide.",
+                reply_markup=InlineKeyboardMarkup(back_button),
+            )
+        except MessageNotModified:
+            pass
+
+    elif data == "help_templates":
+        try:
+            await callback_query.message.edit_text(
+                "**🏷️ Templates & Variables**\n\n"
+                "> Customize your output format.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Templates control how your files are named and captioned after processing. "
+                "Select a topic below to learn more:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("📝 Filename Templates", callback_data="help_tpl_filename"),
+                         InlineKeyboardButton("💬 Caption Templates", callback_data="help_tpl_caption")],
+                        [InlineKeyboardButton("📋 Variable Reference", callback_data="help_tpl_variables"),
+                         InlineKeyboardButton("🎯 Template Examples", callback_data="help_tpl_examples")],
+                        [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
+                    ]
+                )
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_tpl_"):
+        tpl = data.replace("help_tpl_", "")
+        back_to_tpl = [[InlineKeyboardButton("← Back to Templates", callback_data="help_templates")]]
+
+        if tpl == "filename":
+            text = (
+                "**📝 Filename Templates**\n\n"
+                "> Control your output filenames.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Go to `/settings` > **Filename Template** to set your format.\n\n"
+                "• Use variables like `{Title}`, `{Year}`, `{Quality}` to build dynamic names.\n"
+                "• The file extension is always added automatically.\n"
+                "• Example: `{Title} ({Year}) [{Quality}]` → `Inception (2010) [1080p].mkv`"
+            )
+        elif tpl == "caption":
+            text = (
+                "**💬 Caption Templates**\n\n"
+                "> Customize file captions.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Captions appear below your file in Telegram.\n\n"
+                "• Set via `/settings` > **Caption Template**.\n"
+                "• Supports the same variables as filename templates.\n"
+                "• You can use Telegram formatting: **bold**, __italic__, `code`."
+            )
+        elif tpl == "variables":
+            text = (
+                "**📋 Variable Reference**\n\n"
+                "> All available template variables.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• `{Title}` — Detected movie/series title\n"
+                "• `{Year}` — Release year\n"
+                "• `{Quality}` — e.g. 1080p, 720p\n"
+                "• `{Season_Episode}` — e.g. S01E01\n"
+                "• `{filename}` — Original filename\n"
+                "• `{extension}` — File extension\n"
+                "• `{size}` — File size"
+            )
+        elif tpl == "examples":
+            text = (
+                "**🎯 Template Examples**\n\n"
+                "> Ready-to-use templates.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Movies:**\n"
+                "• `{Title} ({Year}) [{Quality}]`\n"
+                "→ `Inception (2010) [1080p].mkv`\n\n"
+                "**Series:**\n"
+                "• `{Title} {Season_Episode} [{Quality}]`\n"
+                "→ `Breaking Bad S01E01 [720p].mkv`\n\n"
+                "**Simple:**\n"
+                "• `{Title}` → `Inception.mkv`"
+            )
+        else:
+            text = "Unknown template topic."
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_tpl))
+        except MessageNotModified:
+            pass
+
+    elif data == "help_commands":
+        try:
+            await callback_query.message.edit_text(
+                "**🔗 Bot Commands**\n\n"
+                "> Quick reference for all commands.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Select a category to see available commands:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("🎬 Media Commands", callback_data="help_cmd_media")],
+                        [InlineKeyboardButton("📁 File & Mode Commands", callback_data="help_cmd_files")],
+                        [InlineKeyboardButton("⚙️ System Commands", callback_data="help_cmd_system")],
+                        [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
+                    ]
+                )
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_cmd_"):
+        cmd = data.replace("help_cmd_", "")
+        back_to_cmd = [[InlineKeyboardButton("← Back to Commands", callback_data="help_commands")]]
+
+        if cmd == "media":
+            text = (
+                "**🎬 Media Commands**\n\n"
+                "> Process and edit your media.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• `/rename` or `/r` — Start the rename & tag tool\n"
+                "• `/audio` or `/a` — Open the audio metadata editor\n"
+                "• `/convert` or `/c` — Convert file formats\n"
+                "• `/watermark` or `/w` — Add image watermark\n"
+                "• `/subtitle` or `/s` — Extract subtitles"
+            )
+        elif cmd == "files":
+            text = (
+                "**📁 File & Mode Commands**\n\n"
+                "> Manage files and modes.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• `/myfiles` — Access your personal file storage\n"
+                "• `/g` — Activate General Mode (no metadata)\n"
+                "• Just send a file directly to start Auto-Detect Mode"
+            )
+        elif cmd == "system":
+            text = (
+                "**⚙️ System Commands**\n\n"
+                "> Control the bot.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• `/start` — Main menu & dashboard\n"
+                "• `/help` — Open this guide\n"
+                "• `/end` — Cancel current task & reset session\n"
+                "• `/settings` — Personal settings & templates\n"
+                "• `/info` — Bot info & support contact"
+            )
+        else:
+            text = "Unknown command category."
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_cmd))
         except MessageNotModified:
             pass
 
@@ -867,15 +1036,16 @@ async def handle_help_callbacks(client, callback_query):
                 "**🔧 Troubleshooting & FAQ**\n\n"
                 "> Common issues and solutions.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "Select the issue you are experiencing below to see how to fix it:",
+                "Select the category that best matches your issue:",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("🤖 Bot Not Responding", callback_data="help_ts_no_response"),
-                         InlineKeyboardButton("❌ Wrong Metadata", callback_data="help_ts_wrong_meta")],
-                        [InlineKeyboardButton("📦 File Too Large", callback_data="help_ts_file_size"),
-                         InlineKeyboardButton("⏳ Stuck Processing", callback_data="help_ts_stuck")],
-                        [InlineKeyboardButton("🎵 Missing Audio/Subs", callback_data="help_ts_missing_tracks"),
-                         InlineKeyboardButton("📝 Subtitles Won't Extract", callback_data="help_ts_subs_fail")],
+                        [InlineKeyboardButton("🔌 Connection & Access", callback_data="help_ts_cat_connect"),
+                         InlineKeyboardButton("📤 Upload & Download", callback_data="help_ts_cat_upload")],
+                        [InlineKeyboardButton("🏷️ Metadata & Detection", callback_data="help_ts_cat_meta"),
+                         InlineKeyboardButton("⚙️ Processing Issues", callback_data="help_ts_cat_process")],
+                        [InlineKeyboardButton("🎵 Audio & Subtitles", callback_data="help_ts_cat_audio"),
+                         InlineKeyboardButton("📁 Files & Storage", callback_data="help_ts_cat_files")],
+                        [InlineKeyboardButton("💎 Account & Premium", callback_data="help_ts_cat_account")],
                         [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
                     ]
                 )
@@ -883,10 +1053,101 @@ async def handle_help_callbacks(client, callback_query):
         except MessageNotModified:
             pass
 
-    elif data.startswith("help_ts_"):
-        issue = data.replace("help_ts_", "")
+    elif data.startswith("help_ts_cat_"):
+        cat = data.replace("help_ts_cat_", "")
         back_to_ts = [[InlineKeyboardButton("← Back to Troubleshooting", callback_data="help_troubleshooting")]]
 
+        if cat == "connect":
+            text = "**🔌 Connection & Access**\n\n> Issues with reaching the bot.\n━━━━━━━━━━━━━━━━━━━━\nSelect your specific issue:"
+            buttons = [
+                [InlineKeyboardButton("🤖 Bot Not Responding", callback_data="help_ts_no_response"),
+                 InlineKeyboardButton("🚫 Bot Seems Blocked", callback_data="help_ts_blocked")],
+                [InlineKeyboardButton("⌨️ Commands Ignored", callback_data="help_ts_cmd_ignored"),
+                 InlineKeyboardButton("🔒 Private Chat Error", callback_data="help_ts_private_only")],
+            ]
+        elif cat == "upload":
+            text = "**📤 Upload & Download**\n\n> Issues with file transfers.\n━━━━━━━━━━━━━━━━━━━━\nSelect your specific issue:"
+            buttons = [
+                [InlineKeyboardButton("📦 File Too Large", callback_data="help_ts_file_size"),
+                 InlineKeyboardButton("💥 Upload Fails", callback_data="help_ts_upload_fail")],
+                [InlineKeyboardButton("🐌 Slow Transfer", callback_data="help_ts_slow_transfer"),
+                 InlineKeyboardButton("🔨 File Corrupted", callback_data="help_ts_corrupted")],
+            ]
+        elif cat == "meta":
+            text = "**🏷️ Metadata & Detection**\n\n> Issues with auto-detection.\n━━━━━━━━━━━━━━━━━━━━\nSelect your specific issue:"
+            buttons = [
+                [InlineKeyboardButton("❌ Wrong Metadata", callback_data="help_ts_wrong_meta"),
+                 InlineKeyboardButton("🔍 TMDb No Results", callback_data="help_ts_tmdb_empty")],
+                [InlineKeyboardButton("📺 Wrong Season/Ep", callback_data="help_ts_wrong_ep"),
+                 InlineKeyboardButton("🖼 Poster Not Loading", callback_data="help_ts_poster_fail")],
+            ]
+        elif cat == "process":
+            text = "**⚙️ Processing Issues**\n\n> Issues during file processing.\n━━━━━━━━━━━━━━━━━━━━\nSelect your specific issue:"
+            buttons = [
+                [InlineKeyboardButton("⏳ Stuck Processing", callback_data="help_ts_stuck"),
+                 InlineKeyboardButton("💥 Conversion Fails", callback_data="help_ts_conv_fail")],
+                [InlineKeyboardButton("📄 Output Empty", callback_data="help_ts_empty_output"),
+                 InlineKeyboardButton("📉 Bad Quality", callback_data="help_ts_bad_quality")],
+            ]
+        elif cat == "audio":
+            text = "**🎵 Audio & Subtitles**\n\n> Issues with audio and subtitle tracks.\n━━━━━━━━━━━━━━━━━━━━\nSelect your specific issue:"
+            buttons = [
+                [InlineKeyboardButton("🎵 Missing Tracks", callback_data="help_ts_missing_tracks"),
+                 InlineKeyboardButton("📝 Subs Won't Extract", callback_data="help_ts_subs_fail")],
+                [InlineKeyboardButton("🔊 Audio Out of Sync", callback_data="help_ts_audio_sync"),
+                 InlineKeyboardButton("🗣 Wrong Language", callback_data="help_ts_wrong_lang")],
+            ]
+        elif cat == "files":
+            text = "**📁 Files & Storage**\n\n> Issues with your stored files.\n━━━━━━━━━━━━━━━━━━━━\nSelect your specific issue:"
+            buttons = [
+                [InlineKeyboardButton("📂 MyFiles Not Loading", callback_data="help_ts_myfiles_fail"),
+                 InlineKeyboardButton("⏰ Files Expired Early", callback_data="help_ts_expired")],
+                [InlineKeyboardButton("🗑 Can't Delete Files", callback_data="help_ts_cant_delete"),
+                 InlineKeyboardButton("💾 Storage Full", callback_data="help_ts_storage_full")],
+            ]
+        elif cat == "account":
+            text = "**💎 Account & Premium**\n\n> Issues with your account or plan.\n━━━━━━━━━━━━━━━━━━━━\nSelect your specific issue:"
+            buttons = [
+                [InlineKeyboardButton("💎 Premium Not Active", callback_data="help_ts_prem_fail"),
+                 InlineKeyboardButton("🔄 Quota Not Resetting", callback_data="help_ts_quota_reset")],
+                [InlineKeyboardButton("⬆️ Upgrade Problems", callback_data="help_ts_upgrade_fail"),
+                 InlineKeyboardButton("👤 Account Not Found", callback_data="help_ts_acc_missing")],
+            ]
+        else:
+            text = "Unknown category."
+            buttons = []
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(buttons + back_to_ts)
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_ts_"):
+        issue = data.replace("help_ts_", "")
+
+        ts_categories = {
+            "no_response": "connect", "blocked": "connect", "cmd_ignored": "connect", "private_only": "connect",
+            "file_size": "upload", "upload_fail": "upload", "slow_transfer": "upload", "corrupted": "upload",
+            "wrong_meta": "meta", "tmdb_empty": "meta", "wrong_ep": "meta", "poster_fail": "meta",
+            "stuck": "process", "conv_fail": "process", "empty_output": "process", "bad_quality": "process",
+            "missing_tracks": "audio", "subs_fail": "audio", "audio_sync": "audio", "wrong_lang": "audio",
+            "myfiles_fail": "files", "expired": "files", "cant_delete": "files", "storage_full": "files",
+            "prem_fail": "account", "quota_reset": "account", "upgrade_fail": "account", "acc_missing": "account",
+        }
+        cat_names = {
+            "connect": "Connection", "upload": "Upload", "meta": "Metadata",
+            "process": "Processing", "audio": "Audio & Subs", "files": "Files & Storage",
+            "account": "Account"
+        }
+        cat = ts_categories.get(issue, "")
+        back_label = cat_names.get(cat, "Troubleshooting")
+        back_cb = f"help_ts_cat_{cat}" if cat else "help_troubleshooting"
+        back_to_cat = [[InlineKeyboardButton(f"← Back to {back_label}", callback_data=back_cb)]]
+
+        # --- Connection & Access ---
         if issue == "no_response":
             text = (
                 "**🤖 Bot Not Responding**\n\n"
@@ -895,15 +1156,31 @@ async def handle_help_callbacks(client, callback_query):
                 "**2. Active Session:** The bot might be stuck waiting for your input on a previous task. Type `/end` to completely reset your session and try again.\n"
                 "**3. Global Maintenance:** Occasionally, the bot undergoes maintenance or restarts. Give it a couple of minutes."
             )
-        elif issue == "wrong_meta":
+        elif issue == "blocked":
             text = (
-                "**❌ Wrong Metadata / Bad TMDb Match**\n\n"
-                "Sometimes, the Auto-Detector grabs the wrong poster or movie name because the original filename was too messy.\n\n"
-                "**How to fix it:**\n"
-                "1. **Clean the Filename:** Rename the file on your phone/PC *before* sending it. Format it like `Movie Title (Year).mp4`. This gives the bot a 99% success rate.\n"
-                "2. **Use Quick Rename:** If it's not a real movie, go to `/settings` and enable **Quick Rename Mode**. This skips TMDb entirely!\n"
-                "3. **Manual Override:** When the bot asks you to confirm the TMDb details, just hit **Skip / Manual**."
+                "**🚫 Bot Seems Blocked**\n\n"
+                "If you can't start or interact with the bot at all:\n\n"
+                "**1. Unblock the Bot:** Open the bot's profile in Telegram and check if you accidentally blocked it. Tap 'Unblock' if so.\n"
+                "**2. Restart the Bot:** Send `/start` to re-initialize your session.\n"
+                "**3. Access Restricted:** In Public Mode, the admin may have restricted access. Contact the bot owner."
             )
+        elif issue == "cmd_ignored":
+            text = (
+                "**⌨️ Commands Ignored**\n\n"
+                "If the bot doesn't react to your commands:\n\n"
+                "**1. Private Chat Only:** Most commands only work in the bot's private chat, not in groups.\n"
+                "**2. Typo in Command:** Ensure you're typing the exact command (e.g. `/rename`, not `/Rename`).\n"
+                "**3. Active Session:** You may have a pending task. Type `/end` first, then retry your command."
+            )
+        elif issue == "private_only":
+            text = (
+                "**🔒 Private Chat Error**\n\n"
+                "If you get a 'private chat only' error:\n\n"
+                "**1. Open Private Chat:** Click on the bot's name and tap 'Message' to open a direct chat.\n"
+                "**2. Group Limitations:** The bot processes files only in private chats. Groups are used for Dumb Channel routing only.\n"
+                "**3. Start the Bot:** Send `/start` in the private chat to initialize."
+            )
+        # --- Upload & Download ---
         elif issue == "file_size":
             text = (
                 "**📦 File Too Large (2GB Limit)**\n\n"
@@ -914,6 +1191,65 @@ async def handle_help_callbacks(client, callback_query):
                 "**Workarounds:**\n"
                 "If your file is 2.5GB, you must either compress it on your computer before sending it, or upgrade to a Premium Plan to unlock the 4GB bot capacity."
             )
+        elif issue == "upload_fail":
+            text = (
+                "**💥 Upload Fails Midway**\n\n"
+                "If your upload keeps failing or disconnecting:\n\n"
+                "**1. Network Stability:** Ensure you have a stable internet connection. Switch from Wi-Fi to mobile data or vice versa.\n"
+                "**2. File Size:** Verify the file isn't exceeding Telegram's upload limit for your account type.\n"
+                "**3. Telegram Servers:** Telegram may be experiencing issues. Wait a few minutes and try again."
+            )
+        elif issue == "slow_transfer":
+            text = (
+                "**🐌 Slow Transfer Speed**\n\n"
+                "If uploads or downloads are very slow:\n\n"
+                "**1. Server Load:** During peak hours, Telegram's servers can be slower. Try again at a different time.\n"
+                "**2. File Size:** Large files naturally take longer. A 1.5GB file can take several minutes.\n"
+                "**3. Your Connection:** Test your internet speed. The bot can only transfer as fast as your connection allows."
+            )
+        elif issue == "corrupted":
+            text = (
+                "**🔨 File Corrupted After Download**\n\n"
+                "If the file you received appears broken or won't play:\n\n"
+                "**1. Re-Download:** Try downloading the file again from the bot's message. Telegram sometimes corrupts files during transfer.\n"
+                "**2. Original File:** The source file may have been corrupted before processing. Test the original on your device.\n"
+                "**3. Format Issue:** Some players can't handle certain codecs. Try opening the file with VLC."
+            )
+        # --- Metadata & Detection ---
+        elif issue == "wrong_meta":
+            text = (
+                "**❌ Wrong Metadata / Bad TMDb Match**\n\n"
+                "Sometimes, the Auto-Detector grabs the wrong poster or movie name because the original filename was too messy.\n\n"
+                "**How to fix it:**\n"
+                "1. **Clean the Filename:** Rename the file on your phone/PC *before* sending it. Format it like `Movie Title (Year).mp4`. This gives the bot a 99% success rate.\n"
+                "2. **Use Quick Rename:** If it's not a real movie, go to `/settings` and enable **Quick Rename Mode**. This skips TMDb entirely!\n"
+                "3. **Manual Override:** When the bot asks you to confirm the TMDb details, just hit **Skip / Manual**."
+            )
+        elif issue == "tmdb_empty":
+            text = (
+                "**🔍 TMDb No Results**\n\n"
+                "If the bot can't find your movie or series on TMDb:\n\n"
+                "**1. Clean the Filename:** Remove junk from the name. `Movie.2024.1080p.WEB-DL.x264` should become `Movie (2024).mp4`.\n"
+                "**2. English Title:** TMDb works best with English titles. If your file has a foreign title, try the international name.\n"
+                "**3. New Release:** Very new or obscure releases may not be on TMDb yet. Use **Skip / Manual** to set details yourself."
+            )
+        elif issue == "wrong_ep":
+            text = (
+                "**📺 Wrong Season/Episode**\n\n"
+                "If the bot detects the wrong season or episode number:\n\n"
+                "**1. Filename Format:** Ensure the file follows common naming: `Show S01E05.mkv` or `Show - 1x05.mkv`.\n"
+                "**2. Absolute Numbering:** Some anime uses absolute episode numbers. The bot expects SxxExx format.\n"
+                "**3. Manual Edit:** When the bot shows detected info, you can manually change the season and episode before confirming."
+            )
+        elif issue == "poster_fail":
+            text = (
+                "**🖼 Poster Not Loading**\n\n"
+                "If the thumbnail or poster doesn't appear:\n\n"
+                "**1. TMDb Availability:** Not all titles have poster images on TMDb. The bot can only use what's available.\n"
+                "**2. Set a Custom Thumbnail:** Go to `/settings` > **Default Thumbnail** and upload your own.\n"
+                "**3. Skip / Manual:** When in manual mode, you can send any image as the thumbnail."
+            )
+        # --- Processing Issues ---
         elif issue == "stuck":
             text = (
                 "**⏳ Stuck Processing**\n\n"
@@ -922,6 +1258,31 @@ async def handle_help_callbacks(client, callback_query):
                 "**2. Corrupt File:** The file you uploaded might be broken or incomplete. Try playing it on your device to ensure it's not corrupted.\n"
                 "**3. Telegram Server Lag:** Sometimes Telegram's upload servers experience severe delays. Cancel it and try again later."
             )
+        elif issue == "conv_fail":
+            text = (
+                "**💥 Conversion Fails**\n\n"
+                "If the File Converter returns an error:\n\n"
+                "**1. Unsupported Codec:** The source file may use a codec the converter can't handle. Try a different format.\n"
+                "**2. Corrupt Source:** The original file might be damaged. Test it on your device with VLC first.\n"
+                "**3. File Too Large:** Very large files may time out during conversion. Try compressing the file before sending."
+            )
+        elif issue == "empty_output":
+            text = (
+                "**📄 Output File Empty**\n\n"
+                "If the bot returns a file that's 0 bytes or won't open:\n\n"
+                "**1. Source Issue:** The original file may have been corrupted or incomplete.\n"
+                "**2. Format Mismatch:** Converting between incompatible formats can produce empty files. Stick to common formats like MP4/MKV.\n"
+                "**3. Retry:** Cancel with `/end` and send the file again. Temporary server glitches can cause this."
+            )
+        elif issue == "bad_quality":
+            text = (
+                "**📉 Bad Output Quality**\n\n"
+                "If the output looks worse than the original:\n\n"
+                "**1. Renaming Doesn't Re-encode:** The Rename & Tag tool never changes video quality. If quality dropped, the issue is elsewhere.\n"
+                "**2. Conversion Compression:** The File Converter may compress during format changes. This is normal for some conversions.\n"
+                "**3. Telegram Compression:** Make sure you're sending files as **Documents**, not as 'Video'. Telegram compresses videos heavily."
+            )
+        # --- Audio & Subtitles ---
         elif issue == "missing_tracks":
             text = (
                 "**🎵 Missing Audio or Subtitle Tracks**\n\n"
@@ -936,40 +1297,190 @@ async def handle_help_callbacks(client, callback_query):
                 "**1. Image-Based Subs:** Some subtitles (like PGS or VobSub/PGS) are actually *images*, not text. The bot cannot extract image-based subtitles yet.\n"
                 "**2. No Embedded Tracks:** The video might not actually have embedded subtitle files; you might have just been playing it alongside a separate file on your PC."
             )
+        elif issue == "audio_sync":
+            text = (
+                "**🔊 Audio Out of Sync**\n\n"
+                "If the audio doesn't match the video after processing:\n\n"
+                "**1. Original Sync:** Check if the original file already had sync issues. Play it on VLC to compare.\n"
+                "**2. Conversion Artifact:** Format conversion can sometimes cause slight desync. Try a different output format.\n"
+                "**3. Variable Frame Rate:** VFR videos are prone to sync issues. The bot processes them as-is."
+            )
+        elif issue == "wrong_lang":
+            text = (
+                "**🗣 Wrong Audio Language**\n\n"
+                "If the bot picks the wrong audio track:\n\n"
+                "**1. Default Track:** The bot uses the default audio track set in the file's metadata. This may not always be your preferred language.\n"
+                "**2. MKV Multi-Audio:** MKV files can contain multiple audio tracks. The first one is usually selected.\n"
+                "**3. Re-mux with MKVToolNix:** Use a tool on your PC to set the correct default audio track before sending."
+            )
+        # --- Files & Storage ---
+        elif issue == "myfiles_fail":
+            text = (
+                "**📂 MyFiles Not Loading**\n\n"
+                "If the `/myfiles` command isn't working:\n\n"
+                "**1. Empty Storage:** You might not have any stored files yet. Process a file first and it will appear.\n"
+                "**2. Session Conflict:** Type `/end` first to clear any active sessions, then try `/myfiles` again.\n"
+                "**3. Server Restart:** After a bot restart, give it a minute to reconnect to the database."
+            )
+        elif issue == "expired":
+            text = (
+                "**⏰ Files Expired Too Early**\n\n"
+                "If your temporary files disappeared sooner than expected:\n\n"
+                "**1. Expiry Rules:** Temporary files have a plan-based expiry (e.g., 7 days for free users). Check your plan details.\n"
+                "**2. Use Permanent Slots:** Pin important files to your permanent storage to keep them forever.\n"
+                "**3. Storage Cleanup:** The admin may have triggered a manual cleanup. Contact support if this happens repeatedly."
+            )
+        elif issue == "cant_delete":
+            text = (
+                "**🗑 Can't Delete Files**\n\n"
+                "If you're unable to remove files from your storage:\n\n"
+                "**1. Use /myfiles:** Navigate to the file via `/myfiles` and use the delete button in the file's detail view.\n"
+                "**2. Active Processing:** You can't delete a file that's currently being processed. Wait for completion or use `/end`.\n"
+                "**3. Expired Files:** Already-expired files are removed automatically. They may just not be visible anymore."
+            )
+        elif issue == "storage_full":
+            text = (
+                "**💾 Storage Full**\n\n"
+                "If you've hit your storage limit:\n\n"
+                "**1. Delete Old Files:** Use `/myfiles` to remove files you no longer need.\n"
+                "**2. Permanent Slot Limit:** Each plan has a fixed number of permanent slots. Free up slots by unpinning files.\n"
+                "**3. Upgrade Plan:** Premium plans offer significantly more storage. Check the Premium Dashboard on `/start`."
+            )
+        # --- Account & Premium ---
+        elif issue == "prem_fail":
+            text = (
+                "**💎 Premium Not Activating**\n\n"
+                "If your Premium subscription isn't working:\n\n"
+                "**1. Activation Delay:** Allow a few minutes after purchase for the system to process your payment.\n"
+                "**2. Restart Session:** Send `/start` to refresh your profile. The bot caches user data briefly.\n"
+                "**3. Contact Admin:** If it still doesn't work, use `/info` to find the support contact and send your payment receipt."
+            )
+        elif issue == "quota_reset":
+            text = (
+                "**🔄 Quota Not Resetting**\n\n"
+                "If your daily limits haven't reset:\n\n"
+                "**1. 24-Hour Cycle:** Quotas reset exactly 24 hours after your first usage of the day, not at midnight.\n"
+                "**2. Check Usage:** Use `/myfiles` or your profile to see your current usage and when the reset is due.\n"
+                "**3. Time Zone:** The reset timer is based on UTC. Your local time may differ."
+            )
+        elif issue == "upgrade_fail":
+            text = (
+                "**⬆️ Upgrade Problems**\n\n"
+                "If you can't upgrade your plan:\n\n"
+                "**1. Already Premium:** Check if you already have an active subscription via `/start`.\n"
+                "**2. Payment Method:** Ensure the payment method configured by the admin is available in your region.\n"
+                "**3. Contact Support:** Use `/info` to reach the bot admin for manual activation or alternative payment options."
+            )
+        elif issue == "acc_missing":
+            text = (
+                "**👤 Account Not Found**\n\n"
+                "If the bot doesn't recognize your account:\n\n"
+                "**1. First Time:** Send `/start` to register. The bot creates your profile on first interaction.\n"
+                "**2. Database Reset:** The admin may have reset the database. Your data would need to be restored manually.\n"
+                "**3. Different Account:** Ensure you're using the same Telegram account you originally registered with."
+            )
+        else:
+            text = "Unknown issue. Please go back and select a valid topic."
 
         try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_ts))
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_cat))
         except MessageNotModified:
             pass
 
     elif data == "help_settings":
-        if Config.PUBLIC_MODE:
-            text = (
+        try:
+            await callback_query.message.edit_text(
                 "**⚙️ Settings & Info**\n\n"
                 "> Customize your experience.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "• Use the `/settings` command to access your personal settings.\n"
-                "• Configure custom **Filename Templates** (e.g., `{Title} ({Year}) [{Quality}]`).\n"
-                "• Set your own **Default Thumbnail** or disable it.\n"
-                "• Customize **Caption Templates** and Metadata.\n"
-                "• Use `/info` to see details about this bot and support contact."
-            )
-        else:
-            text = (
-                "**⚙️ Settings & Admin**\n\n"
-                "> Customize your experience.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "• Use the `/admin` command to access advanced settings.\n"
-                "• Configure custom **Filename Templates** (e.g., `{Title} ({Year}) [{Quality}]`).\n"
-                "• Set a **Default Thumbnail** for all your uploads.\n"
-                "• Customize **Caption Templates** and more!"
-            )
-        try:
-            await callback_query.message.edit_text(
-                text, reply_markup=InlineKeyboardMarkup(back_button)
+                "Explore the different settings you can configure:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("📝 Filename Template", callback_data="help_set_filename"),
+                         InlineKeyboardButton("💬 Caption Template", callback_data="help_set_caption")],
+                        [InlineKeyboardButton("🖼 Default Thumbnail", callback_data="help_set_thumb"),
+                         InlineKeyboardButton("⚡ Quick Rename", callback_data="help_set_quick")],
+                        [InlineKeyboardButton("📺 Dumb Channels", callback_data="help_set_dumb"),
+                         InlineKeyboardButton("ℹ️ Bot Info", callback_data="help_set_info")],
+                        [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
+                    ]
+                )
             )
         except MessageNotModified:
             pass
+
+    elif data.startswith("help_set_"):
+        setting = data.replace("help_set_", "")
+        back_to_set = [[InlineKeyboardButton("← Back to Settings", callback_data="help_settings")]]
+
+        if setting == "filename":
+            text = (
+                "**📝 Filename Template**\n\n"
+                "> Control how output files are named.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Go to `/settings` > **Filename Template** to customize.\n\n"
+                "• Use variables like `{Title}`, `{Year}`, `{Quality}`.\n"
+                "• The file extension is always appended automatically.\n"
+                "• Example: `{Title} ({Year}) [{Quality}]`"
+            )
+        elif setting == "caption":
+            text = (
+                "**💬 Caption Template**\n\n"
+                "> Customize the text below your files.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Go to `/settings` > **Caption Template** to configure.\n\n"
+                "• Captions appear directly below your uploaded files in Telegram.\n"
+                "• Supports the same variables as filename templates.\n"
+                "• You can also use Telegram formatting like **bold** and __italic__."
+            )
+        elif setting == "thumb":
+            text = (
+                "**🖼 Default Thumbnail**\n\n"
+                "> Set a custom poster for all uploads.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Go to `/settings` > **Default Thumbnail**.\n\n"
+                "• Upload any image to use as the default thumbnail for all processed files.\n"
+                "• This overrides TMDb posters unless disabled per-file.\n"
+                "• To remove it, go back and select **Remove Thumbnail**."
+            )
+        elif setting == "quick":
+            text = (
+                "**⚡ Quick Rename Mode**\n\n"
+                "> Skip TMDb entirely.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Enable via `/settings` > **Quick Rename Mode**.\n\n"
+                "• When enabled, the bot skips all TMDb lookups and metadata detection.\n"
+                "• You'll be prompted for a custom filename immediately.\n"
+                "• Perfect for personal files, documents, or non-media content."
+            )
+        elif setting == "dumb":
+            text = (
+                "**📺 Dumb Channels Setup**\n\n"
+                "> Route processed files to channels.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Go to `/settings` > **Dumb Channels**.\n\n"
+                "• Add the bot as an admin to your channel first.\n"
+                "• Then forward a message from that channel to the bot.\n"
+                "• Set the channel type: Movies, Series, or Standard (everything)."
+            )
+        elif setting == "info":
+            text = (
+                "**ℹ️ Bot Info & Contact**\n\n"
+                "> Learn about the bot.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Use the `/info` command to view:\n\n"
+                "• Bot version and uptime status.\n"
+                "• The admin's contact details for support.\n"
+                "• Links to the official channel or community group."
+            )
+        else:
+            text = "Unknown setting."
+
+        try:
+            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_set))
+        except MessageNotModified:
+            pass
+
     elif data == "help_close":
         await callback_query.message.delete()
 
