@@ -521,6 +521,154 @@ async def handle_subtitle_command(client, message):
     mock_cb.message = msg
     await handle_subtitle_extractor_menu(client, mock_cb)
 
+@Client.on_message(filters.command(["t", "trim"]) & filters.private, group=0)
+async def handle_trim_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("video_trimmer", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("video_trimmer", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from tools.VideoTrimmer import handle_video_trimmer_menu
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "video_trimmer_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading video trimmer...")
+    mock_cb.message = msg
+    await handle_video_trimmer_menu(client, mock_cb)
+
+@Client.on_message(filters.command(["mi", "mediainfo"]) & filters.private, group=0)
+async def handle_mediainfo_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("media_info", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("media_info", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from tools.MediaInfo import handle_media_info_menu
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "media_info_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading media info...")
+    mock_cb.message = msg
+    await handle_media_info_menu(client, mock_cb)
+
+@Client.on_message(filters.command(["v", "voice"]) & filters.private, group=0)
+async def handle_voice_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("voice_converter", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("voice_converter", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from tools.VoiceNoteConverter import handle_voice_converter_menu
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "voice_converter_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading voice converter...")
+    mock_cb.message = msg
+    await handle_voice_converter_menu(client, mock_cb)
+
+@Client.on_message(filters.command(["vn", "videonote"]) & filters.private, group=0)
+async def handle_videonote_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("video_note_converter", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("video_note_converter", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from tools.VideoNoteConverter import handle_video_note_menu
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "video_note_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading video note converter...")
+    mock_cb.message = msg
+    await handle_video_note_menu(client, mock_cb)
+
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
     user_id = message.from_user.id
@@ -612,16 +760,25 @@ async def handle_other_features_menu(client, callback_query):
     if toggles.get("file_converter", True) or pf.get("file_converter", False):
         buttons.append([InlineKeyboardButton("🔀 File Converter", callback_data="file_converter_menu")])
     if toggles.get("watermarker", True) or pf.get("watermarker", False):
-        buttons.append([InlineKeyboardButton("© Image Watermarker", callback_data="watermarker_menu")])
+        buttons.append([InlineKeyboardButton("©️ Image Watermarker", callback_data="watermarker_menu")])
     if toggles.get("subtitle_extractor", True) or pf.get("subtitle_extractor", False):
         buttons.append([InlineKeyboardButton("📝 Subtitle Extractor", callback_data="subtitle_extractor_menu")])
+    if toggles.get("video_trimmer", True) or pf.get("video_trimmer", False):
+        buttons.append([InlineKeyboardButton("✂️ Video Trimmer", callback_data="video_trimmer_menu")])
+    if toggles.get("media_info", True) or pf.get("media_info", False):
+        buttons.append([InlineKeyboardButton("ℹ️ Media Info", callback_data="media_info_menu")])
+    if toggles.get("voice_converter", True) or pf.get("voice_converter", False):
+        buttons.append([InlineKeyboardButton("🎙️ Voice Note Converter", callback_data="voice_converter_menu")])
+    if toggles.get("video_note_converter", True) or pf.get("video_note_converter", False):
+        buttons.append([InlineKeyboardButton("⭕ Video Note Converter", callback_data="video_note_menu")])
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="help_close")])
 
     try:
         await callback_query.message.edit_text(
-            "**✨ Other Features**\n\n"
-            "Select an additional tool below:",
+            "✨ **Media Tools**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Select a tool from the list below:",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
     except MessageNotModified:
@@ -815,7 +972,11 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/audio` or `/a` — Open the audio metadata editor\n"
                 "• `/convert` or `/c` — Convert file formats\n"
                 "• `/watermark` or `/w` — Add image watermark\n"
-                "• `/subtitle` or `/s` — Extract subtitles"
+                "• `/subtitle` or `/s` — Extract subtitles\n"
+                "• `/trim` or `/t` — Trim/cut video by timestamp\n"
+                "• `/mediainfo` or `/mi` — Show detailed media file info\n"
+                "• `/voice` or `/v` — Convert audio to voice note\n"
+                "• `/videonote` or `/vn` — Convert video to round note"
             )
         elif cmd == "files":
             text = (
@@ -859,6 +1020,10 @@ async def handle_help_callbacks(client, callback_query):
                          InlineKeyboardButton("🔀 File Converter", callback_data="help_tool_convert")],
                         [InlineKeyboardButton("© Image Watermarker", callback_data="help_tool_watermark"),
                          InlineKeyboardButton("📝 Subtitle Extractor", callback_data="help_tool_subtitle")],
+                        [InlineKeyboardButton("✂️ Video Trimmer", callback_data="help_tool_trimmer"),
+                         InlineKeyboardButton("ℹ️ Media Info", callback_data="help_tool_mediainfo")],
+                        [InlineKeyboardButton("🎙️ Voice Converter", callback_data="help_tool_voice"),
+                         InlineKeyboardButton("⭕ Video Note", callback_data="help_tool_videonote")],
                         [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
                     ]
                 )
@@ -919,6 +1084,45 @@ async def handle_help_callbacks(client, callback_query):
                 "**What it does:**\n"
                 "Extracts embedded subtitle tracks from video files and gives them to you as `.srt` or `.ass` files.\n\n"
                 "• **Shortcut:** `/s` or `/subtitle`."
+            )
+        elif tool == "trimmer":
+            text = (
+                "**✂️ Video Trimmer**\n\n"
+                "> Cut videos by timestamp.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What it does:**\n"
+                "Trims a video between a start and end timestamp using stream copy (no re-encoding).\n\n"
+                "• Send a video, then provide start and end times.\n"
+                "• **Format:** `HH:MM:SS` or `MM:SS`\n"
+                "• **Shortcut:** `/t` or `/trim`."
+            )
+        elif tool == "mediainfo":
+            text = (
+                "**ℹ️ Media Info**\n\n"
+                "> Inspect any media file.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What it does:**\n"
+                "Shows detailed technical information about a media file: codecs, resolution, bitrate, duration, and all streams.\n\n"
+                "• **Shortcut:** `/mi` or `/mediainfo`."
+            )
+        elif tool == "voice":
+            text = (
+                "**🎙️ Voice Note Converter**\n\n"
+                "> Turn audio into voice notes.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What it does:**\n"
+                "Converts any audio file to Telegram voice note format (OGG Opus).\n\n"
+                "• Send an audio file and it will be converted and sent as a voice message.\n"
+                "• **Shortcut:** `/v` or `/voice`."
+            )
+        elif tool == "videonote":
+            text = (
+                "**⭕ Video Note Converter**\n\n"
+                "> Create round video messages.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What it does:**\n"
+                "Converts a video into a Telegram round video note. The video is cropped to square, scaled to 384px, and limited to 60 seconds.\n\n"
+                "• **Shortcut:** `/vn` or `/videonote`."
             )
 
         try:

@@ -600,26 +600,20 @@ async def handle_text_input(client, message):
         set_state(user_id, "awaiting_watermark_position")
 
         await message.reply_text(
-            "📍 **Select Watermark Position**\n\nWhere should the watermark be placed?",
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Where should the watermark be placed?",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton(
-                            "Top-Left", callback_data="wm_pos_topleft"
-                        ),
-                        InlineKeyboardButton(
-                            "Top-Right", callback_data="wm_pos_topright"
-                        ),
+                        InlineKeyboardButton("↖️ Top-Left", callback_data="wm_pos_topleft"),
+                        InlineKeyboardButton("↗️ Top-Right", callback_data="wm_pos_topright"),
                     ],
                     [
-                        InlineKeyboardButton(
-                            "Bottom-Left", callback_data="wm_pos_bottomleft"
-                        ),
-                        InlineKeyboardButton(
-                            "Bottom-Right", callback_data="wm_pos_bottomright"
-                        ),
+                        InlineKeyboardButton("↙️ Bottom-Left", callback_data="wm_pos_bottomleft"),
+                        InlineKeyboardButton("↘️ Bottom-Right", callback_data="wm_pos_bottomright"),
                     ],
-                    [InlineKeyboardButton("Center", callback_data="wm_pos_center")],
+                    [InlineKeyboardButton("⊹ Center", callback_data="wm_pos_center")],
                     [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
                 ]
             ),
@@ -1397,58 +1391,43 @@ async def handle_file_upload(client, message):
 
         buttons = []
         if is_video:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        "Extract Audio (MP3)", callback_data="convert_to_mp3"
-                    )
-                ]
-            )
-            buttons.append(
-                [InlineKeyboardButton("Convert to GIF", callback_data="convert_to_gif")]
-            )
-            buttons.append(
-                [InlineKeyboardButton("Convert to MKV", callback_data="convert_to_mkv")]
-            )
-            buttons.append(
-                [InlineKeyboardButton("Convert to MP4", callback_data="convert_to_mp4")]
-            )
-            buttons.append(
-                [InlineKeyboardButton("Convert to x264 (H.264)", callback_data="convert_to_x264")]
-            )
-            buttons.append(
-                [InlineKeyboardButton("Convert to x265 (HEVC)", callback_data="convert_to_x265")]
-            )
-            buttons.append(
-                [InlineKeyboardButton("Normalize Audio", callback_data="convert_to_audionorm")]
-            )
+            buttons.append([
+                InlineKeyboardButton("🎵 MP3", callback_data="convert_to_mp3"),
+                InlineKeyboardButton("🎞️ GIF", callback_data="convert_to_gif"),
+            ])
+            buttons.append([
+                InlineKeyboardButton("📦 MKV", callback_data="convert_to_mkv"),
+                InlineKeyboardButton("🎬 MP4", callback_data="convert_to_mp4"),
+            ])
+            buttons.append([
+                InlineKeyboardButton("🔷 x264", callback_data="convert_to_x264"),
+                InlineKeyboardButton("🔶 x265", callback_data="convert_to_x265"),
+            ])
+            buttons.append([
+                InlineKeyboardButton("🔊 Normalize Audio", callback_data="convert_to_audionorm"),
+            ])
         elif is_image:
             ext = os.path.splitext(file_name)[1].lower() if file_name else ""
             img_buttons = []
             if ext != ".png":
                 img_buttons.append(
-                    InlineKeyboardButton(
-                        "Convert to PNG", callback_data="convert_to_png"
-                    )
+                    InlineKeyboardButton("🖼️ PNG", callback_data="convert_to_png")
                 )
             if ext not in [".jpg", ".jpeg"]:
                 img_buttons.append(
-                    InlineKeyboardButton(
-                        "Convert to JPG", callback_data="convert_to_jpg"
-                    )
+                    InlineKeyboardButton("📸 JPG", callback_data="convert_to_jpg")
                 )
             if ext != ".webp":
                 img_buttons.append(
-                    InlineKeyboardButton(
-                        "Convert to WEBP", callback_data="convert_to_webp"
-                    )
+                    InlineKeyboardButton("🌐 WEBP", callback_data="convert_to_webp")
                 )
 
-            for i in range(0, len(img_buttons), 2):
-                buttons.append(img_buttons[i : i + 2])
+            if img_buttons:
+                buttons.append(img_buttons)
         else:
             await message.reply_text(
-                "Could not determine file type. Please send a clear Image or Video."
+                "❌ Could not determine file type.\n\n"
+                "> Please send a clear **image** or **video** file."
             )
             return
 
@@ -1458,9 +1437,10 @@ async def handle_file_upload(client, message):
 
         set_state(user_id, "awaiting_convert_format")
         await message.reply_text(
-            f"🔀 **File Converter**\n\n"
-            f"**File:** `{file_name}`\n\n"
-            "Select the format you want to convert to:",
+            f"🔀 **File Converter**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"> 📄 **File:** `{file_name}`\n\n"
+            "Select the target format:",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
         return
@@ -1494,8 +1474,9 @@ async def handle_file_upload(client, message):
         update_data(user_id, "file_chat_id", message.chat.id)
 
         await message.reply_text(
-            "© **Image Watermarker**\n\n"
-            "Image received. What type of watermark do you want to add?",
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> What type of watermark do you want to add?",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
@@ -1503,7 +1484,7 @@ async def handle_file_upload(client, message):
                             "📝 Text Watermark", callback_data="watermark_type_text"
                         ),
                         InlineKeyboardButton(
-                            "🖼 Image Watermark", callback_data="watermark_type_image"
+                            "🖼️ Image Watermark", callback_data="watermark_type_image"
                         ),
                     ],
                     [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
@@ -1530,26 +1511,20 @@ async def handle_file_upload(client, message):
         set_state(user_id, "awaiting_watermark_position")
 
         await message.reply_text(
-            "📍 **Select Watermark Position**\n\nWhere should the watermark be placed?",
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Where should the watermark be placed?",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton(
-                            "Top-Left", callback_data="wm_pos_topleft"
-                        ),
-                        InlineKeyboardButton(
-                            "Top-Right", callback_data="wm_pos_topright"
-                        ),
+                        InlineKeyboardButton("↖️ Top-Left", callback_data="wm_pos_topleft"),
+                        InlineKeyboardButton("↗️ Top-Right", callback_data="wm_pos_topright"),
                     ],
                     [
-                        InlineKeyboardButton(
-                            "Bottom-Left", callback_data="wm_pos_bottomleft"
-                        ),
-                        InlineKeyboardButton(
-                            "Bottom-Right", callback_data="wm_pos_bottomright"
-                        ),
+                        InlineKeyboardButton("↙️ Bottom-Left", callback_data="wm_pos_bottomleft"),
+                        InlineKeyboardButton("↘️ Bottom-Right", callback_data="wm_pos_bottomright"),
                     ],
-                    [InlineKeyboardButton("Center", callback_data="wm_pos_center")],
+                    [InlineKeyboardButton("⊹ Center", callback_data="wm_pos_center")],
                     [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
                 ]
             ),
@@ -1579,6 +1554,262 @@ async def handle_file_upload(client, message):
 
         set_state(user_id, "awaiting_audio_menu")
         await render_audio_menu(client, message, user_id)
+        return
+
+    # === VIDEO TRIMMER STATES ===
+    if state == "awaiting_trim_file":
+        if not getattr(message, "video", None) and not getattr(message, "document", None):
+            await message.reply_text(
+                "❌ Please send a **video file** to trim.\n\n"
+                "> Supported: MP4, MKV, AVI, MOV, WebM"
+            )
+            return
+
+        file_name = "video.mkv"
+        if getattr(message, "video", None):
+            file_name = message.video.file_name or "video.mp4"
+        elif getattr(message, "document", None):
+            file_name = message.document.file_name or "file.bin"
+
+        update_data(user_id, "original_name", file_name)
+        update_data(user_id, "file_message_id", message.id)
+        update_data(user_id, "file_chat_id", message.chat.id)
+        set_state(user_id, "awaiting_trim_start")
+
+        await message.reply_text(
+            "✂️ **Video Trimmer**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"> 📄 **File:** `{file_name}`\n\n"
+            "Send the **start timestamp** for the trim.\n"
+            "**Format:** `HH:MM:SS` or `MM:SS`\n\n"
+            "__Example:__ `00:01:30` or `1:30`",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+        return
+
+    if state == "awaiting_trim_start":
+        if not getattr(message, "text", None):
+            await message.reply_text("Please send a timestamp like `00:01:30` or `1:30`.")
+            return
+
+        from tools.VideoTrimmer import validate_timestamp, normalize_timestamp
+        ts = message.text.strip()
+        if not validate_timestamp(ts):
+            await message.reply_text(
+                "❌ Invalid timestamp format.\n\n"
+                "> Use `HH:MM:SS` or `MM:SS`\n"
+                "> Example: `00:01:30` or `1:30`"
+            )
+            return
+
+        normalized = normalize_timestamp(ts)
+        update_data(user_id, "trim_start", normalized)
+        set_state(user_id, "awaiting_trim_end")
+
+        await message.reply_text(
+            "✂️ **Video Trimmer**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"> ▶️ **Start:** `{normalized}`\n\n"
+            "Now send the **end timestamp** for the trim.\n"
+            "**Format:** `HH:MM:SS` or `MM:SS`",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+            ),
+        )
+        return
+
+    if state == "awaiting_trim_end":
+        if not getattr(message, "text", None):
+            await message.reply_text("Please send a timestamp like `00:05:00` or `5:00`.")
+            return
+
+        from tools.VideoTrimmer import validate_timestamp, normalize_timestamp
+        ts = message.text.strip()
+        if not validate_timestamp(ts):
+            await message.reply_text(
+                "❌ Invalid timestamp format.\n\n"
+                "> Use `HH:MM:SS` or `MM:SS`\n"
+                "> Example: `00:05:00` or `5:00`"
+            )
+            return
+
+        normalized = normalize_timestamp(ts)
+        update_data(user_id, "trim_end", normalized)
+        session_data = get_data(user_id)
+
+        data = {
+            "type": "trim",
+            "original_name": session_data.get("original_name"),
+            "file_message_id": session_data.get("file_message_id"),
+            "file_chat_id": session_data.get("file_chat_id"),
+            "trim_start": session_data.get("trim_start"),
+            "trim_end": normalized,
+            "is_auto": False,
+        }
+
+        try:
+            msg = await client.get_messages(
+                session_data.get("file_chat_id"), session_data.get("file_message_id")
+            )
+            data["file_message"] = msg
+            reply_msg = await client.send_message(
+                user_id,
+                "✂️ **Video Trimmer**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"> ▶️ **Start:** `{session_data.get('trim_start')}`\n"
+                f"> ⏹️ **End:** `{normalized}`\n\n"
+                "> ⏳ Trimming video..."
+            )
+            from plugins.process import process_file
+            asyncio.create_task(process_file(client, reply_msg, data))
+        except Exception as e:
+            logger.error(f"Failed to get message for trim mode: {e}")
+            await client.send_message(user_id, f"❌ Error: `{e}`")
+
+        clear_session(user_id)
+        return
+
+    # === MEDIA INFO STATE ===
+    if state == "awaiting_mediainfo_file":
+        if (
+            not getattr(message, "video", None)
+            and not getattr(message, "audio", None)
+            and not getattr(message, "document", None)
+            and not getattr(message, "photo", None)
+        ):
+            await message.reply_text("Please send a media file (video, audio, image, or document).")
+            return
+
+        file_name = "unknown_file.bin"
+        if getattr(message, "video", None):
+            file_name = message.video.file_name or "video.mp4"
+        elif getattr(message, "audio", None):
+            file_name = message.audio.file_name or "audio.mp3"
+        elif getattr(message, "document", None):
+            file_name = message.document.file_name or "file.bin"
+        elif getattr(message, "photo", None):
+            file_name = f"image_{message.id}.jpg"
+
+        status_msg = await message.reply_text(
+            "ℹ️ **Media Info**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> ⏳ Downloading and analyzing file..."
+        )
+
+        try:
+            from config import Config
+            import os
+            input_path = os.path.join(Config.DOWNLOAD_DIR, f"{user_id}_{message.id}_probe_input")
+            downloaded = await client.download_media(message, file_name=input_path)
+            if downloaded and os.path.exists(downloaded):
+                from utils.ffmpeg_tools import probe_file
+                probe_data, _ = await probe_file(downloaded)
+                from tools.MediaInfo import format_media_info
+                info_text = format_media_info(probe_data, file_name)
+                await status_msg.edit_text(
+                    info_text,
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("🔄 Analyze Another", callback_data="media_info_menu")],
+                         [InlineKeyboardButton("❌ Close", callback_data="help_close")]]
+                    ),
+                )
+                try:
+                    os.remove(downloaded)
+                except Exception:
+                    pass
+            else:
+                await status_msg.edit_text("❌ Failed to download file for analysis.")
+        except Exception as e:
+            logger.error(f"MediaInfo analysis failed: {e}")
+            await status_msg.edit_text(f"❌ Analysis failed: `{e}`")
+
+        clear_session(user_id)
+        return
+
+    # === VOICE NOTE CONVERTER STATE ===
+    if state == "awaiting_voice_file":
+        if (
+            not getattr(message, "audio", None)
+            and not getattr(message, "document", None)
+            and not getattr(message, "voice", None)
+        ):
+            await message.reply_text(
+                "❌ Please send an **audio file**.\n\n"
+                "> Supported: MP3, FLAC, M4A, WAV, AAC, OGG"
+            )
+            return
+
+        file_name = "audio.mp3"
+        if getattr(message, "audio", None):
+            file_name = message.audio.file_name or "audio.mp3"
+        elif getattr(message, "document", None):
+            file_name = message.document.file_name or "file.bin"
+        elif getattr(message, "voice", None):
+            file_name = "voice.ogg"
+
+        update_data(user_id, "original_name", file_name)
+        update_data(user_id, "file_message_id", message.id)
+        update_data(user_id, "file_chat_id", message.chat.id)
+
+        data = {
+            "type": "voice_convert",
+            "original_name": file_name,
+            "file_message_id": message.id,
+            "file_chat_id": message.chat.id,
+            "file_message": message,
+            "is_auto": False,
+        }
+
+        reply_msg = await client.send_message(
+            user_id,
+            "🎙️ **Voice Note Converter**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> ⏳ Converting to OGG Opus voice note..."
+        )
+        from plugins.process import process_file
+        asyncio.create_task(process_file(client, reply_msg, data))
+        clear_session(user_id)
+        return
+
+    # === VIDEO NOTE CONVERTER STATE ===
+    if state == "awaiting_videonote_file":
+        if not getattr(message, "video", None) and not getattr(message, "document", None):
+            await message.reply_text(
+                "❌ Please send a **video file**.\n\n"
+                "> The video will be cropped to a square and converted."
+            )
+            return
+
+        file_name = "video.mp4"
+        if getattr(message, "video", None):
+            file_name = message.video.file_name or "video.mp4"
+        elif getattr(message, "document", None):
+            file_name = message.document.file_name or "file.bin"
+
+        update_data(user_id, "original_name", file_name)
+        update_data(user_id, "file_message_id", message.id)
+        update_data(user_id, "file_chat_id", message.chat.id)
+
+        data = {
+            "type": "video_note",
+            "original_name": file_name,
+            "file_message_id": message.id,
+            "file_chat_id": message.chat.id,
+            "file_message": message,
+            "is_auto": False,
+        }
+
+        reply_msg = await client.send_message(
+            user_id,
+            "⭕ **Video Note Converter**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> ⏳ Cropping to square and converting..."
+        )
+        from plugins.process import process_file
+        asyncio.create_task(process_file(client, reply_msg, data))
+        clear_session(user_id)
         return
 
     if state == "awaiting_general_file":

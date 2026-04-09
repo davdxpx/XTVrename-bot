@@ -1036,30 +1036,38 @@ async def admin_callback(client, callback_query):
 
     if data == "admin_feature_toggles":
         toggles = await db.get_feature_toggles()
-        # Default True if not set
         audio_en = toggles.get("audio_editor", True)
         conv_en = toggles.get("file_converter", True)
         wm_en = toggles.get("watermarker", True)
         sub_en = toggles.get("subtitle_extractor", True)
+        trim_en = toggles.get("video_trimmer", True)
+        info_en = toggles.get("media_info", True)
+        voice_en = toggles.get("voice_converter", True)
+        vnote_en = toggles.get("video_note_converter", True)
 
         def emoji(state): return "✅" if state else "❌"
 
         text = (
-            "⚙️ **Feature Toggles**\n\n"
-            "Enable or disable specific features of the bot to save server resources.\n\n"
-            "**Performance Impact:**\n"
-            "• **File Converter:** High CPU & RAM\n"
-            "• **Watermarker:** Medium CPU\n"
-            "• **Audio Editor:** Low CPU\n"
-            "• **Subtitle Extractor:** Medium CPU\n\n"
-            "Click on a feature below to toggle its state globally:"
+            "⚙️ **Feature Toggles**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Enable or disable specific features globally.\n\n"
+            "> **Performance Impact:**\n"
+            "> • **File Converter:** High CPU & RAM\n"
+            "> • **Watermarker / Trimmer:** Medium CPU\n"
+            "> • **Audio Editor / Voice:** Low CPU\n"
+            "> • **Media Info:** Minimal CPU\n\n"
+            "Click a feature below to toggle:"
         )
 
         buttons = [
-            [InlineKeyboardButton(f"{emoji(conv_en)} File Converter", callback_data="admin_toggle_file_converter")],
-            [InlineKeyboardButton(f"{emoji(sub_en)} Subtitle Extractor", callback_data="admin_toggle_subtitle_extractor")],
-            [InlineKeyboardButton(f"{emoji(wm_en)} Image Watermarker", callback_data="admin_toggle_watermarker")],
-            [InlineKeyboardButton(f"{emoji(audio_en)} Audio Editor", callback_data="admin_toggle_audio_editor")],
+            [InlineKeyboardButton(f"{emoji(conv_en)} 🔀 File Converter", callback_data="admin_toggle_file_converter")],
+            [InlineKeyboardButton(f"{emoji(sub_en)} 📝 Subtitle Extractor", callback_data="admin_toggle_subtitle_extractor")],
+            [InlineKeyboardButton(f"{emoji(wm_en)} ©️ Image Watermarker", callback_data="admin_toggle_watermarker")],
+            [InlineKeyboardButton(f"{emoji(audio_en)} 🎵 Audio Editor", callback_data="admin_toggle_audio_editor")],
+            [InlineKeyboardButton(f"{emoji(trim_en)} ✂️ Video Trimmer", callback_data="admin_toggle_video_trimmer")],
+            [InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_toggle_media_info")],
+            [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_toggle_voice_converter")],
+            [InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_toggle_video_note_converter")],
             [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]
         ]
 
@@ -1257,6 +1265,10 @@ async def admin_callback(client, callback_query):
                 wm = global_toggles.get("watermarker", True)
                 fc = global_toggles.get("file_converter", True)
                 ae = global_toggles.get("audio_editor", True)
+                vt = global_toggles.get("video_trimmer", True)
+                mi = global_toggles.get("media_info", True)
+                vc = global_toggles.get("voice_converter", True)
+                vnc = global_toggles.get("video_note_converter", True)
 
                 buttons.append([
                     InlineKeyboardButton(f"{emoji(se)} 🎬 Subtitle Extractor", callback_data=f"admin_toggle_subtitle_extractor_{plan_name}"),
@@ -1266,9 +1278,19 @@ async def admin_callback(client, callback_query):
                     InlineKeyboardButton(f"{emoji(fc)} 🔄 Converter", callback_data=f"admin_toggle_file_converter_{plan_name}"),
                     InlineKeyboardButton(f"{emoji(ae)} 🎵 Audio Editor", callback_data=f"admin_toggle_audio_editor_{plan_name}")
                 ])
+                buttons.append([
+                    InlineKeyboardButton(f"{emoji(vt)} ✂️ Video Trimmer", callback_data=f"admin_toggle_video_trimmer_{plan_name}"),
+                    InlineKeyboardButton(f"{emoji(mi)} ℹ️ Media Info", callback_data=f"admin_toggle_media_info_{plan_name}")
+                ])
+                buttons.append([
+                    InlineKeyboardButton(f"{emoji(vc)} 🎙️ Voice Converter", callback_data=f"admin_toggle_voice_converter_{plan_name}"),
+                    InlineKeyboardButton(f"{emoji(vnc)} ⭕ Video Note", callback_data=f"admin_toggle_video_note_converter_{plan_name}")
+                ])
             else:
                 media_tools_row1 = []
                 media_tools_row2 = []
+                media_tools_row3 = []
+                media_tools_row4 = []
 
                 if not global_toggles.get("subtitle_extractor", True):
                     se = features.get("subtitle_extractor", False)
@@ -1282,10 +1304,24 @@ async def admin_callback(client, callback_query):
                 if not global_toggles.get("audio_editor", True):
                     ae = features.get("audio_editor", False)
                     media_tools_row2.append(InlineKeyboardButton(f"{emoji(ae)} 🎵 Audio Editor", callback_data=f"admin_premium_feat_{plan_name}_audio_editor"))
+                if not global_toggles.get("video_trimmer", True):
+                    vt = features.get("video_trimmer", False)
+                    media_tools_row3.append(InlineKeyboardButton(f"{emoji(vt)} ✂️ Video Trimmer", callback_data=f"admin_premium_feat_{plan_name}_video_trimmer"))
+                if not global_toggles.get("media_info", True):
+                    mi = features.get("media_info", False)
+                    media_tools_row3.append(InlineKeyboardButton(f"{emoji(mi)} ℹ️ Media Info", callback_data=f"admin_premium_feat_{plan_name}_media_info"))
+                if not global_toggles.get("voice_converter", True):
+                    vc = features.get("voice_converter", False)
+                    media_tools_row4.append(InlineKeyboardButton(f"{emoji(vc)} 🎙️ Voice Converter", callback_data=f"admin_premium_feat_{plan_name}_voice_converter"))
+                if not global_toggles.get("video_note_converter", True):
+                    vnc = features.get("video_note_converter", False)
+                    media_tools_row4.append(InlineKeyboardButton(f"{emoji(vnc)} ⭕ Video Note", callback_data=f"admin_premium_feat_{plan_name}_video_note_converter"))
 
                 if media_tools_row1: buttons.append(media_tools_row1)
                 if media_tools_row2: buttons.append(media_tools_row2)
-                if not media_tools_row1 and not media_tools_row2:
+                if media_tools_row3: buttons.append(media_tools_row3)
+                if media_tools_row4: buttons.append(media_tools_row4)
+                if not media_tools_row1 and not media_tools_row2 and not media_tools_row3 and not media_tools_row4:
                     buttons.append([InlineKeyboardButton("✅ All tools globally enabled", callback_data="noop")])
 
             buttons.append([InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")])
@@ -1349,16 +1385,35 @@ async def admin_callback(client, callback_query):
             ]
 
             if ps:
+                hdn = privacy.get('hide_display_name', False)
+                hft = privacy.get('hide_forward_tags', False)
+                la = privacy.get('link_anonymity', False)
+
                 buttons.extend([
-                    [InlineKeyboardButton("─── 🔒 Available Controls ───", callback_data="noop")],
-                    [InlineKeyboardButton(f"{emoji(privacy.get('hide_display_name', False))} Hide Display Name", callback_data=f"admin_privacy_toggle_{plan_name}_hide_display_name")],
-                    [InlineKeyboardButton(f"{emoji(privacy.get('hide_forward_tags', False))} Hide Forward Tags", callback_data=f"admin_privacy_toggle_{plan_name}_hide_forward_tags")],
-                    [InlineKeyboardButton(f"{emoji(privacy.get('link_anonymity', False))} Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")]
+                    [InlineKeyboardButton("━━━ 🔒 Available Controls ━━━", callback_data="noop")],
+                    [InlineKeyboardButton(f"{emoji(hdn)} 👤 Hide Display Name", callback_data=f"admin_privacy_toggle_{plan_name}_hide_display_name")],
+                    [InlineKeyboardButton(f"{emoji(hft)} 🏷️ Hide Forward Tags", callback_data=f"admin_privacy_toggle_{plan_name}_hide_forward_tags")],
+                    [InlineKeyboardButton(f"{emoji(la)} 🔗 Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")]
                 ])
 
             buttons.append([InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")])
 
-            text = f"🔒 **Privacy Settings ({plan_name.capitalize()})**\n\nToggle which privacy controls are **available** for users on this plan to configure in their /settings:"
+            text = (
+                f"🔒 **Privacy Settings ({plan_name.capitalize()})**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"Toggle which privacy controls are **available** for users on this plan to configure in their /settings:\n\n"
+            )
+            if ps:
+                text += (
+                    f"> 👤 **Hide Display Name:** {'Enabled' if privacy.get('hide_display_name', False) else 'Disabled'}\n"
+                    f"> __Users can hide their name on shared files__\n"
+                    f"> 🏷️ **Hide Forward Tags:** {'Enabled' if privacy.get('hide_forward_tags', False) else 'Disabled'}\n"
+                    f"> __Remove 'Forwarded from' on shares__\n"
+                    f"> 🔗 **Link Anonymity:** {'Enabled' if privacy.get('link_anonymity', False) else 'Disabled'}\n"
+                    f"> __Use anonymous hash in share links__\n"
+                )
+            else:
+                text += "> ⚠️ __Privacy settings are disabled for this plan.__\n"
 
             try:
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))

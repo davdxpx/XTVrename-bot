@@ -20,8 +20,11 @@ async def handle_audio_editor_menu(client, callback_query):
 
     try:
         await callback_query.message.edit_text(
-            "🎵 **Audio Metadata Editor**\n\n"
-            "Please **send me the audio file** (e.g., MP3, FLAC, M4A) you want to edit.",
+            "🎵 **Audio Metadata Editor**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Send me the **audio file** you want to edit.\n"
+            "> Supported: MP3, FLAC, M4A, WAV, OGG\n\n"
+            "You can edit **title**, **artist**, **album** and **cover art**.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
@@ -59,7 +62,12 @@ async def handle_audio_edit_callbacks(client, callback_query):
                 session_data.get("file_chat_id"), session_data.get("file_message_id")
             )
             data["file_message"] = msg
-            reply_msg = await client.send_message(user_id, "Processing audio file...")
+            reply_msg = await client.send_message(
+                user_id,
+                "🎵 **Audio Metadata Editor**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> ⏳ Applying metadata changes..."
+            )
             from plugins.process import process_file
 
             asyncio.create_task(process_file(client, reply_msg, data))
@@ -72,9 +80,18 @@ async def handle_audio_edit_callbacks(client, callback_query):
     set_state(user_id, f"awaiting_audio_{action}")
 
     if action == "thumb":
-        text = "🖼 **Send me the new cover art (photo) for this audio file:**"
+        text = (
+            "🖼️ **Edit Cover Art**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Send me a **photo** to use as cover art."
+        )
     else:
-        text = f"✏️ **Send me the new {action.capitalize()} for this audio file:**\n*(Send '-' to clear the current value)*"
+        text = (
+            f"✏️ **Edit {action.capitalize()}**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"> Send me the new **{action}** for this audio file.\n"
+            f"> Send `—` to clear the current value."
+        )
 
     try:
         await callback_query.message.edit_text(
@@ -101,13 +118,14 @@ async def render_audio_menu(client, message, user_id):
     thumb = "✅ Uploaded" if sd.get("audio_thumb_id") else "❌ Not Set"
 
     text = (
-        f"🎵 **Audio Metadata Editor**\n\n"
-        f"**File:** `{sd.get('original_name')}`\n\n"
-        f"**Title:** `{title}`\n"
-        f"**Artist:** `{artist}`\n"
-        f"**Album:** `{album}`\n"
-        f"**Cover Art:** {thumb}\n\n"
-        "Click the buttons below to edit."
+        f"🎵 **Audio Metadata Editor**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"> 📄 **File:** `{sd.get('original_name')}`\n"
+        f"> 🏷️ **Title:** `{title}`\n"
+        f"> 👤 **Artist:** `{artist}`\n"
+        f"> 💿 **Album:** `{album}`\n"
+        f"> 🖼️ **Cover Art:** {thumb}\n\n"
+        "Tap any button below to edit a field, then press **Process** when ready."
     )
 
     markup = InlineKeyboardMarkup(
