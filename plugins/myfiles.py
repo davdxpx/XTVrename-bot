@@ -169,8 +169,8 @@ async def get_myfiles_main_menu(user_id: int):
             "📁 **MyFiles**\n"
             "_Your personal media vault. Permanent files stick around — temp files vanish after use._\n\n"
             f"**Plan** · `{plan_label}`\n"
-            f"**Saved** · `{perm_count} / {limit_str}` files\n"
-            f"**Temp** · `{temp_count}` files\n\n"
+            f"**Permanent Storage** · `{perm_count} / {limit_str}` files\n"
+            f"**Temporary Storage** · `{temp_count}` files\n\n"
             "What are you looking for?"
         )
     else:
@@ -185,8 +185,8 @@ async def get_myfiles_main_menu(user_id: int):
         text = (
             "📁 **Team MyFiles**\n"
             "_Global storage across all users._\n\n"
-            f"**Saved** · `{perm_count} / {limit_str}` files\n"
-            f"**Temp** · `{temp_count}` files\n\n"
+            f"**Permanent Storage** · `{perm_count} / {limit_str}` files\n"
+            f"**Temporary Storage** · `{temp_count}` files\n\n"
             "Browse by category:"
         )
 
