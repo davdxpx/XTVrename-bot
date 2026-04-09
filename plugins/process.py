@@ -280,7 +280,9 @@ class TaskProcessor:
         try:
             self.status_msg = await self.message.edit_text(
                 "⏳ **Initializing Task...**\n"
-                "Allocating resources and preparing environment.\n\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Allocating resources and configuring pipeline...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
                 f"{XTVEngine.get_signature(mode=self.mode)}"
             )
         except MessageNotModified:
@@ -291,7 +293,9 @@ class TaskProcessor:
             try:
                 self.status_msg = await self.message.edit_text(
                     "⏳ **Initializing Task...**\n"
-                    "Allocating resources and preparing environment.\n\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "> Allocating resources and configuring pipeline...\n"
+                    "\n━━━━━━━━━━━━━━━━━━━━\n"
                     f"{XTVEngine.get_signature(mode=self.mode)}"
                 )
             except Exception:
@@ -316,9 +320,10 @@ class TaskProcessor:
 
     async def _download_media(self) -> bool:
         await self._update_status(
-            "📥 **Acquiring Media Resources**\n\n"
-            "Establishing connection to Telegram servers...\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
+            "📥 **Downloading Media...**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Establishing connection to Telegram servers...\n"
+            "\n━━━━━━━━━━━━━━━━━━━━\n"
             f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
@@ -507,9 +512,10 @@ class TaskProcessor:
 
     async def _prepare_resources(self):
         await self._update_status(
-            "🎨 **Preparing Metadata Assets**\n\n"
-            "Optimizing thumbnails and configuring metadata...\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
+            "🎨 **Preparing Resources...**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Optimizing thumbnails and configuring metadata...\n"
+            "\n━━━━━━━━━━━━━━━━━━━━\n"
             f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
@@ -794,11 +800,12 @@ class TaskProcessor:
         )
 
     async def _process_media(self) -> bool:
-        if self.media_type not in ["convert", "extract_subtitles", "audio", "watermark"]:
+        if self.media_type not in ["convert", "extract_subtitles", "audio", "watermark", "trim", "voice_convert", "video_note"]:
             await self._update_status(
-                "⚙️ **Executing Transcoding Matrix**\n\n"
-                "Injecting metadata and optimizing container...\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
+                "⚙️ **Processing Media...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Injecting metadata and optimizing container...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
                 f"{XTVEngine.get_signature(mode=self.mode)}"
             )
 
@@ -836,12 +843,19 @@ class TaskProcessor:
                         secs = int(seconds % 60)
                         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
+                    remaining = total_duration - current_time
+                    filled = int(percentage / 10)
+                    bar = "■" * filled + "□" * (10 - filled)
+
                     msg = (
-                        "🔀 **Converting Media Format**\n\n"
-                        "Processing video stream...\n"
-                        f"Progress: [{bar}] {percentage:.1f}%\n"
-                        f"Time: {format_time(current_time)} / {format_time(total_duration)}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━\n"
+                        "⚙️ **Processing Media...**\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"**Progress:**  `{percentage:.1f}%`\n"
+                        f"[{bar}]\n\n"
+                        f"> **Elapsed:** `{format_time(current_time)}` · "
+                        f"**Remaining:** `{format_time(remaining)}`\n"
+                        f"> **Duration:** `{format_time(total_duration)}`\n"
+                        f"\n━━━━━━━━━━━━━━━━━━━━\n"
                         f"{XTVEngine.get_signature(mode=self.mode)}"
                     )
 
@@ -863,9 +877,10 @@ class TaskProcessor:
 
         if self.media_type == "watermark":
             await self._update_status(
-                "© **Applying Watermark**\n\n"
-                "Processing media with customized overlay...\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
+                "©️ **Applying Watermark...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Applying customized watermark overlay...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
                 f"{XTVEngine.get_signature(mode=self.mode)}"
             )
             from tools.ImageWatermarker import watermark
@@ -882,9 +897,10 @@ class TaskProcessor:
 
         elif self.media_type == "convert":
             await self._update_status(
-                "🔀 **Converting Media Format**\n\n"
-                "Initializing video stream processor...\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
+                "🔀 **Converting Media...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Initializing video stream processor...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
                 f"{XTVEngine.get_signature(mode=self.mode)}"
             )
             from tools.FileConverter import convert
@@ -897,9 +913,10 @@ class TaskProcessor:
 
         elif self.media_type == "extract_subtitles":
             await self._update_status(
-                "📝 **Extracting Subtitles**\n\n"
-                "Scanning video streams for text tracks...\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
+                "📝 **Extracting Subtitles...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Scanning video streams for text tracks...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
                 f"{XTVEngine.get_signature(mode=self.mode)}"
             )
             from tools.SubtitleExtractor import extract_subtitles
@@ -911,9 +928,10 @@ class TaskProcessor:
 
         elif self.media_type == "audio":
             await self._update_status(
-                "🎵 **Editing Audio Metadata**\n\n"
-                "Injecting tags and cover art...\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
+                "🎵 **Editing Audio Metadata...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Injecting metadata tags and cover art...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
                 f"{XTVEngine.get_signature(mode=self.mode)}"
             )
             from tools.AudioMetadataEditor import edit_audio_metadata
@@ -922,6 +940,53 @@ class TaskProcessor:
                 self.input_path, self.download_dir, safe_title, ext, self.metadata, thumb, progress_callback=ffmpeg_progress
             )
             self.metadata["title"] = meta_title
+
+        elif self.media_type == "trim":
+            await self._update_status(
+                "✂️ **Trimming Video...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"> ▶️ **Start:** `{self.data.get('trim_start', '00:00:00')}`\n"
+                f"> ⏹️ **End:** `{self.data.get('trim_end', '00:00:00')}`\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature(mode=self.mode)}"
+            )
+            from tools.VideoTrimmer import trim
+            success, stderr, self.output_path, meta_title = await trim(
+                self.input_path, self.download_dir, safe_title,
+                self.data.get("trim_start", "00:00:00"),
+                self.data.get("trim_end", "00:00:00"),
+                progress_callback=ffmpeg_progress
+            )
+            self.metadata["title"] = meta_title
+
+        elif self.media_type == "voice_convert":
+            await self._update_status(
+                "🎙️ **Converting to Voice Note...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Converting audio to Telegram voice format...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature(mode=self.mode)}"
+            )
+            from tools.VoiceNoteConverter import convert_to_voice
+            success, stderr, self.output_path, meta_title = await convert_to_voice(
+                self.input_path, self.download_dir, safe_title, progress_callback=ffmpeg_progress
+            )
+            self.metadata["title"] = meta_title
+
+        elif self.media_type == "video_note":
+            await self._update_status(
+                "⭕ **Converting to Video Note...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> Cropping to square and encoding round video...\n"
+                "\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature(mode=self.mode)}"
+            )
+            from tools.VideoNoteConverter import convert_to_video_note
+            success, stderr, self.output_path, meta_title = await convert_to_video_note(
+                self.input_path, self.download_dir, safe_title, progress_callback=ffmpeg_progress
+            )
+            self.metadata["title"] = meta_title
+
         else:
             cmd, err = await generate_ffmpeg_command(
                 input_path=self.input_path,
@@ -978,9 +1043,10 @@ class TaskProcessor:
 
     async def _upload_media(self):
         await self._update_status(
-            "📤 **Finalizing & Uploading**\n\n"
-            "Transferring optimized asset to cloud...\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
+            "📤 **Uploading Result...**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Transferring optimized asset to Telegram...\n"
+            "\n━━━━━━━━━━━━━━━━━━━━\n"
             f"{XTVEngine.get_signature(mode=self.mode)}"
         )
 
@@ -1026,6 +1092,39 @@ class TaskProcessor:
                 )
 
                 send_as = self.data.get("send_as")
+
+                # Voice note: send as voice message
+                if self.media_type == "voice_convert":
+                    media_msg = await self.active_client.send_voice(
+                        chat_id=target_chat_id,
+                        voice=self.output_path,
+                        caption=caption,
+                        progress=progress_for_pyrogram,
+                        progress_args=(
+                            "📤 **Uploading Voice Note...**",
+                            self.status_msg,
+                            upload_start,
+                            self.mode,
+                            self.is_priority,
+                        ),
+                    )
+                    break
+
+                # Video note: send as round video
+                if self.media_type == "video_note":
+                    media_msg = await self.active_client.send_video_note(
+                        chat_id=target_chat_id,
+                        video_note=self.output_path,
+                        progress=progress_for_pyrogram,
+                        progress_args=(
+                            "📤 **Uploading Video Note...**",
+                            self.status_msg,
+                            upload_start,
+                            self.mode,
+                            self.is_priority,
+                        ),
+                    )
+                    break
 
                 file_ext = os.path.splitext(self.output_path)[1].lower()
                 is_vid_ext = file_ext in [".mp4", ".mkv", ".webm", ".avi", ".mov"]

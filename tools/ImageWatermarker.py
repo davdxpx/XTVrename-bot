@@ -21,8 +21,10 @@ async def handle_watermarker_menu(client, callback_query):
 
     try:
         await callback_query.message.edit_text(
-            "© **Image Watermarker**\n\n"
-            "Please **send me the image** you want to watermark.",
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Send me the **image** you want to watermark.\n"
+            "> Supported: PNG, JPG, WEBP",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
@@ -40,11 +42,18 @@ async def handle_watermark_type(client, callback_query):
     set_state(user_id, f"awaiting_watermark_{wtype}")
 
     if wtype == "text":
-        msg = "📝 **Send me the text** you want to use as a watermark:"
+        msg = (
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Send me the **text** you want as a watermark."
+        )
     else:
         set_state(user_id, "awaiting_watermark_overlay")
         msg = (
-            "🖼 **Send me the image (PNG/JPG)** you want to use as a watermark overlay:"
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Send me the **image** (PNG/JPG) to use\n"
+            "> as a watermark overlay."
         )
 
     try:
@@ -67,19 +76,21 @@ async def handle_watermark_position(client, callback_query):
     set_state(user_id, "awaiting_watermark_size")
     try:
         await callback_query.message.edit_text(
-            "📏 **Select Watermark Size**\n\nHow large should the watermark be?",
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> How large should the watermark be?",
             reply_markup=InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("Small", callback_data="wm_size_small"),
-                        InlineKeyboardButton("Medium", callback_data="wm_size_medium"),
-                        InlineKeyboardButton("Large", callback_data="wm_size_large"),
+                        InlineKeyboardButton("🔹 Small", callback_data="wm_size_small"),
+                        InlineKeyboardButton("🔸 Medium", callback_data="wm_size_medium"),
+                        InlineKeyboardButton("🔶 Large", callback_data="wm_size_large"),
                     ],
                     [
-                        InlineKeyboardButton("10% width", callback_data="wm_size_10"),
-                        InlineKeyboardButton("20% width", callback_data="wm_size_20"),
+                        InlineKeyboardButton("10%", callback_data="wm_size_10"),
+                        InlineKeyboardButton("20%", callback_data="wm_size_20"),
+                        InlineKeyboardButton("30%", callback_data="wm_size_30"),
                     ],
-                    [InlineKeyboardButton("30% width", callback_data="wm_size_30")],
                     [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")],
                 ]
             ),
@@ -115,7 +126,13 @@ async def handle_watermark_size(client, callback_query):
         )
         data["file_message"] = msg
         await callback_query.message.delete()
-        reply_msg = await client.send_message(user_id, "Processing watermark...")
+        reply_msg = await client.send_message(
+            user_id,
+            "©️ **Image Watermarker**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "⏳ __Processing watermark...__\n\n"
+            "> Applying your customized overlay."
+        )
         from plugins.process import process_file
 
         asyncio.create_task(process_file(client, reply_msg, data))

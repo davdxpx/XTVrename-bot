@@ -888,30 +888,37 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         auto_expire = s.get("privacy_auto_expire_links", False) if s else False
         expire_dur = s.get("privacy_link_expiry_duration", "24h") if s else "24h"
 
-        text = "🔒 **Privacy Settings**\n\n"
+        text = "🔒 **Privacy Settings**\n━━━━━━━━━━━━━━━━━━━━\n\n"
         buttons = []
+        has_plan_features = False
 
         if privacy_feat.get("hide_display_name", False) or plan == "global" or is_global_admin:
-            text += f"**Display Name on Shares:** {'ON' if share_name else 'OFF'} — Show your name on shared files\n\n"
+            has_plan_features = True
+            text += f"> 👤 **Display Name:** {'✅ ON' if share_name else '❌ OFF'}\n> __Show your name on shared files__\n"
             buttons.append([InlineKeyboardButton(f"👤 Display Name: {'✅ ON' if share_name else '❌ OFF'}", callback_data="myfiles_toggle_share_name")])
 
         if privacy_feat.get("hide_forward_tags", False) or plan == "global" or is_global_admin:
-            text += f"**Hide Forward Tags:** {'ON' if hide_forward else 'OFF'} — Remove 'Forwarded from' on shares\n\n"
-            buttons.append([InlineKeyboardButton(f"🏷️ Hide Forward Tags: {'✅ ON' if hide_forward else '❌ OFF'}", callback_data="myfiles_toggle_hide_fwd")])
+            has_plan_features = True
+            text += f"> 🏷️ **Forward Tags:** {'✅ Hidden' if hide_forward else '❌ Visible'}\n> __Remove 'Forwarded from' on shares__\n"
+            buttons.append([InlineKeyboardButton(f"🏷️ Forward Tags: {'✅ Hidden' if hide_forward else '❌ Visible'}", callback_data="myfiles_toggle_hide_fwd")])
 
         if privacy_feat.get("link_anonymity", False) or plan == "global" or is_global_admin:
-            text += f"**Link Anonymity:** {'ON' if link_anon else 'OFF'} — Use anonymous hash in share links\n\n"
+            has_plan_features = True
+            text += f"> 🔗 **Link Anonymity:** {'✅ ON' if link_anon else '❌ OFF'}\n> __Use anonymous hash in share links__\n"
             buttons.append([InlineKeyboardButton(f"🔗 Link Anonymity: {'✅ ON' if link_anon else '❌ OFF'}", callback_data="myfiles_toggle_link_anon")])
 
-        text += f"**Hide Username:** {'ON' if hide_user else 'OFF'} — Hide username on shared content\n\n"
+        if has_plan_features:
+            text += "\n━━━━━━━━━━━━━━━━━━━━\n\n"
+
+        text += f"> 🙈 **Hide Username:** {'✅ ON' if hide_user else '❌ OFF'}\n> __Hide username on shared content__\n"
         buttons.append([InlineKeyboardButton(f"🙈 Hide Username: {'✅ ON' if hide_user else '❌ OFF'}", callback_data="stg_toggle_privacy_hide_username")])
 
-        text += f"**Auto-Expire Links:** {'ON' if auto_expire else 'OFF'} — Share links expire automatically\n\n"
-        buttons.append([InlineKeyboardButton(f"⏳ Auto-Expire Links: {'✅ ON' if auto_expire else '❌ OFF'}", callback_data="stg_toggle_privacy_auto_expire_links")])
+        text += f"> ⏳ **Auto-Expire Links:** {'✅ ON' if auto_expire else '❌ OFF'}\n> __Share links expire automatically__\n"
+        buttons.append([InlineKeyboardButton(f"⏳ Auto-Expire: {'✅ ON' if auto_expire else '❌ OFF'}", callback_data="stg_toggle_privacy_auto_expire_links")])
 
         if auto_expire:
             dur_labels = {"1h": "1 Hour", "6h": "6 Hours", "24h": "24 Hours", "7d": "7 Days", "30d": "30 Days"}
-            text += f"**Link Expiry Duration:** {dur_labels.get(expire_dur, expire_dur)}\n\n"
+            text += f"> ⏱️ **Expiry Duration:** `{dur_labels.get(expire_dur, expire_dur)}`\n"
             buttons.append([InlineKeyboardButton(f"⏱️ Expiry: {dur_labels.get(expire_dur, expire_dur)}", callback_data="stg_sel_privacy_link_expiry_duration")])
 
         buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")])

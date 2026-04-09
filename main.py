@@ -45,6 +45,10 @@ import tools.FileConverter
 import tools.AudioMetadataEditor
 import tools.ImageWatermarker
 import tools.SubtitleExtractor
+import tools.VideoTrimmer
+import tools.MediaInfo
+import tools.VoiceNoteConverter
+import tools.VideoNoteConverter
 
 def register_tool_handlers(client, module):
     for name in dir(module):
@@ -60,6 +64,10 @@ register_tool_handlers(app, tools.FileConverter)
 register_tool_handlers(app, tools.AudioMetadataEditor)
 register_tool_handlers(app, tools.ImageWatermarker)
 register_tool_handlers(app, tools.SubtitleExtractor)
+register_tool_handlers(app, tools.VideoTrimmer)
+register_tool_handlers(app, tools.MediaInfo)
+register_tool_handlers(app, tools.VoiceNoteConverter)
+register_tool_handlers(app, tools.VideoNoteConverter)
 
 user_bot = None
 

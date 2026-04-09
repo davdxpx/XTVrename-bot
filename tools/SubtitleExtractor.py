@@ -20,8 +20,11 @@ async def handle_subtitle_extractor_menu(client, callback_query):
 
     try:
         await callback_query.message.edit_text(
-            "📝 **Subtitle Extractor**\n\n"
-            "Please **send me the video file** you want to extract subtitles from.",
+            "📝 **Subtitle Extractor**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Send me the **video file** you want to\n"
+            "> extract subtitles from.\n\n"
+            "**Output:** SRT subtitle file",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
@@ -55,7 +58,12 @@ async def handle_subtitle_extractor_upload(client, message):
             "is_auto": False,
         }
 
-        reply_msg = await client.send_message(user_id, "Processing subtitle extraction...")
+        reply_msg = await client.send_message(
+            user_id,
+            "📝 **Subtitle Extractor**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> ⏳ Scanning video streams for text tracks..."
+        )
         from plugins.process import process_file
 
         asyncio.create_task(process_file(client, reply_msg, data))

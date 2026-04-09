@@ -20,8 +20,11 @@ async def handle_file_converter_menu(client, callback_query):
 
     try:
         await callback_query.message.edit_text(
-            "🔀 **File Converter**\n\n"
-            "Please **send me the file** (Video or Image) you want to convert.",
+            "🔀 **File Converter**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Send me the **video** or **image** file\n"
+            "> you want to convert to another format.\n\n"
+            "**Supported:** MP4, MKV, GIF, MP3, PNG, JPG, WEBP, x264, x265",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
@@ -54,7 +57,12 @@ async def handle_convert_to(client, callback_query):
             session_data.get("file_chat_id"), session_data.get("file_message_id")
         )
         data["file_message"] = msg
-        reply_msg = await client.send_message(user_id, "Processing conversion...")
+        reply_msg = await client.send_message(
+            user_id,
+            "🔀 **File Converter**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> ⏳ Initializing conversion pipeline..."
+        )
         from plugins.process import process_file
 
         asyncio.create_task(process_file(client, reply_msg, data))

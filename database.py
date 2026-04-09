@@ -645,6 +645,10 @@ class Database:
                             "audio_editor": True,
                             "watermarker": True,
                             "subtitle_extractor": True,
+                            "video_trimmer": True,
+                            "media_info": True,
+                            "voice_converter": True,
+                            "video_note_converter": True,
                             "4k_enhancement": True,
                             "batch_processing_pro": True
                         }
@@ -661,6 +665,10 @@ class Database:
                             "audio_editor": True,
                             "watermarker": True,
                             "subtitle_extractor": True,
+                            "video_trimmer": True,
+                            "media_info": True,
+                            "voice_converter": True,
+                            "video_note_converter": True,
                             "4k_enhancement": True,
                             "batch_processing_pro": True
                         }

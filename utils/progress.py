@@ -48,17 +48,17 @@ async def progress_for_pyrogram(
     total_fmt = XTVEngine.humanbytes(total)
     speed_fmt = XTVEngine.humanbytes(speed)
 
-    text = f"{ud_type}\n\n"
+    elapsed_str = _format_elapsed(diff)
 
+    text = f"{ud_type}\n\n"
     text += f"**Progress:**  `{percentage:.1f}%`\n"
     text += f"[{bar}]\n\n"
-
-    text += f"**Size:** `{current_fmt}` / `{total_fmt}`\n"
-    text += f"**Speed:** `{speed_fmt}/s`\n"
-    text += f"**ETA:** `{estimated_total_time}`\n"
+    text += f"> **Size:** `{current_fmt}` / `{total_fmt}`\n"
+    text += f"> **Speed:** `{speed_fmt}/s`\n"
+    text += f"> **Elapsed:** `{elapsed_str}` · **ETA:** `{estimated_total_time}`\n"
 
     if is_priority:
-        text += f"\n**Priority Queue:** `Active`\n"
+        text += f"\n⚡ **Priority Queue:** `Active`\n"
 
     text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
     text += f"{XTVEngine.get_signature(mode=mode)}"
@@ -68,8 +68,15 @@ async def progress_for_pyrogram(
     except FloodWait as e:
         setattr(message, "last_update", now + e.value)
     except Exception:
-        # Message may have been deleted or is otherwise uneditable
         pass
+
+
+def _format_elapsed(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
