@@ -310,6 +310,43 @@ For around €4 a month, you get a dedicated IPv4 and a massive **20TB of Traffi
 
 ---
 
+
+## 🤖 BotFather Commands
+
+Use these ready-to-copy command lists to easily set up your bot menu in @BotFather via `Edit Bot > Edit Commands`. Choose the block that matches your `PUBLIC_MODE` configuration.
+
+<details>
+<summary><b>🔓 Public Mode Commands (PUBLIC_MODE=True)</b></summary>
+<br>
+
+```text
+start - ▶️ Start the bot
+settings - ⚙️ Customize your templates & thumbnails
+myfiles - 🗃️ Your personal Cloud Media Library
+premium - 💎 View and upgrade your premium plan
+usage - 📊 Track your limits & active storage
+help - 🆘 Read the Help Guide & troubleshooting
+info - ℹ️ View bot version and support info
+end - 🚫 Cancel the current task or state
+admin - ⛔ Access Global Configurations (CEO Only)
+```
+</details>
+
+<details>
+<summary><b>🔒 Private Mode Commands (PUBLIC_MODE=False)</b></summary>
+<br>
+
+```text
+start - ▶️ Start the bot
+myfiles - 🗃️ Open your Cloud Media Library
+help - 🆘 Read the Help Guide & troubleshooting
+info - ℹ️ View bot version and support info
+end - 🚫 Cancel the current task or state
+admin - ⛔ Access Global Configurations (Admins Only)
+```
+</details>
+
+---
 ## 🎮 Usage Commands
 
 *   **/start**: Check bot status and ping.
