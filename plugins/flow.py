@@ -1699,7 +1699,6 @@ async def handle_file_upload(client, message):
         )
 
         try:
-            from config import Config
             import os
             input_path = os.path.join(Config.DOWNLOAD_DIR, f"{user_id}_{message.id}_probe_input")
             downloaded = await client.download_media(message, file_name=input_path)

@@ -1,6 +1,7 @@
 # --- Imports ---
 import logging
 import sys
+from config import Config
 
 # === Classes ===
 class Colors:
@@ -56,7 +57,6 @@ _console_handler = None
 
 # === Helper Functions ===
 def get_logger(name):
-    from config import Config
     global _console_handler
 
     logger = logging.getLogger(name)
