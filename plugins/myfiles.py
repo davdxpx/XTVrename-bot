@@ -624,7 +624,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         back_data = state_dict.get("current_view", "myfiles_cat_recent")
 
         markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Copy Link", copy_text=deep_link)],
+            [InlineKeyboardButton("🔗 Open Link", url=deep_link)],
             [InlineKeyboardButton("← Back", callback_data=back_data)]
         ])
 
