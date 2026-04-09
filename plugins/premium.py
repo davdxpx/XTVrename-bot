@@ -59,7 +59,7 @@ async def generate_premium_dashboard(user_id, client):
             f"**MyFiles Limits:**\n"
             f"> **Permanent Files:** `Up to {perm_str}`\n"
             f"> **Custom Folders:** `Up to {folder_str}`\n\n"
-            f"✨ *Thank you for supporting 𝕏TV! Enjoy your exclusive benefits, priority processing, and enhanced limits.*\n\n"
+            f"✨ _Thank you for supporting 𝕏TV! Enjoy your exclusive benefits, priority processing, and enhanced limits._\n\n"
             f"━━━━━━━━━━━━━━━━━━━━"
         )
 

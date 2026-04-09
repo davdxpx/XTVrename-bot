@@ -171,7 +171,7 @@ async def user_settings_callback(client, callback_query):
             )
 
             if not channels:
-                text += "❌ *No Dumb Channels configured yet.*\n\n"
+                text += "❌ _No Dumb Channels configured yet._\n\n"
 
             buttons = [[InlineKeyboardButton("➕ Add New Dumb Channel", callback_data="dumb_user_add")]]
 
@@ -260,7 +260,7 @@ async def user_settings_callback(client, callback_query):
                 await callback_query.message.edit_text(
                     "✏️ **Rename Channel**\n\n"
                     "Please enter the new name for this channel:\n\n"
-                    "*(Send `disable` to cancel)*",
+                    "_(Send `disable` to cancel)_",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"dumb_user_opt_{ch_id}")]])
                 )
             except MessageNotModified:
@@ -298,7 +298,7 @@ async def user_settings_callback(client, callback_query):
                     "➕ **Add Dumb Channel**\n\n"
                     "Please add me as an Administrator in the desired channel.\n"
                     "Then, forward any message from that channel to me, OR send the Channel ID (e.g. `-100...`) or Public Username.\n\n"
-                    "*(Send `disable` to cancel)*",
+                    "_(Send `disable` to cancel)_",
                     reply_markup=InlineKeyboardMarkup(
                         [
                             [
@@ -435,7 +435,7 @@ async def user_settings_callback(client, callback_query):
                 sent_msg = await client.send_photo(
                     user_id,
                     f,
-                    caption="🖼 **Your Current Default Thumbnail**\n*(This message will auto-delete to keep the chat clean)*",
+                    caption="🖼 **Your Current Default Thumbnail**\n_(This message will auto-delete to keep the chat clean)_",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("✅ OK", callback_data="user_delete_msg")]]
                     )
@@ -996,7 +996,7 @@ async def user_settings_callback(client, callback_query):
         try:
             await callback_query.message.edit_text(
                 "🌍 **Select your preferred language for TMDb Metadata:**\n\n"
-                "*(Default is English)*",
+                "_(Default is English)_",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -1415,7 +1415,7 @@ async def _send_usage(client, target, user_id, is_callback=False):
     if limit_to_check > 0 or (not is_admin_user and daily_file_count_limit > 0):
         text += f"`{progress_bar}` {max_percent:.1f}%\n\n"
     else:
-        text += f"*(No limits currently applied)*\n\n"
+        text += f"_(No limits currently applied)_\n\n"
 
     text += (
         f"**All-Time**\n"

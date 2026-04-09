@@ -190,7 +190,7 @@ async def send_starter_setup_message(client, user_id, first_name=""):
         "**⚡ Quick Mode**\n"
         "├ **Best for:** `Personal Videos, Anime, General Files`\n"
         "└ **Action:** `Skips auto-detection, bypasses TMDb, and goes straight to renaming.`\n\n"
-        "*(Don't worry, you can always change this later in /settings)*"
+        "_(Don't worry, you can always change this later in /settings)_"
     )
 
     markup = InlineKeyboardMarkup(
@@ -228,7 +228,7 @@ async def handle_setup_mode_callback(client, callback_query):
     text = (
         f"✅ **Setup Complete!**\n\n"
         f"You have selected **{mode_str}**.\n"
-        "*(You can change this anytime via /settings)*\n\n"
+        "_(You can change this anytime via /settings)_\n\n"
         "**💡 Tip:** Simply send or forward any file to me right now to begin!"
     )
 
