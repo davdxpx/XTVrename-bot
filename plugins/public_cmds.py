@@ -8,7 +8,7 @@ import datetime
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import Config
+from config import Config, BOT_START_TIME
 from database import db
 from utils.log import get_logger
 import io
