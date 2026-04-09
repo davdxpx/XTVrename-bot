@@ -20,8 +20,13 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
-## 📋 What's New in v1.5.0
+## 📋 What's New in v1.5.1
+*   **Migration to Pyrofork**: The underlying Telegram framework was migrated from Pyrogram to Pyrofork, enabling the usage of modern Telegram API Layer features.
+*   **Expandable Quotes**: Added native support for `<blockquote expandable>` for long text fields (e.g. inside `/help`).
+*   **System Info Refactor**: Added detailed system info natively in the `/info` menu.
+*   **Robust Peer Caching**: Fixed pesky `PeerIdInvalid` errors. The bot now explicitly forces a re-cache by fetching the chat when channels are not found dynamically!
 
+## 📋 What's New in v1.5.0
 > **The biggest update in 𝕏TV history — 77 pull requests, a full rebrand, and an entirely new product.**
 
 - **🏷️ Rebrand:** XTV Rename Bot is now **𝕏TV MediaStudio™** — new name, new identity, new era
