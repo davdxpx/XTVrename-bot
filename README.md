@@ -20,7 +20,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
-## 📋 What's New in v1.5.1
+### 📋 What's New in v1.5.1
 *   **Migration to Pyrofork**: The underlying Telegram framework was migrated from Pyrogram to Pyrofork, enabling the usage of modern Telegram API Layer features.
 *   **Expandable Quotes**: Added native support for `<blockquote expandable>` for long text fields (e.g. inside `/help`).
 *   **System Info Refactor**: Added detailed system info natively in the `/info` menu.
@@ -47,6 +47,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 - **🎨 UI Polish:** 150+ back-button labels standardized with contextual `← Back to [Page]` format
 - **🏗️ Infrastructure:** Ruff linter, GitHub Actions CI, pinned dependencies, Dockerfile optimization
 </details>  
+
 ---
 
 ## 📑 Table of Contents
