@@ -208,15 +208,15 @@ async def admin_panel(client, message):
 
     if Config.PUBLIC_MODE:
         text = (
-            "⚙️ **Control Center** · _Public Mode_\n\n"
+            "⚙️ **Control Center** · __Public Mode__\n\n"
             "You're running the show.\n"
             "Everything here applies globally — branding, rate limits, payment methods, the works.\n\n"
-            "_(Your personal renaming templates live in /settings)_"
+            "__(Your personal renaming templates live in /settings)__"
         )
     else:
         text = (
             "⚙️ **𝕏TV Admin Panel**\n\n"
-            "_Your studio. Your rules._\n"
+            "__Your studio. Your rules.__\n"
             "These settings shape how every file passing through the bot gets handled."
         )
 
@@ -490,7 +490,7 @@ async def admin_callback(client, callback_query):
                 f"⚙️ **Set {name}**\n"
                 f"For the **{plan.capitalize()}** Tier.\n\n"
                 f"Please send a number in the chat (e.g. `50` or `30`).\n"
-                f"> 💡 _Tip: Send `-1` to set this limit to UNLIMITED._",
+                f"> 💡 __Tip: Send `-1` to set this limit to UNLIMITED.__",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("∞ Set Unlimited", callback_data=f"set_unlimited_myfiles_lim_{plan}_{field}")],
                     [InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]
@@ -683,7 +683,7 @@ async def admin_callback(client, callback_query):
             )
 
             if not channels:
-                text += "❌ _No Dumb Channels configured yet._\n\n"
+                text += "❌ __No Dumb Channels configured yet.__\n\n"
 
             buttons = [[InlineKeyboardButton("➕ Add New Dumb Channel", callback_data="dumb_add")]]
 
@@ -772,7 +772,7 @@ async def admin_callback(client, callback_query):
                 await callback_query.message.edit_text(
                     "✏️ **Rename Channel**\n\n"
                     "Please enter the new name for this global channel:\n\n"
-                    "_(Send `disable` to cancel)_",
+                    "__(Send `disable` to cancel)__",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"dumb_opt_{ch_id}")]])
                 )
             except MessageNotModified:
@@ -840,7 +840,7 @@ async def admin_callback(client, callback_query):
         text = (
             "⚙️ **Payment Settings**\n\n"
             "Toggle payment methods and configure their respective addresses/IDs.\n"
-            "_(Users will only see the enabled methods during checkout)_\n\n"
+            "__(Users will only see the enabled methods during checkout)__\n\n"
             f"**PayPal Email:** `{pm.get('paypal_email', 'Not set')}`\n"
             f"**UPI ID:** `{pm.get('upi_id', 'Not set')}`\n\n"
             f"**Crypto Addresses:**\n"
@@ -1196,7 +1196,7 @@ async def admin_callback(client, callback_query):
                 text = (
                     "⚙️ **Free Plan Features**\n\n"
                     "Select a category to configure **Baseline Features**.\n"
-                    "> _Note: Free Plan media tools apply globally by default._"
+                    "> __Note: Free Plan media tools apply globally by default.__"
                 )
             else:
                 text = (
@@ -1555,7 +1555,7 @@ async def admin_callback(client, callback_query):
                 "➕ **Add Dumb Channel**\n\n"
                 "Please add me as an Administrator in the desired channel.\n"
                 "Then, forward any message from that channel to me, OR send the Channel ID (e.g. `-100...`) or Public Username.\n\n"
-                "_(Send `disable` to cancel)_",
+                "__(Send `disable` to cancel)__",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]]
                 ),
@@ -1791,7 +1791,7 @@ async def admin_callback(client, callback_query):
                     "Simply **add me as an Administrator** to your desired channel right now!\n"
                     "Make sure I have the 'Invite Users via Link' permission.\n\n"
                     "I will automatically detect the channel and set it up instantly.\n\n"
-                    "_Send /cancel to cancel._",
+                    "__Send /cancel to cancel.__",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("❌ Cancel", callback_data="admin_force_sub_menu")]]
                     )
@@ -1903,7 +1903,7 @@ async def admin_callback(client, callback_query):
             if current_msg:
                 text += f"`{current_msg}`\n\n"
             else:
-                text += "_Default Message_\n\n"
+                text += "__Default Message__\n\n"
 
             text += "Send your new gate message. You can use `{channel}`, `{bot_name}`, `{community}`.\nSend /cancel to keep the current one."
 
@@ -2069,7 +2069,7 @@ async def admin_callback(client, callback_query):
                 "Simply **add me as an Administrator** to your desired channel right now!\n"
                 "Make sure I have the 'Invite Users via Link' permission.\n\n"
                 "I will automatically detect the channel and set it up instantly.\n\n"
-                "_Send /cancel to cancel._"
+                "__Send /cancel to cancel.__"
             )
         elif field == "daily_egress":
             text = "📦 **Send the new daily egress limit.**\n\nYou can send the value in MB (e.g., `2048`) or use `GB` format (e.g., `2 GB` or `5.5 GB`).\nSend `0` to disable."
@@ -2187,7 +2187,7 @@ async def admin_callback(client, callback_query):
                 sent_msg = await client.send_photo(
                     user_id,
                     f,
-                    caption="🖼 **Current Default Thumbnail**\n_(This message will auto-delete to keep the chat clean)_",
+                    caption="🖼 **Current Default Thumbnail**\n__(This message will auto-delete to keep the chat clean)__",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("✅ OK", callback_data="admin_delete_msg")]]
                     )
@@ -2751,7 +2751,7 @@ async def admin_callback(client, callback_query):
         try:
             await callback_query.message.edit_text(
                 "🌍 **Select global preferred language for TMDb Metadata:**\n\n"
-                "_(Default is English)_",
+                "__(Default is English)__",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
@@ -2806,10 +2806,10 @@ async def admin_callback(client, callback_query):
         if Config.PUBLIC_MODE:
             try:
                 await callback_query.message.edit_text(
-                    "⚙️ **Control Center** · _Public Mode_\n\n"
+                    "⚙️ **Control Center** · __Public Mode__\n\n"
                     "You're running the show.\n"
                     "Everything here applies globally — branding, rate limits, payment methods, the works.\n\n"
-                    "_(Your personal renaming templates live in /settings)_",
+                    "__(Your personal renaming templates live in /settings)__",
                     reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE),
                 )
             except MessageNotModified:
@@ -2818,7 +2818,7 @@ async def admin_callback(client, callback_query):
             try:
                 await callback_query.message.edit_text(
                     "⚙️ **𝕏TV Admin Panel**\n\n"
-                    "_Your studio. Your rules._\n"
+                    "__Your studio. Your rules.__\n"
                     "These settings shape how every file passing through the bot gets handled.",
                     reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE),
                 )
