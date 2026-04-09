@@ -984,13 +984,13 @@ async def handle_help_callbacks(client, callback_query):
                 "**🎞️ Formats & Codecs**\n\n"
                 "> Supported media formats.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "**Supported Video Formats:**\n"
+                "<blockquote expandable>**Supported Video Formats:**\n"
                 "• `.mp4`, `.mkv`, `.avi`, `.webm`, `.flv`\n\n"
                 "**Supported Audio Formats:**\n"
                 "• `.mp3`, `.flac`, `.m4a`, `.wav`, `.aac`\n\n"
                 "**Supported Image Formats:**\n"
                 "• `.jpg`, `.png`, `.webp`, `.jpeg`\n\n"
-                "__(The bot can process any extension, but specific tools like the Converter or Audio Editor only work with media files!)__",
+                "__(The bot can process any extension, but specific tools like the Converter or Audio Editor only work with media files!)__</blockquote>",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
         except MessageNotModified:
@@ -1036,7 +1036,9 @@ async def handle_help_callbacks(client, callback_query):
                 "**🔧 Troubleshooting & FAQ**\n\n"
                 "> Common issues and solutions.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "Select the category that best matches your issue:",
+                "<blockquote expandable>Welcome to the troubleshooting guide. Here you can find solutions to common problems.\n"
+                "If you are experiencing issues with the bot, please select one of the categories below to see detailed help.</blockquote>\n\n"
+                "Select the issue you are experiencing below to see how to fix it:",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [InlineKeyboardButton("🔌 Connection & Access", callback_data="help_ts_cat_connect"),

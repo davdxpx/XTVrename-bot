@@ -1,11 +1,14 @@
 import os
+import time
 from dotenv import load_dotenv
+
+BOT_START_TIME = time.time()
 
 load_dotenv()
 
 
 class Config:
-    VERSION = "v1.5.0"
+    VERSION = "v1.5.1"
     MYFILES_VERSION = "2.1"
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     API_ID = int(os.getenv("API_ID", 0))

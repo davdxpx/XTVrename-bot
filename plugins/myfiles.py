@@ -1414,11 +1414,20 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         await callback_query.answer("Sending file...", show_alert=False)
         try:
-            await client.copy_message(
-                chat_id=user_id,
-                from_chat_id=f["channel_id"],
-                message_id=f["message_id"]
-            )
+            from pyrogram.errors import PeerIdInvalid
+            try:
+                await client.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=f["channel_id"],
+                    message_id=f["message_id"]
+                )
+            except PeerIdInvalid:
+                await client.get_chat(f["channel_id"])
+                await client.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=f["channel_id"],
+                    message_id=f["message_id"]
+                )
         except Exception as e:
             await client.send_message(user_id, f"❌ Failed to send file. It might have been deleted from the database channel. Error: `{e}`")
         return
@@ -1575,11 +1584,20 @@ async def process_send_all(client, user_id, files, plan, batch_id):
             await asyncio.sleep(60)
 
         try:
-            await client.copy_message(
-                chat_id=user_id,
-                from_chat_id=f["channel_id"],
-                message_id=f["message_id"]
-            )
+            from pyrogram.errors import PeerIdInvalid
+            try:
+                await client.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=f["channel_id"],
+                    message_id=f["message_id"]
+                )
+            except PeerIdInvalid:
+                await client.get_chat(f["channel_id"])
+                await client.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=f["channel_id"],
+                    message_id=f["message_id"]
+                )
             count += 1
             queue_manager.update_status(batch_id, str(i), "done_user")
 

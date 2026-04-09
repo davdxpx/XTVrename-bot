@@ -20,9 +20,15 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
-## 📋 What's New in v1.5.0
-
-> **The biggest update in 𝕏TV history — 77 pull requests, a full rebrand, and an entirely new product.**
+### 📋 What's New in v1.5.1
+*   **Migration to Pyrofork**: The underlying Telegram framework was migrated from Pyrogram to Pyrofork, enabling the usage of modern Telegram API Layer features.
+*   **Expandable Quotes**: Added native support for `<blockquote expandable>` for long text fields (e.g. inside `/help`).
+*   **System Info Refactor**: Added detailed system info natively in the `/info` menu.
+*   **Robust Peer Caching**: Fixed pesky `PeerIdInvalid` errors. The bot now explicitly forces a re-cache by fetching the chat when channels are not found dynamically!
+  
+<details>
+<summary><b>📋 What's New in v1.5.0</b></summary>
+• The biggest update in 𝕏TV history — 77 pull requests, a full rebrand, and an entirely new product.
 
 - **🏷️ Rebrand:** XTV Rename Bot is now **𝕏TV MediaStudio™** — new name, new identity, new era
 - **📁 MyFiles V2.0 — Endgame Evolution:** Personal cloud storage with auto-folders, custom folders, batch multi-select actions, season grouping, Netflix-style TMDb poster dashboard, inline query search (`@bot query`), system filename templates, dynamic sorting, and privacy settings
@@ -40,7 +46,8 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 - **🧹 Reliability:** State TTL auto-cleanup, queue memory leak fix, graceful shutdown, robust subprocess cleanup with disk checks
 - **🎨 UI Polish:** 150+ back-button labels standardized with contextual `← Back to [Page]` format
 - **🏗️ Infrastructure:** Ruff linter, GitHub Actions CI, pinned dependencies, Dockerfile optimization
-  
+</details>  
+
 ---
 
 ## 📑 Table of Contents

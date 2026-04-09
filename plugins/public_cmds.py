@@ -1,8 +1,14 @@
 # --- Imports ---
+import os
+import time
+import psutil
+import platform
+import pyrogram
+import datetime
 from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import Config
+from config import Config, BOT_START_TIME
 from database import db
 from utils.log import get_logger
 import io
@@ -104,11 +110,27 @@ async def info_command(client, message):
     text += f"**💡 About This Bot**\n"
     text += f"Your ultimate media processing tool. Easily rename, format, and organize your files with professional metadata injection and custom thumbnails.\n\n"
 
+
+
+    # Calculate Uptime
+    uptime_seconds = int(time.time() - BOT_START_TIME)
+    uptime_str = f"{uptime_seconds // 86400}d {(uptime_seconds % 86400) // 3600}h"
+
+    # Get system stats
+    cpu_usage = psutil.cpu_percent()
+    ram_usage = psutil.virtual_memory().percent
+
     text += f"**📊 System Details**\n"
-    text += f"• **Version:** `{Config.VERSION} (Public Edition)`\n"
-    text += f"• **MyFiles Version:** `{Config.MYFILES_VERSION}`\n"
+    text += f"• **Bot Version:** `{Config.VERSION} (Public Edition)`\n"
+    text += f"• **MyFiles Engine:** `{Config.MYFILES_VERSION}`\n"
+    text += f"• **Framework:** `Pyrofork v{pyrogram.__version__}`\n"
+    text += f"• **Python:** `v{platform.python_version()}`\n"
+    text += f"• **OS:** `{platform.system()} {platform.release()}`\n"
+    text += f"• **Uptime:** `{uptime_str}`\n"
+    text += f"• **Load:** `CPU {cpu_usage}% | RAM {ram_usage}%`\n"
     text += f"• **Status:** `Online & Operational`\n"
     text += f"• **Community:** `{community_name}`\n\n"
+
 
     text += f"**📞 Help & Support**\n"
     text += f"• **Support Contact:** {support_contact}\n"
@@ -1217,6 +1239,9 @@ async def handle_user_text(client, message):
         if message.forward_from_chat:
             ch_id = message.forward_from_chat.id
             ch_name = message.forward_from_chat.title
+        elif getattr(message, 'forward_origin', None) and getattr(message.forward_origin, 'chat', None):
+            ch_id = message.forward_origin.chat.id
+            ch_name = message.forward_origin.chat.title
         elif val:
             try:
                 chat = await client.get_chat(val)
