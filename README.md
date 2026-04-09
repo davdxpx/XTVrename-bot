@@ -27,7 +27,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **Robust Peer Caching**: Fixed pesky `PeerIdInvalid` errors. The bot now explicitly forces a re-cache by fetching the chat when channels are not found dynamically!
   
 <details>
-<summary>## 📋 What's New in v1.5.0</summary>
+<summary><b>📋 What's New in v1.5.0</b></summary>
 > **The biggest update in 𝕏TV history — 77 pull requests, a full rebrand, and an entirely new product.**
 
 - **🏷️ Rebrand:** XTV Rename Bot is now **𝕏TV MediaStudio™** — new name, new identity, new era
