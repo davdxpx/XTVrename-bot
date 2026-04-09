@@ -25,7 +25,8 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **Expandable Quotes**: Added native support for `<blockquote expandable>` for long text fields (e.g. inside `/help`).
 *   **System Info Refactor**: Added detailed system info natively in the `/info` menu.
 *   **Robust Peer Caching**: Fixed pesky `PeerIdInvalid` errors. The bot now explicitly forces a re-cache by fetching the chat when channels are not found dynamically!
-
+  
+<details>
 <summary>## 📋 What's New in v1.5.0</summary>
 > **The biggest update in 𝕏TV history — 77 pull requests, a full rebrand, and an entirely new product.**
 
