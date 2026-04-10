@@ -270,6 +270,7 @@ async def handle_start_command_unique(client, message):
     is_premium_user = False
     plan_display = "Standard"
     status_emoji = "⭐"
+    pf = {}
 
     if Config.PUBLIC_MODE and not show_other:
         user_doc = await db.get_user(user_id)
