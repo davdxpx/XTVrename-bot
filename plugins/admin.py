@@ -66,7 +66,7 @@ def get_admin_main_menu(pro_session, public_mode):
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "📁 MyFiles Settings", callback_data="admin_myfiles_settings"
+                    "📁 Setup MyFiles™", callback_data="admin_myfiles_settings"
                 ),
             ]
         )
@@ -243,7 +243,10 @@ async def admin_callback(client, callback_query):
     debug(f"Admin callback: {data} from user {user_id}")
 
     if data == "admin_myfiles_settings":
-        text = "📁 **MyFiles Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
+        if Config.PUBLIC_MODE:
+            text = "📁 **Setup MyFiles™**\n\nConfigure database channels, storage limits, and cleanup unused files."
+        else:
+            text = "📁 **MyFiles Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
         buttons = [
             [InlineKeyboardButton("🗄️ Database Channels", callback_data="admin_myfiles_db_channels")],
         ]

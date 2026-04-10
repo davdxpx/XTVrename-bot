@@ -1,5 +1,6 @@
 # --- Imports ---
 from pyrogram.errors import MessageNotModified
+from plugins.user_setup import track_tool_usage
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils.state import set_state, get_state, get_data, clear_session
@@ -12,6 +13,7 @@ logger = get_logger("tools.VideoNoteConverter")
 # === Handlers ===
 @Client.on_callback_query(filters.regex(r"^video_note_menu$"))
 async def handle_video_note_menu(client, callback_query):
+    await track_tool_usage(callback_query.from_user.id, 'video_note_converter')
     await callback_query.answer()
     user_id = callback_query.from_user.id
     clear_session(user_id)
