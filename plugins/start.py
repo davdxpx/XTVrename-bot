@@ -13,6 +13,7 @@ from database import db
 from utils.auth import check_force_sub
 from utils.gate import send_force_sub_gate, check_and_send_welcome
 from plugins.force_sub_handler import send_starter_setup_message
+from plugins.user_setup import perform_smart_swap_if_needed, track_tool_usage, send_user_tool_preferences_setup
 
 @Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)
 
@@ -245,6 +246,15 @@ async def handle_start_command_unique(client, message):
             await send_starter_setup_message(client, user_id, message.from_user.first_name)
             return
 
+        has_completed_preferences = await db.get_setting("has_completed_preferences", default=False, user_id=user_id)
+        if not has_completed_preferences:
+            await send_user_tool_preferences_setup(client, user_id, message)
+            return
+
+    # Trigger smart swap check before rendering menu
+    await perform_smart_swap_if_needed(user_id)
+
+
     await db.ensure_user(
         user_id=message.from_user.id,
         first_name=message.from_user.first_name,
@@ -283,10 +293,47 @@ async def handle_start_command_unique(client, message):
             plan_display = "Deluxe" if plan_name == "deluxe" else "Standard"
             status_emoji = "💎" if plan_name == "deluxe" else "⭐"
 
-    buttons = [
-        [InlineKeyboardButton("📁 Rename / Tag Media", callback_data="start_renaming")]
-    ]
-    if show_other:
+    # Map tool IDs to UI representation
+    tool_map = {
+        "rename": ("📁 Rename / Tag Media", "start_renaming"),
+        "audio_editor": ("🎵 Audio Editor", "audio_editor_menu"),
+        "file_converter": ("🔀 File Converter", "file_converter_menu"),
+        "watermarker": ("©️ Watermarker", "watermarker_menu"),
+        "subtitle_extractor": ("📝 Subtitle Extractor", "subtitle_extractor_menu"),
+        "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
+        "media_info": ("ℹ️ Media Info", "media_info_menu"),
+        "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
+        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu")
+    }
+
+    user_settings = await db.get_settings(user_id)
+    selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]
+
+    buttons = []
+
+    # Render selected tools directly on the start page (1 per row)
+    for tool_id in selected_tools:
+        if tool_id in tool_map:
+            # Check if user actually has access to this tool (toggles)
+            # 'rename' is always available
+            is_avail = tool_id == "rename"
+            if not is_avail:
+                is_avail = toggles.get(tool_id, True)
+                if Config.PUBLIC_MODE and is_premium_user:
+                    is_avail = is_avail or pf.get(tool_id, False)
+
+            if is_avail:
+                buttons.append([InlineKeyboardButton(tool_map[tool_id][0], callback_data=tool_map[tool_id][1])])
+
+    # Are there any tools left for "Other Features"?
+    all_avail_ids = ["rename"]
+    for t_id in tool_map:
+        if t_id == "rename": continue
+        if toggles.get(t_id, True) or (Config.PUBLIC_MODE and is_premium_user and pf.get(t_id, False)):
+            all_avail_ids.append(t_id)
+
+    unselected_tools = [t for t in all_avail_ids if t not in selected_tools]
+    if unselected_tools:
         buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
     if Config.PUBLIC_MODE and is_premium_user:
         buttons.append([InlineKeyboardButton("💎 Premium Dashboard", callback_data="user_premium_menu")])
@@ -320,6 +367,7 @@ async def handle_start_command_unique(client, message):
 async def handle_rename_command(client, message):
     user_id = message.from_user.id
     from plugins.flow import handle_start_renaming
+    await track_tool_usage(user_id, "rename")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -376,6 +424,7 @@ async def handle_audio_command(client, message):
         return
 
     from tools.AudioMetadataEditor import handle_audio_editor_menu
+    await track_tool_usage(user_id, "audio_editor")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -432,6 +481,7 @@ async def handle_convert_command(client, message):
         return
 
     from tools.FileConverter import handle_file_converter_menu
+    await track_tool_usage(user_id, "file_converter")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -469,6 +519,7 @@ async def handle_watermark_command(client, message):
         return
 
     from tools.ImageWatermarker import handle_watermarker_menu
+    await track_tool_usage(user_id, "watermarker")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -506,6 +557,7 @@ async def handle_subtitle_command(client, message):
         return
 
     from tools.SubtitleExtractor import handle_subtitle_extractor_menu
+    await track_tool_usage(user_id, "subtitle_extractor")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -543,6 +595,7 @@ async def handle_trim_command(client, message):
         return
 
     from tools.VideoTrimmer import handle_video_trimmer_menu
+    await track_tool_usage(user_id, "video_trimmer")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -580,6 +633,7 @@ async def handle_mediainfo_command(client, message):
         return
 
     from tools.MediaInfo import handle_media_info_menu
+    await track_tool_usage(user_id, "media_info")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -617,6 +671,7 @@ async def handle_voice_command(client, message):
         return
 
     from tools.VoiceNoteConverter import handle_voice_converter_menu
+    await track_tool_usage(user_id, "voice_converter")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -654,6 +709,7 @@ async def handle_videonote_command(client, message):
         return
 
     from tools.VideoNoteConverter import handle_video_note_menu
+    await track_tool_usage(user_id, "video_note_converter")
 
     class MockCallbackQuery:
         def __init__(self, message):
@@ -754,23 +810,34 @@ async def handle_other_features_menu(client, callback_query):
                 plan_settings = config.get(f"premium_{plan_name}", {})
                 pf = plan_settings.get("features", {})
 
+    user_settings = await db.get_settings(user_id)
+    selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]
+
+    tool_map = {
+        "rename": ("📁 Rename / Tag Media", "start_renaming"),
+        "audio_editor": ("🎵 Audio Editor", "audio_editor_menu"),
+        "file_converter": ("🔀 File Converter", "file_converter_menu"),
+        "watermarker": ("©️ Watermarker", "watermarker_menu"),
+        "subtitle_extractor": ("📝 Subtitle Extractor", "subtitle_extractor_menu"),
+        "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
+        "media_info": ("ℹ️ Media Info", "media_info_menu"),
+        "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
+        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu")
+    }
+
     buttons = []
-    if toggles.get("audio_editor", True) or pf.get("audio_editor", False):
-        buttons.append([InlineKeyboardButton("🎵 Audio Metadata Editor", callback_data="audio_editor_menu")])
-    if toggles.get("file_converter", True) or pf.get("file_converter", False):
-        buttons.append([InlineKeyboardButton("🔀 File Converter", callback_data="file_converter_menu")])
-    if toggles.get("watermarker", True) or pf.get("watermarker", False):
-        buttons.append([InlineKeyboardButton("©️ Image Watermarker", callback_data="watermarker_menu")])
-    if toggles.get("subtitle_extractor", True) or pf.get("subtitle_extractor", False):
-        buttons.append([InlineKeyboardButton("📝 Subtitle Extractor", callback_data="subtitle_extractor_menu")])
-    if toggles.get("video_trimmer", True) or pf.get("video_trimmer", False):
-        buttons.append([InlineKeyboardButton("✂️ Video Trimmer", callback_data="video_trimmer_menu")])
-    if toggles.get("media_info", True) or pf.get("media_info", False):
-        buttons.append([InlineKeyboardButton("ℹ️ Media Info", callback_data="media_info_menu")])
-    if toggles.get("voice_converter", True) or pf.get("voice_converter", False):
-        buttons.append([InlineKeyboardButton("🎙️ Voice Note Converter", callback_data="voice_converter_menu")])
-    if toggles.get("video_note_converter", True) or pf.get("video_note_converter", False):
-        buttons.append([InlineKeyboardButton("⭕ Video Note Converter", callback_data="video_note_menu")])
+
+    # Render unselected tools in Other Features
+    for t_id in tool_map:
+        if t_id in selected_tools: continue # These are on the main page
+
+        is_avail = t_id == "rename"
+        if not is_avail:
+            is_avail = toggles.get(t_id, True) or pf.get(t_id, False)
+
+        if is_avail:
+            buttons.append([InlineKeyboardButton(tool_map[t_id][0], callback_data=tool_map[t_id][1])])
+
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="help_close")])
 

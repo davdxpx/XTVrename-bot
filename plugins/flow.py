@@ -1,5 +1,6 @@
 # --- Imports ---
 from pyrogram.errors import MessageNotModified
+from plugins.user_setup import track_tool_usage
 from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from utils.tmdb import tmdb
@@ -99,6 +100,7 @@ def format_episode_str(episode):
 
 # --- Handlers ---
 async def handle_start_renaming(client, callback_query):
+    await track_tool_usage(callback_query.from_user.id, 'rename')
     user_id = callback_query.from_user.id
     cb_data = callback_query.data
 

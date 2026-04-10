@@ -914,6 +914,11 @@ async def user_settings_callback(client, callback_query):
                                 "⚙️ Workflow Mode", callback_data="user_general_workflow"
                             )
                         ],
+                        [
+                            InlineKeyboardButton(
+                                "🎨 Preferences", callback_data="user_general_preferences"
+                            )
+                        ],
                         [InlineKeyboardButton("← Back to Settings", callback_data="user_main")],
                     ]
                 ),
@@ -950,6 +955,10 @@ async def user_settings_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
+    elif data == "user_general_preferences":
+        from plugins.user_setup import send_user_tool_preferences_setup
+        await send_user_tool_preferences_setup(client, user_id, callback_query)
+        return
     elif data.startswith("set_user_workflow_"):
         new_mode = "smart_media_mode" if data.endswith("smart") else "quick_mode"
         await db.update_workflow_mode(new_mode, user_id)
