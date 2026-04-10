@@ -108,7 +108,7 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "📁 MyFiles Settings", callback_data="admin_myfiles_settings"
+                    myfiles_txt, callback_data="admin_myfiles_settings"
                 ),
             ]
         )
