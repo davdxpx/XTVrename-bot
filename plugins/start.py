@@ -272,27 +272,22 @@ async def handle_start_command_unique(client, message):
     status_emoji = "⭐"
     pf = {}
 
-    if Config.PUBLIC_MODE and not show_other:
+    if Config.PUBLIC_MODE:
         user_doc = await db.get_user(user_id)
         if user_doc and user_doc.get("is_premium"):
             is_premium_user = True
             plan_name = user_doc.get("premium_plan", "standard")
             plan_display = "Deluxe" if plan_name == "deluxe" else "Standard"
             status_emoji = "💎" if plan_name == "deluxe" else "⭐"
+
             config = await db.get_public_config()
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
                 pf = plan_settings.get("features", {})
-                if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
-                    show_other = True
 
-    if Config.PUBLIC_MODE and show_other and not is_premium_user:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            is_premium_user = True
-            plan_name = user_doc.get("premium_plan", "standard")
-            plan_display = "Deluxe" if plan_name == "deluxe" else "Standard"
-            status_emoji = "💎" if plan_name == "deluxe" else "⭐"
+                if not show_other:
+                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
+                        show_other = True
 
     # Map tool IDs to UI representation
     tool_map = {
@@ -766,7 +761,8 @@ async def handle_end_command_unique(client, message):
     toggles = await db.get_feature_toggles()
     show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
 
-    if Config.PUBLIC_MODE and not show_other:
+    pf = {}
+    if Config.PUBLIC_MODE:
         user_doc = await db.get_user(user_id)
         if user_doc and user_doc.get("is_premium"):
             plan_name = user_doc.get("premium_plan", "standard")
@@ -774,8 +770,9 @@ async def handle_end_command_unique(client, message):
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
                 pf = plan_settings.get("features", {})
-                if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
-                    show_other = True
+                if not show_other:
+                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
+                        show_other = True
 
     buttons = [
         [InlineKeyboardButton("🎬 Start Renaming Manually", callback_data="start_renaming")]

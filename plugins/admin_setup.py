@@ -28,28 +28,28 @@ async def intercept_start_for_setup(client, message):
     await send_ceo_setup_menu(client, message.chat.id)
     raise StopPropagation
 
-async def send_ceo_setup_menu(client, chat_id):
+async def send_ceo_setup_menu(client, chat_id, edit_message=None):
     state = await db.get_setting("setup_stage", default="1.0", user_id=Config.CEO_ID)
 
     # We will dispatch based on state
     if state == "1.0":
-        await render_stage_1(client, chat_id)
+        await render_stage_1(client, chat_id, edit_message)
 
     elif state.startswith("2."):
-        await render_stage_2(client, chat_id, state)
+        await render_stage_2(client, chat_id, state, edit_message)
 
     elif state.startswith("3."):
-        await render_stage_3(client, chat_id, state)
+        await render_stage_3(client, chat_id, state, edit_message)
 
     elif state.startswith("4."):
-        await render_stage_4(client, chat_id, state)
+        await render_stage_4(client, chat_id, state, edit_message)
 
-async def render_stage_1(client, chat_id):
+async def render_stage_1(client, chat_id, edit_message=None):
     text = (
         "🚀 **Welcome to 𝕏TV MediaStudio™ Initial Setup!**\n\n"
         "**Stage 1: Basic Bot Info**\n"
         "Let's configure the basic visual elements of the bot.\n\n"
-        "> *Tip: You can use the Skip button if you want to keep the defaults.*"
+        "> __Tip: You can use the Skip button if you want to keep the defaults.__"
     )
 
     config = {}
@@ -68,9 +68,15 @@ async def render_stage_1(client, chat_id):
         [InlineKeyboardButton("🌐 Set Language (Coming Soon)", callback_data="setup_noop")],
         [InlineKeyboardButton("➡️ Next Stage", callback_data="setup_next_2.0")]
     ]
-    await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+    if edit_message:
+        try:
+            await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception:
+            pass
+    else:
+        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
-async def render_stage_2(client, chat_id, state):
+async def render_stage_2(client, chat_id, state, edit_message=None):
     if state == "2.0":
         # MyFiles enable/disable
         text = (
@@ -82,7 +88,13 @@ async def render_stage_2(client, chat_id, state):
             [InlineKeyboardButton("✅ Yes, Enable MyFiles™", callback_data="setup_myfiles_on")],
             [InlineKeyboardButton("❌ No, Disable MyFiles™", callback_data="setup_myfiles_off")]
         ]
-        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+        if edit_message:
+            try:
+                await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except Exception:
+                pass
+        else:
+            await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif state == "2.1":
         # Storage Channels
@@ -116,9 +128,15 @@ async def render_stage_2(client, chat_id, state):
             buttons = [
                 [InlineKeyboardButton("➡️ Next Stage", callback_data="setup_next_3.0")]
             ]
-        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+            if edit_message:
+                try:
+                    await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+                except Exception:
+                    pass
+            else:
+                await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
-async def render_stage_3(client, chat_id, state):
+async def render_stage_3(client, chat_id, state, edit_message=None):
     if state == "3.0":
         text = (
             "⚙️ **Stage 3: Features & Premium (1/3)**\n\n"
@@ -134,7 +152,13 @@ async def render_stage_3(client, chat_id, state):
             [InlineKeyboardButton(f"{emoji(toggles.get('subtitle_extractor', True))} Subtitle Extractor", callback_data="setup_tog_sub")],
             [InlineKeyboardButton("➡️ Next Step", callback_data="setup_next_3.1")]
         ]
-        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+        if edit_message:
+            try:
+                await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except Exception:
+                pass
+        else:
+            await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif state == "3.1":
         text = (
@@ -143,14 +167,20 @@ async def render_stage_3(client, chat_id, state):
             "This will activate premium plans, limits, trials, and payment systems."
         )
         if not Config.PUBLIC_MODE:
-            text += "\n\n*(Note: Premium System is only relevant in Public Mode)*"
+            text += "\n\n__(Note: Premium System is only relevant in Public Mode)__"
             buttons = [[InlineKeyboardButton("➡️ Skip (Non-Public Mode)", callback_data="setup_next_4.0")]]
         else:
             buttons = [
                 [InlineKeyboardButton("✅ Yes, Enable Premium", callback_data="setup_prem_on")],
                 [InlineKeyboardButton("❌ No, Disable Premium", callback_data="setup_prem_off")]
             ]
-        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+            if edit_message:
+                try:
+                    await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+                except Exception:
+                    pass
+            else:
+                await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif state == "3.2":
         text = (
@@ -170,9 +200,15 @@ async def render_stage_3(client, chat_id, state):
             [InlineKeyboardButton("⚙️ Configure Trial Length", callback_data="setup_set_trial_len")],
             [InlineKeyboardButton("➡️ Next Stage", callback_data="setup_next_4.0")]
         ]
-        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+        if edit_message:
+            try:
+                await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except Exception:
+                pass
+        else:
+            await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
-async def render_stage_4(client, chat_id, state):
+async def render_stage_4(client, chat_id, state, edit_message=None):
     if state == "4.0":
         text = (
             "🔐 **Stage 4: Advanced & 𝕏TV Pro™ (1/2)**\n\n"
@@ -188,7 +224,13 @@ async def render_stage_4(client, chat_id, state):
             [InlineKeyboardButton("➡️ Next Step", callback_data="setup_next_4.1")]
         ]
         buttons = [b for b in buttons if b] # Remove empty
-        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+        if edit_message:
+            try:
+                await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except Exception:
+                pass
+        else:
+            await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif state == "4.1":
         text = (
@@ -200,7 +242,13 @@ async def render_stage_4(client, chat_id, state):
             [InlineKeyboardButton("✅ Setup 4GB Userbot", callback_data="setup_pro_bot")],
             [InlineKeyboardButton("⏩ Skip & Finish Setup", callback_data="setup_finish")]
         ]
-        await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+        if edit_message:
+            try:
+                await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+            except Exception:
+                pass
+        else:
+            await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
 @Client.on_callback_query(filters.regex(r"^setup_"))
 async def handle_setup_callbacks(client, callback_query: CallbackQuery):
@@ -217,34 +265,31 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
     elif data.startswith("setup_next_"):
         next_stage = data.split("_")[2]
         await db.update_setting("setup_stage", next_stage, user_id=Config.CEO_ID)
-        await callback_query.message.delete()
-        await send_ceo_setup_menu(client, callback_query.message.chat.id)
+        await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
     elif data == "setup_set_bot_name":
         if not Config.PUBLIC_MODE:
             await callback_query.answer("Only available in Public Mode.", show_alert=True)
             return
         admin_sessions[user_id] = "awaiting_setup_bot_name"
-        await callback_query.message.reply_text("Please send the new **Bot Name**:\n\n*(Send /cancel to abort)*")
+        await callback_query.message.reply_text("Please send the new **Bot Name**:\n\n__(Send /cancel to abort)__")
 
     elif data == "setup_set_community_name":
         if not Config.PUBLIC_MODE:
             await callback_query.answer("Only available in Public Mode.", show_alert=True)
             return
         admin_sessions[user_id] = "awaiting_setup_community_name"
-        await callback_query.message.reply_text("Please send the new **Community Name**:\n\n*(Send /cancel to abort)*")
+        await callback_query.message.reply_text("Please send the new **Community Name**:\n\n__(Send /cancel to abort)__")
 
     elif data == "setup_myfiles_on":
         await db.update_setting("myfiles_enabled", True)
         await db.update_setting("setup_stage", "2.1", user_id=Config.CEO_ID)
-        await callback_query.message.delete()
-        await send_ceo_setup_menu(client, callback_query.message.chat.id)
+        await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
     elif data == "setup_myfiles_off":
         await db.update_setting("myfiles_enabled", False)
         await db.update_setting("setup_stage", "2.1", user_id=Config.CEO_ID)
-        await callback_query.message.delete()
-        await send_ceo_setup_menu(client, callback_query.message.chat.id)
+        await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
     elif data.startswith("setup_tog_"):
         tog = data.split("_")[2]
@@ -255,49 +300,46 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
             current = toggles.get(feature, True)
             toggles[feature] = not current
             await db.update_setting("global_feature_toggles", toggles)
-            await callback_query.message.delete()
-            await send_ceo_setup_menu(client, callback_query.message.chat.id)
+            await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
         elif tog == "deluxe":
             config = await db.get_public_config()
             current = config.get("premium_deluxe_enabled", True)
             await db.update_public_config("premium_deluxe_enabled", not current)
-            await callback_query.message.delete()
-            await send_ceo_setup_menu(client, callback_query.message.chat.id)
+            await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
         elif tog == "trial":
             config = await db.get_public_config()
             current = config.get("premium_trial_enabled", True)
             await db.update_public_config("premium_trial_enabled", not current)
-            await callback_query.message.delete()
-            await send_ceo_setup_menu(client, callback_query.message.chat.id)
+            await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
     elif data == "setup_prem_on":
         await db.update_public_config("premium_system_enabled", True)
         await db.update_setting("setup_stage", "3.2", user_id=Config.CEO_ID)
-        await callback_query.message.delete()
-        await send_ceo_setup_menu(client, callback_query.message.chat.id)
+        await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
     elif data == "setup_prem_off":
         await db.update_public_config("premium_system_enabled", False)
         await db.update_setting("setup_stage", "4.0", user_id=Config.CEO_ID)
-        await callback_query.message.delete()
-        await send_ceo_setup_menu(client, callback_query.message.chat.id)
+        await send_ceo_setup_menu(client, callback_query.message.chat.id, edit_message=callback_query.message)
 
     elif data == "setup_set_trial_len":
         admin_sessions[user_id] = "awaiting_setup_trial_length"
-        await callback_query.message.reply_text("Please send the **Trial Length** in days (e.g., 7):\n\n*(Send /cancel to abort)*")
+        await callback_query.message.reply_text("Please send the **Trial Length** in days (e.g., 7):\n\n__(Send /cancel to abort)__")
 
     elif data == "setup_edit_timeout":
         admin_sessions[user_id] = "awaiting_setup_timeout"
-        await callback_query.message.reply_text("Please send the new **Timeout** in seconds (e.g., 60):\n\n*(Send /cancel to abort)*")
+        await callback_query.message.reply_text("Please send the new **Timeout** in seconds (e.g., 60):\n\n__(Send /cancel to abort)__")
 
     elif data == "setup_force_sub":
         # Launch existing force sub menu
         from plugins.admin import get_admin_force_sub_menu
-        await callback_query.message.delete()
         msg, kb = await get_admin_force_sub_menu()
-        await client.send_message(callback_query.message.chat.id, msg, reply_markup=kb)
+        try:
+            await callback_query.message.edit_text(msg, reply_markup=kb)
+        except Exception:
+            pass
 
     elif data == "setup_payments":
         await callback_query.answer("Open Admin Panel -> Premium Systems -> Setup Payments to configure.", show_alert=True)
@@ -310,19 +352,20 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
             "⚡ **𝕏TV Pro™ 4GB Userbot Setup**\n\n"
             "Please send your **API ID**.\n"
             "You can get it from https://my.telegram.org\n\n"
-            "*(Send /cancel to abort)*"
+            "__(Send /cancel to abort)__"
         )
 
     elif data == "setup_finish":
         await db.update_setting("is_bot_setup_complete", True, user_id=Config.CEO_ID)
         await db.update_setting("setup_stage", "done", user_id=Config.CEO_ID)
-        await callback_query.message.delete()
-        await client.send_message(
-            callback_query.message.chat.id,
-            "🎉 **Setup Complete!**\n\nThe bot is now fully configured and ready to use.\n"
-            "You can always change these settings in the `/admin` panel.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Enter Bot", callback_data="help_close")]])
-        )
+        try:
+            await callback_query.message.edit_text(
+                "🎉 **Setup Complete!**\n\nThe bot is now fully configured and ready to use.\n"
+                "You can always change these settings in the `/admin` panel.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Enter Bot", callback_data="help_close")]])
+            )
+        except Exception:
+            pass
 
 @Client.on_message(filters.private & filters.text & ~filters.command(["start", "new", "cancel"]), group=1)
 async def handle_setup_text_inputs(client, message):
