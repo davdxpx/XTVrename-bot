@@ -48,7 +48,7 @@ async def send_user_tool_preferences_setup(client, user_id, message_or_query):
         "⚙️ **Personalize Your Menu**\n\n"
         "What tools do you plan to use the most?\n"
         "Select up to **3 features** to pin them directly to your `/start` menu for quick access.\n"
-        "*(The rest will be inside the 'Other Features' button)*"
+        "__(The rest will be inside the 'Other Features' button)__"
     )
 
     buttons = []
