@@ -13,7 +13,7 @@ logger = get_logger("plugins.admin")
 admin_sessions = {}
 
 # === Helper Functions ===
-def get_admin_main_menu(pro_session, public_mode):
+def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
     pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
 
     keyboard = []
@@ -63,10 +63,11 @@ def get_admin_main_menu(pro_session, public_mode):
                 ),
             ]
         )
+        myfiles_txt = "📁 MyFiles Settings" if myfiles_enabled else "📁 Setup MyFiles™"
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "📁 Setup MyFiles™", callback_data="admin_myfiles_settings"
+                    myfiles_txt, callback_data="admin_myfiles_settings"
                 ),
             ]
         )
@@ -220,8 +221,9 @@ async def admin_panel(client, message):
             "These settings shape how every file passing through the bot gets handled."
         )
 
+    myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
     await message.reply_text(
-        text, reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE)
+        text, reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE, myfiles_enabled)
     )
 
 from pyrogram import ContinuePropagation
@@ -243,7 +245,8 @@ async def admin_callback(client, callback_query):
     debug(f"Admin callback: {data} from user {user_id}")
 
     if data == "admin_myfiles_settings":
-        if Config.PUBLIC_MODE:
+        myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+        if not myfiles_enabled:
             text = "📁 **Setup MyFiles™**\n\nConfigure database channels, storage limits, and cleanup unused files."
         else:
             text = "📁 **MyFiles Settings**\n\nConfigure database channels, storage limits, and cleanup unused files."
@@ -2868,7 +2871,7 @@ async def admin_callback(client, callback_query):
                     "You're running the show.\n"
                     "Everything here applies globally — branding, rate limits, payment methods, the works.\n\n"
                     "__(Your personal renaming templates live in /settings)__",
-                    reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE),
+                    reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE, await db.get_setting("myfiles_enabled", default=False)),
                 )
             except MessageNotModified:
                 pass
@@ -2878,7 +2881,7 @@ async def admin_callback(client, callback_query):
                     "⚙️ **𝕏TV Admin Panel**\n\n"
                     "__Your studio. Your rules.__\n"
                     "These settings shape how every file passing through the bot gets handled.",
-                    reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE),
+                    reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE, await db.get_setting("myfiles_enabled", default=False)),
                 )
             except MessageNotModified:
                 pass
