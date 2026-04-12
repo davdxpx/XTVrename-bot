@@ -756,6 +756,8 @@ async def handle_torrent_command(client, message):
             pass
 
     mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading Torrent Downloader...")
+    mock_cb.message = msg
     await handle_torrent_downloader_menu(client, mock_cb)
 
 @Client.on_message(filters.command("help") & filters.private, group=0)
