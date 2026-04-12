@@ -1,78 +1,455 @@
-XTV PUBLIC LICENSE v2.0
+XTV PUBLIC LICENSE v3.0
 Copyright (c) 2026 𝕏0L0™ (@davdxpx) | XTV Network Global
 
 TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMPORTANT NOTICE: This is a "Source Available" license. It is NOT an OSI-
+approved Open Source license. Rights not explicitly granted herein are reserved.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 1. DEFINITIONS.
 
-   "License" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.
+   "License" shall mean the terms and conditions for use, reproduction, and
+   distribution as defined by Sections 1 through 15 of this document.
 
-   "Licensor" shall mean the copyright owner or entity authorized by the copyright owner that is granting the License.
+   "Licensor" shall mean 𝕏0L0™ (@davdxpx), the copyright owner and original
+   author of the Work, or any entity authorized by the copyright owner to grant
+   this License.
 
-   "Legal Entity" shall mean the union of the acting entity and all other entities that control, are controlled by, or are under common control with that entity. For the purposes of this definition, "control" means (i) the power, direct or indirect, to cause the direction or management of such entity, whether by contract or otherwise, or (ii) ownership of fifty percent (50%) or more of the outstanding shares, or (iii) beneficial ownership of such entity.
+   "Legal Entity" shall mean the union of the acting entity and all other
+   entities that control, are controlled by, or are under common control with
+   that entity. For the purposes of this definition, "control" means (i) the
+   power, direct or indirect, to cause the direction or management of such
+   entity, whether by contract or otherwise, or (ii) ownership of fifty percent
+   (50%) or more of the outstanding shares, or (iii) beneficial ownership of
+   such entity.
 
-   "You" (or "Your") shall mean an individual or Legal Entity exercising permissions granted by this License.
+   "You" (or "Your") shall mean an individual or Legal Entity exercising
+   permissions granted by this License.
 
-   "Source" form shall mean the preferred form for making modifications, including but not limited to software source code, documentation source, and configuration files.
+   "Source" form shall mean the preferred form for making modifications,
+   including but not limited to software source code, documentation source, and
+   configuration files.
 
-   "Object" form shall mean any form resulting from mechanical transformation or translation of a Source form, including but not limited to compiled object code, generated documentation, and conversions to other media types.
+   "Object" form shall mean any form resulting from mechanical transformation
+   or translation of a Source form, including but not limited to compiled object
+   code, generated documentation, and conversions to other media types.
 
-   "Work" shall mean the work of authorship, whether in Source or Object form, made available under the License, as indicated by a copyright notice that is included in or attached to the work (an example is provided in the Appendix below).
+   "Work" shall mean the work of authorship (𝕏TV MediaStudio™), whether in
+   Source or Object form, made available under this License, as indicated by a
+   copyright notice that is included in or attached to the work.
 
-   "Derivative Works" shall mean any work, whether in Source or Object form, that is based on (or derived from) the Work and for which the editorial revisions, annotations, elaborations, or other modifications represent, as a whole, an original work of authorship.
+   "Derivative Works" shall mean any work, whether in Source or Object form,
+   that is based on (or derived from) the Work and for which editorial
+   revisions, annotations, elaborations, or other modifications represent, as a
+   whole, an original work of authorship. This includes forks, ports, plugins,
+   and any software that incorporates a substantial portion of the Work.
 
-   "Contribution" shall mean any work of authorship, including the original version of the Work and any modifications or additions to that Work or Derivative Works thereof, that is intentionally submitted to Licensor for inclusion in the Work by the copyright owner or by an individual or Legal Entity authorized to submit on behalf of the copyright owner.
+   "Contribution" shall mean any work of authorship submitted to the Licensor
+   for inclusion in the Work, including modifications, additions, bug fixes,
+   security patches, performance improvements, and new features.
 
-   "Contributor" shall mean Licensor and any individual or Legal Entity on behalf of whom a Contribution has been received by Licensor and subsequently incorporated within the Work.
+   "Contributor" shall mean Licensor and any individual or Legal Entity on
+   behalf of whom a Contribution has been received by the Licensor and
+   subsequently incorporated within the Work.
+
+   "Hosting" shall mean operating an instance of the Work (or a Derivative
+   Work) as a service accessible to third parties, including but not limited to
+   running a Telegram bot based on the Work.
+
+   "Commercial Code Use" shall mean incorporating the Work or substantial parts
+   of its Source code into a separate product or service that is sold, licensed,
+   or otherwise commercially distributed to third parties as a standalone
+   offering.
+
+   "XTV Branding" shall mean all copyright notices, author attributions, and
+   identifying marks of the Work, including but not limited to: "XTV Network",
+   "XTV Network Global", "𝕏TV MediaStudio™", "Developed by 𝕏0L0™", references
+   to @davdxpx, @XTVglobal, @XTVbots, @XTVhome, and all associated logos,
+   links, and copyright statements.
+
 
 2. GRANT OF COPYRIGHT LICENSE.
-   Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare Derivative Works of, publicly display, publicly perform, sublicense, and distribute the Work and such Derivative Works in Source or Object form.
+
+   Subject to the terms and conditions of this License, and specifically subject
+   to the restrictions in Section 3, the Licensor hereby grants You a
+   worldwide, non-exclusive, no-charge, royalty-free copyright license to:
+
+   a. Reproduce and use the Work in Source or Object form for personal and
+      non-commercial purposes;
+
+   b. Prepare Derivative Works of the Work, provided that all conditions of
+      Section 3 are met;
+
+   c. Publicly display and distribute the Work and Derivative Works, provided
+      that all conditions of Section 3 are met;
+
+   d. Host the Work or Derivative Works as a service (including commercially),
+      provided that all conditions of Section 3 are met — in particular
+      Section 3(e).
+
+   For any use not explicitly covered by this Section, or where a condition of
+   Section 3 cannot be met, You must obtain a separate written license from the
+   Licensor (see Section 14).
+
 
 3. CONDITIONS OF USAGE AND MODIFICATION.
-   Permission is hereby granted to use, copy, modify, and distribute this software, provided that the following conditions are strictly adhered to:
 
-   a. **Attribution Requirement**: You MUST NOT remove, alter, or obscure any copyright notices, author attributions, or branding (including "XTV Network", "Developed by 𝕏0L0™", and links to @davdxpx / @XTVglobal) from the Source or Object forms of the Work.
+   The permissions granted in Section 2 are subject to the following conditions,
+   which must be strictly adhered to at all times:
 
-   b. **Forking and Usage**: You are permitted to fork the project for personal or commercial use, provided that the original credits remain intact in all prominent locations (README, About dialogs, Source headers).
+   a. ATTRIBUTION REQUIREMENT.
 
-   c. **Prohibited Modifications**: Unauthorized redistribution of modified versions that strip credit, rebrand the bot as your own work, or remove links to the original developer (@davdxpx) or network (@XTVglobal) is strictly prohibited. This is a "Source Available" license, not a permissive license for white-labeling.
+      You MUST retain all XTV Branding in full and without alteration in every
+      form of the Work You use, distribute, or deploy. This includes, without
+      limitation:
 
-   d. **Contribution**: Modifications that enhance the software are encouraged and may be submitted via Pull Request, provided they respect the original authorship and do not violate clause 3(a).
+      (i)   All copyright headers and notices in Source code files;
+      (ii)  The "Developed by 𝕏0L0™ (@davdxpx)" attribution in READMEs, About
+            dialogs, bot start messages, and all other prominent locations;
+      (iii) All links and references to @davdxpx, @XTVglobal, and associated
+            Telegram channels as they appear in the original Work;
+      (iv)  The XTV PUBLIC LICENSE v3.0 notice in any accompanying
+            documentation or license files.
+
+      You MUST NOT remove, alter, obscure, or replace any portion of the XTV
+      Branding for any reason.
+
+   b. FORKING AND PUBLIC REDISTRIBUTION.
+
+      You are permitted to fork the Work and publicly redistribute Derivative
+      Works (e.g., on GitHub or similar platforms), subject to ALL of the
+      following:
+
+      (i)   The full XTV Branding must be preserved in all prominent locations
+            as described in Section 3(a);
+      (ii)  The Derivative Work must be clearly marked as a fork or modification
+            of 𝕏TV MediaStudio™ and must link back to the original repository;
+      (iii) You MUST NOT present the Derivative Work as your own original
+            creation or remove any indication that the Work originates from
+            𝕏0L0™ / XTV Network Global;
+      (iv)  The Derivative Work must be distributed under this same License
+            (XTV PUBLIC LICENSE v3.0) without modification;
+      (v)   You must comply with the Patch-Back Obligation in Section 3(d).
+
+   c. PROHIBITED MODIFICATIONS AND REBRANDING.
+
+      The following actions are strictly prohibited without prior written
+      authorization from the Licensor:
+
+      (i)   Rebranding the Work or any Derivative Work by replacing or removing
+            XTV Branding and substituting your own name, brand, or identity as
+            the original author;
+      (ii)  Redistributing modified versions that strip, obscure, or replace
+            any credit to 𝕏0L0™, @davdxpx, or XTV Network Global;
+      (iii) Presenting the Work or a Derivative Work as a white-label product
+            that hides the origin and authorship of the original Work;
+      (iv)  Operating a Hosting service for third parties while concealing or
+            removing the XTV Branding from the user-facing interface (e.g.,
+            bot start message, About page, README of deployed version);
+      (v)   Commercial Code Use of the Work without a valid Commercial License
+            (see Section 3(f) and Section 14).
+
+   d. PATCH-BACK OBLIGATION.
+
+      If You create a Derivative Work — including but not limited to bug fixes,
+      security patches, performance improvements, new features, refactors, or
+      any other modifications to the Source code — You are REQUIRED to submit
+      all such changes back to the Licensor as a Pull Request to the official
+      repository (https://github.com/davdxpx/xtv-mediastudio).
+
+      This obligation applies to:
+
+      (i)   All bug fixes and error corrections;
+      (ii)  All security-related patches and vulnerability fixes;
+      (iii) All performance improvements and optimizations;
+      (iv)  All new features, extensions, or additions to existing functionality;
+      (v)   All refactors and code quality improvements.
+
+      The Pull Request must be submitted within a reasonable time after the
+      changes are made publicly available or deployed. The Licensor reserves the
+      right to accept, reject, or modify submitted contributions at their
+      discretion. Submitting a Contribution grants the Licensor a perpetual,
+      irrevocable, worldwide, royalty-free license to use, reproduce, modify,
+      and distribute the Contribution under this or any future version of the
+      XTV PUBLIC LICENSE.
+
+      Failure to comply with this obligation constitutes a material breach of
+      this License and will result in immediate termination under Section 9.
+
+   e. HOSTING PERMISSION.
+
+      You are explicitly permitted to operate the Work or a Derivative Work as
+      a Hosting service accessible to third parties, including commercial
+      Hosting (e.g., running a public Telegram bot that charges users for
+      access), provided that ALL of the following conditions are met:
+
+      (i)   The full XTV Branding must remain visible in all user-facing
+            interfaces, including but not limited to the bot's start message,
+            help command output, About/info sections, and any associated web
+            pages or documentation;
+      (ii)  You must not represent the Hosted service as your own original
+            creation; the origin of the Work must be clearly attributed to
+            𝕏0L0™ / XTV Network Global;
+      (iii) You must comply with Section 3(d) (Patch-Back Obligation) for any
+            modifications made to enable or operate the Hosting service;
+      (iv)  The Hosting service must not be used for any purpose that violates
+            Telegram's Terms of Service, applicable law, or Section 12 of this
+            License.
+
+   f. COMMERCIAL CODE LICENSE REQUIREMENT.
+
+      Commercial Code Use of the Work — defined as incorporating the Source
+      code of the Work (or substantial portions thereof) into a separate
+      product or service that is sold, commercially licensed, or otherwise
+      distributed to third parties as a standalone or bundled offering — is NOT
+      permitted under this License and requires a separate Commercial License.
+
+      To obtain a Commercial License, You must contact the Licensor (see
+      Section 14). Until a valid Commercial License is obtained and in effect,
+      any Commercial Code Use constitutes infringement of this License and the
+      Licensor's exclusive rights.
+
+      Note: Hosting the Work as a service (Section 3(e)) is NOT considered
+      Commercial Code Use for the purposes of this section, even if the Hosting
+      service charges users a fee, provided all conditions of Section 3(e) are
+      met.
+
 
 4. GRANT OF PATENT LICENSE.
-   Subject to the terms and conditions of this License, each Contributor hereby grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this section) patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by such Contributor that are necessarily infringed by their Contribution(s) alone or by combination of their Contribution(s) with the Work to which such Contribution(s) was submitted.
+
+   Subject to the terms and conditions of this License, each Contributor hereby
+   grants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,
+   irrevocable (except as stated in this section) patent license to make, have
+   made, use, offer to sell, sell, import, and otherwise transfer the Work,
+   where such license applies only to those patent claims licensable by such
+   Contributor that are necessarily infringed by their Contribution(s) alone or
+   by combination of their Contribution(s) with the Work to which such
+   Contribution(s) was submitted. If You institute patent litigation against any
+   entity (including a cross-claim or counterclaim in a lawsuit) alleging that
+   the Work or a Contribution incorporated within the Work constitutes direct or
+   contributory patent infringement, then any patent licenses granted to You
+   under this License for that Work shall terminate as of the date such
+   litigation is filed.
+
 
 5. TRADEMARKS.
-   This License does not grant permission to use the trade names, trademarks, service marks, or product names of the Licensor, except as required for reasonable and customary use in describing the origin of the Work and reproducing the content of the NOTICE file.
+
+   This License does not grant permission to use the trade names, trademarks,
+   service marks, or product names of the Licensor, including "XTV", "XTV
+   Network", "XTV Network Global", "𝕏TV MediaStudio™", and "𝕏0L0™", except as
+   required for reasonable and customary use in:
+
+   a. Describing the origin of the Work (e.g., "based on 𝕏TV MediaStudio™ by
+      𝕏0L0™");
+   b. Reproducing the content of attribution notices required by Section 3(a);
+   c. Linking back to the original repository or author as required by this
+      License.
+
+   Any other use of the Licensor's trademarks requires prior written permission.
+
 
 6. DISCLAIMER OF WARRANTY.
-   Unless required by applicable law or agreed to in writing, Licensor provides the Work (and each Contributor provides its Contributions) on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied, including, without limitation, any warranties or conditions of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are solely responsible for determining the appropriateness of using or redistributing the Work and assume any risks associated with Your exercise of permissions under this License.
+
+   Unless required by applicable law or agreed to in writing, the Licensor
+   provides the Work (and each Contributor provides its Contributions) on an
+   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+   or implied, including, without limitation, any warranties or conditions of
+   TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR
+   PURPOSE. You are solely responsible for determining the appropriateness of
+   using or redistributing the Work and assume any and all risks associated with
+   Your exercise of permissions under this License.
+
 
 7. LIMITATION OF LIABILITY.
-   In no event and under no legal theory, whether in tort (including negligence), contract, or otherwise, unless required by applicable law (such as deliberate and grossly negligent acts) or agreed to in writing, shall any Contributor be liable to You for damages, including any direct, indirect, special, incidental, or consequential damages of any character arising as a result of this License or out of the use or inability to use the Work (including but not limited to damages for loss of goodwill, work stoppage, computer failure or malfunction, or any and all other commercial damages or losses), even if such Contributor has been advised of the possibility of such damages.
+
+   In no event and under no legal theory, whether in tort (including
+   negligence), contract, or otherwise, unless required by applicable law (such
+   as deliberate and grossly negligent acts) or agreed to in writing, shall any
+   Contributor be liable to You for damages, including any direct, indirect,
+   special, incidental, or consequential damages of any character arising as a
+   result of this License or out of the use or inability to use the Work
+   (including but not limited to damages for loss of goodwill, work stoppage,
+   computer failure or malfunction, or any and all other commercial damages or
+   losses), even if such Contributor has been advised of the possibility of such
+   damages.
+
 
 8. ACCEPTING WARRANTY OR ADDITIONAL LIABILITY.
-   While redistributing the Work or Derivative Works thereof, You may choose to offer, and charge a fee for, acceptance of support, warranty, indemnity, or other liability obligations and/or rights consistent with this License. However, in accepting such obligations, You may act only on Your own behalf and on Your sole responsibility, not on behalf of any other Contributor, and only if You agree to indemnify, defend, and hold each Contributor harmless for any liability incurred by, or claims asserted against, such Contributor by reason of your accepting any such warranty or additional liability.
+
+   While redistributing the Work or Derivative Works thereof, You may choose to
+   offer, and charge a fee for, acceptance of support, warranty, indemnity, or
+   other liability obligations and/or rights consistent with this License.
+   However, in accepting such obligations, You may act only on Your own behalf
+   and on Your sole responsibility, not on behalf of any other Contributor, and
+   only if You agree to indemnify, defend, and hold each Contributor harmless
+   for any liability incurred by, or claims asserted against, such Contributor
+   by reason of your accepting any such warranty or additional liability.
+
 
 9. TERM AND TERMINATION.
-   a. This License and the rights granted hereunder will terminate automatically if You fail to comply with any of the terms herein and fail to cure such breach within 30 days of becoming aware of the breach.
-   b. Upon termination, You must immediately cease all use and distribution of the Work and any Derivative Works thereof.
+
+   a. This License and all rights granted hereunder shall remain in effect
+      unless terminated.
+
+   b. This License terminates automatically, without notice, if You:
+
+      (i)   Fail to comply with any material term of this License;
+      (ii)  Violate the Attribution Requirement in Section 3(a);
+      (iii) Violate the prohibitions in Section 3(c);
+      (iv)  Fail to submit required Pull Requests under Section 3(d) within a
+            reasonable time after public deployment;
+      (v)   Conduct Commercial Code Use without a valid Commercial License;
+      (vi)  Fail to cure any breach within thirty (30) days of receiving written
+            notice of such breach from the Licensor.
+
+   c. Upon termination, You must immediately cease all use, reproduction,
+      distribution, and Hosting of the Work and any Derivative Works thereof,
+      and must destroy all copies in Your possession or control.
+
+   d. Sections 6, 7, 12, 13, and 15 shall survive termination of this License.
+
 
 10. GOVERNING LAW AND SEVERABILITY.
-    a. This License shall be governed by the laws of the jurisdiction in which the Licensor resides, without regard to conflict of laws principles.
-    b. If any provision of this License is found to be invalid or unenforceable, the remaining provisions shall continue in full force and effect.
-    c. In the event of litigation arising out of or related to this License, the prevailing party shall be entitled to recover reasonable attorneys' fees and costs.
+
+    a. This License shall be governed by the laws of the jurisdiction in which
+       the Licensor resides, without regard to conflict of laws principles.
+
+    b. If any provision of this License is found to be invalid or unenforceable
+       by a court of competent jurisdiction, the remaining provisions shall
+       continue in full force and effect, and the invalid provision shall be
+       modified to the minimum extent necessary to make it valid and enforceable.
+
+    c. In the event of litigation arising out of or related to this License,
+       the prevailing party shall be entitled to recover reasonable attorneys'
+       fees and costs from the non-prevailing party.
+
 
 11. EXPORT CONTROL.
-    You agree that You will not export or re-export the Work, any part thereof, or any process or service that is the direct product of the Work, to any country, person, or entity subject to U.S. export restrictions, or to any country, person, or entity for which the U.S. government or any agency thereof requires an export license or other governmental approval at the time of export or re-export without first obtaining such license or approval.
 
-12. INDEMNIFICATION.
-    You agree to indemnify, defend, and hold harmless the Licensor, Contributors, and their respective affiliates, officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, costs, expenses, or fees (including reasonable attorneys' fees) that such parties may incur as a result of or arising from Your use, reproduction, or distribution of the Work or any Derivative Works thereof, or Your violation of any term of this License.
+    You agree that You will not export or re-export the Work, any part thereof,
+    or any process or service that is the direct product of the Work, to any
+    country, person, or entity subject to applicable export restrictions,
+    including U.S. export control laws and regulations, without first obtaining
+    all required licenses, approvals, or authorizations from the relevant
+    governmental authorities.
+
+
+12. INDEMNIFICATION AND PLATFORM COMPLIANCE.
+
+    a. GENERAL INDEMNIFICATION.
+       You agree to indemnify, defend, and hold harmless the Licensor,
+       Contributors, and their respective affiliates, officers, directors,
+       employees, and agents from and against any and all claims, liabilities,
+       damages, losses, costs, expenses, or fees (including reasonable
+       attorneys' fees) arising from:
+
+       (i)   Your use, reproduction, distribution, or Hosting of the Work or
+             any Derivative Works;
+       (ii)  Your violation of any term of this License;
+       (iii) Your violation of any applicable law or third-party rights.
+
+    b. TELEGRAM PLATFORM COMPLIANCE AND ABUSE LIABILITY.
+
+       The Work is designed to interact with the Telegram platform via the
+       Telegram Bot API and related services. You acknowledge and agree that:
+
+       (i)   You are solely responsible for ensuring that Your use of the Work
+             complies fully with Telegram's Terms of Service, Privacy Policy,
+             API Terms of Service, and any other applicable Telegram guidelines,
+             as amended from time to time;
+
+       (ii)  The Licensor bears no responsibility for any suspension, ban,
+             termination, or other enforcement action taken by Telegram against
+             Your account, bot, or user base as a result of Your use of the
+             Work;
+
+       (iii) If Your use of the Work results in any abuse of the Telegram
+             platform — including but not limited to spam, unauthorized mass
+             messaging, scraping user data, circumventing rate limits, violating
+             user privacy, or any other activity that Telegram prohibits — You
+             are solely liable for all consequences, legal or otherwise, arising
+             from such abuse;
+
+       (iv)  You agree to indemnify, defend, and hold harmless the Licensor and
+             all Contributors from any claims, damages, fines, or losses
+             asserted by Telegram, its affiliates, or third parties as a result
+             of Your non-compliant or abusive use of the Work;
+
+       (v)   The Licensor reserves the right to immediately terminate Your
+             license under Section 9 upon credible evidence of Your use of the
+             Work in violation of Telegram's Terms of Service or applicable law.
+
 
 13. ENTIRE AGREEMENT.
-    This License constitutes the entire agreement between the parties with respect to the subject matter hereof and supersedes all prior or contemporaneous understandings regarding such subject matter. No amendment to or modification of this License will be binding unless in writing and signed by the Licensor.
 
+    This License constitutes the entire agreement between You and the Licensor
+    with respect to the subject matter hereof and supersedes all prior or
+    contemporaneous understandings, agreements, representations, or warranties,
+    whether written or oral, regarding such subject matter. No amendment to or
+    modification of this License will be binding unless made in writing and
+    signed by the Licensor. A Commercial License obtained under Section 14
+    supplements but does not replace the terms of this License except where
+    explicitly stated in the Commercial License agreement.
+
+
+14. OBTAINING A COMMERCIAL LICENSE.
+
+    If You wish to engage in Commercial Code Use (as defined in Section 3(f)),
+    or require any other rights not granted by this License, You must obtain
+    a separate written Commercial License from the Licensor.
+
+    To request a Commercial License, contact the Licensor via one of the
+    following channels:
+
+    a. GitHub Issue: Open an issue in the official repository at
+       https://github.com/davdxpx/xtv-mediastudio with the title
+       "[Commercial License Request]" and describe Your intended use case;
+
+    b. Telegram: Contact @davdxpx directly on Telegram.
+
+    Commercial License requests will be reviewed at the Licensor's sole
+    discretion. The Licensor may offer Commercial Licenses on terms including,
+    but not limited to, a one-time fee, royalty arrangement, or other
+    conditions agreed upon in writing.
+
+    Until a Commercial License is granted in writing by the Licensor, any
+    Commercial Code Use is unauthorized and constitutes a breach of this
+    License.
+
+
+15. COMPATIBILITY STATEMENT.
+
+    This License (XTV PUBLIC LICENSE v3.0) is a proprietary "Source Available"
+    license. It is NOT an Open Source license as defined by the Open Source
+    Initiative (OSI) and does NOT meet the OSI Open Source Definition.
+
+    In particular:
+
+    a. This License imposes conditions beyond those permitted by standard
+       permissive licenses (MIT, Apache 2.0, BSD) and copyleft licenses
+       (GPL, LGPL, AGPL);
+
+    b. The Patch-Back Obligation in Section 3(d) and the Commercial Code
+       License Requirement in Section 3(f) restrict freedoms that OSI-approved
+       licenses guarantee;
+
+    c. This License is NOT compatible with the GNU General Public License
+       (GPL), the MIT License, the Apache License 2.0, or any other OSI-
+       approved Open Source license. You may NOT incorporate this Work into
+       a project distributed under an OSI-approved license.
+
+    d. Despite being "Source Available", this License is designed to foster
+       a community of contributors while protecting the identity, branding,
+       and intellectual property of 𝕏TV MediaStudio™ and XTV Network Global.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 END OF TERMS AND CONDITIONS
 
-Copyright (c) 2026 𝕏0L0™ (@davdxpx)
+Copyright (c) 2026 𝕏0L0™ (@davdxpx) | XTV Network Global
 All Rights Reserved.
+
+For questions about this License, contact: @davdxpx on Telegram
+or open an issue at https://github.com/davdxpx/xtv-mediastudio
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
