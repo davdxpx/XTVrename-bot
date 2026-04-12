@@ -291,11 +291,13 @@ For around €4 a month, you get a dedicated IPv4 and a massive **20TB of Traffi
 
 ### 3. Standard VPS (DigitalOcean, AWS EC2, etc.)
 1. **Connect** to your server via SSH.
-2. **Install Docker**:
+2. **Install Dependencies (Docker & Aria2)**:
    ```
    sudo apt update && sudo apt upgrade -y
-   sudo apt install docker.io docker-compose git -y
+   sudo apt install docker.io docker-compose git aria2 -y
    sudo systemctl enable --now docker
+   # Run Aria2 in daemon mode for the Torrent Downloader
+   aria2c --enable-rpc --rpc-listen-all --daemon
    ```
 3. **Download the Bot:**
    ```

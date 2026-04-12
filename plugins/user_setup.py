@@ -40,6 +40,8 @@ async def send_user_tool_preferences_setup(client, user_id, message_or_query):
         available_tools.append({"id": "voice_converter", "name": "🎙️ Voice Converter"})
     if toggles.get("video_note_converter", True) or pf.get("video_note_converter", False):
         available_tools.append({"id": "video_note_converter", "name": "⭕ Video Note Converter"})
+    if toggles.get("torrent_downloader", True) or pf.get("torrent_downloader", False):
+        available_tools.append({"id": "torrent_downloader", "name": "🧲 Torrent Downloader"})
 
     user_settings = await db.get_settings(user_id)
     selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]
