@@ -570,7 +570,7 @@ async def handle_subtitle_command(client, message):
     mock_cb.message = msg
     await handle_subtitle_extractor_menu(client, mock_cb)
 
-@Client.on_message(filters.command(["t", "trim"]) & filters.private, group=0)
+@Client.on_message(filters.command(["trim"]) & filters.private, group=0)
 async def handle_trim_command(client, message):
     user_id = message.from_user.id
 
@@ -1076,7 +1076,7 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/convert` or `/c` — Convert file formats\n"
                 "• `/watermark` or `/w` — Add image watermark\n"
                 "• `/subtitle` or `/s` — Extract subtitles\n"
-                "• `/trim` or `/t` — Trim/cut video by timestamp\n"
+                "• `/trim` — Trim/cut video by timestamp\n"
                 "• `/mediainfo` or `/mi` — Show detailed media file info\n"
                 "• `/voice` or `/v` — Convert audio to voice note\n"
                 "• `/videonote` or `/vn` — Convert video to round note\n"
@@ -1199,7 +1199,7 @@ async def handle_help_callbacks(client, callback_query):
                 "Trims a video between a start and end timestamp using stream copy (no re-encoding).\n\n"
                 "• Send a video, then provide start and end times.\n"
                 "• **Format:** `HH:MM:SS` or `MM:SS`\n"
-                "• **Shortcut:** `/t` or `/trim`."
+                "• **Shortcut:** `/trim`."
             )
         elif tool == "mediainfo":
             text = (
