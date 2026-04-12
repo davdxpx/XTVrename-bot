@@ -106,8 +106,9 @@ approved Open Source license. Rights not explicitly granted herein are reserved.
       limitation:
 
       (i)   All copyright headers and notices in Source code files;
-      (ii)  The "Developed by 𝕏0L0™ (@davdxpx)" attribution in the repository
-            README and in the bot's /info command output;
+      (ii)  The "Developed by 𝕏0L0™ (@davdxpx)" attribution as it appears in
+            the repository documentation and in any designated credits or
+            information section provided by the Work to its end users;
       (iii) All links and references to @davdxpx, @XTVglobal, and associated
             Telegram channels as they appear in the original Work;
       (iv)  The XTV PUBLIC LICENSE v3.0 notice in any accompanying
@@ -146,8 +147,9 @@ approved Open Source license. Rights not explicitly granted herein are reserved.
       (iii) Presenting the Work or a Derivative Work as a white-label product
             that hides the origin and authorship of the original Work;
       (iv)  Operating a Hosting service for third parties while concealing or
-            removing the XTV Branding from the bot's /info command output or
-            the repository README of the deployed version;
+            removing the XTV Branding from the source code of the Work or
+            from any credits or information section made available to end
+            users by the Work;
       (v)   Commercial Code Use of the Work without a valid Commercial License
             (see Section 3(f) and Section 14).
 
@@ -185,8 +187,14 @@ approved Open Source license. Rights not explicitly granted herein are reserved.
       Hosting (e.g., running a public Telegram bot that charges users for
       access), provided that ALL of the following conditions are met:
 
-      (i)   The full XTV Branding must remain visible in the bot's /info
-            command output and in the repository README;
+      (i)   The XTV Branding must be preserved in its entirety within the
+            source code of the Work and in any credits or information
+            section made available to end users by the Work. The Licensor
+            acknowledges that author attribution is primarily embedded in
+            the source code and is surfaced to end users solely through
+            the Work's designated information interface, and this License
+            does not require attribution to be displayed beyond those
+            locations already present in the original Work;
       (ii)  You must not represent the Hosted service as your own original
             creation; the origin of the Work must be clearly attributed to
             𝕏0L0™ / XTV Network Global;
