@@ -9,3 +9,4 @@ aiohttp~=3.10.5
 guessit
 certifi>=2024.7.4
 psutil
+beautifulsoup4
