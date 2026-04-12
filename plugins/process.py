@@ -319,18 +319,6 @@ class TaskProcessor:
         return True
 
     async def _download_media(self) -> bool:
-        local_file_path = self.data.get("local_file_path")
-        if local_file_path and os.path.exists(local_file_path):
-            await self._update_status(
-                "📥 **Importing Local File...**\n"
-                "━━━━━━━━━━━━━━━━━━━━\n\n"
-                "> Reading file from local storage...\n"
-                "\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature(mode=self.mode)}"
-            )
-            self.input_path = local_file_path
-            return True
-
         await self._update_status(
             "📥 **Downloading Media...**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1793,15 +1781,6 @@ class TaskProcessor:
                 return
 
     async def _cleanup(self):
-        # Clean up any external cleanup directory first (e.g. from TorrentDownloader)
-        cleanup_dir = self.data.get("cleanup_dir")
-        if cleanup_dir and os.path.exists(cleanup_dir):
-            try:
-                import shutil
-                shutil.rmtree(cleanup_dir, ignore_errors=True)
-            except Exception as e:
-                logger.warning(f"Failed to remove temp dir {cleanup_dir}: {e}")
-
         for path in [self.input_path, self.output_path, self.thumb_path]:
             if path and os.path.exists(path):
                 try:
