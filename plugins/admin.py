@@ -1074,7 +1074,6 @@ async def admin_callback(client, callback_query):
             [InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_toggle_media_info")],
             [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_toggle_voice_converter")],
             [InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_toggle_video_note_converter")],
-            [InlineKeyboardButton(f"{emoji(global_toggles.get('torrent_downloader', True))} 🧲 Torrent Downloader", callback_data="admin_toggle_torrent_downloader")],
             [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]
         ]
 
@@ -1289,13 +1288,9 @@ async def admin_callback(client, callback_query):
                     InlineKeyboardButton(f"{emoji(vt)} ✂️ Video Trimmer", callback_data=f"admin_toggle_video_trimmer_{plan_name}"),
                     InlineKeyboardButton(f"{emoji(mi)} ℹ️ Media Info", callback_data=f"admin_toggle_media_info_{plan_name}")
                 ])
-                td = global_toggles.get("torrent_downloader", True)
                 buttons.append([
                     InlineKeyboardButton(f"{emoji(vc)} 🎙️ Voice Converter", callback_data=f"admin_toggle_voice_converter_{plan_name}"),
                     InlineKeyboardButton(f"{emoji(vnc)} ⭕ Video Note", callback_data=f"admin_toggle_video_note_converter_{plan_name}")
-                ])
-                buttons.append([
-                    InlineKeyboardButton(f"{emoji(td)} 🧲 Torrent Downloader", callback_data=f"admin_toggle_torrent_downloader_{plan_name}")
                 ])
             else:
                 media_tools_row1 = []
@@ -1327,20 +1322,12 @@ async def admin_callback(client, callback_query):
                 if not global_toggles.get("video_note_converter", True):
                     vnc = features.get("video_note_converter", False)
                     media_tools_row4.append(InlineKeyboardButton(f"{emoji(vnc)} ⭕ Video Note", callback_data=f"admin_premium_feat_{plan_name}_video_note_converter"))
-                if not global_toggles.get("torrent_downloader", True):
-                    td = features.get("torrent_downloader", False)
-                    media_tools_row5 = []
-                    media_tools_row5.append(InlineKeyboardButton(f"{emoji(td)} 🧲 Torrent", callback_data=f"admin_premium_feat_{plan_name}_torrent_downloader"))
-                    if td:
-                        tms = features.get("torrent_multi_select", False)
-                        media_tools_row5.append(InlineKeyboardButton(f"{emoji(tms)} ✅ Multi-Select", callback_data=f"admin_premium_feat_{plan_name}_torrent_multi_select"))
 
                 if media_tools_row1: buttons.append(media_tools_row1)
                 if media_tools_row2: buttons.append(media_tools_row2)
                 if media_tools_row3: buttons.append(media_tools_row3)
                 if media_tools_row4: buttons.append(media_tools_row4)
-                if not global_toggles.get("torrent_downloader", True) and media_tools_row5: buttons.append(media_tools_row5)
-                if not media_tools_row1 and not media_tools_row2 and not media_tools_row3 and not media_tools_row4 and not media_tools_row5:
+                if not media_tools_row1 and not media_tools_row2 and not media_tools_row3 and not media_tools_row4:
                     buttons.append([InlineKeyboardButton("✅ All tools globally enabled", callback_data="noop")])
 
             buttons.append([InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")])

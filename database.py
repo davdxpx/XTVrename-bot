@@ -650,9 +650,7 @@ class Database:
                             "voice_converter": True,
                             "video_note_converter": True,
                             "4k_enhancement": True,
-                            "batch_processing_pro": True,
-                            "torrent_downloader": True,
-                            "torrent_multi_select": False
+                            "batch_processing_pro": True
                         }
                     },
                     "premium_deluxe": {
@@ -672,9 +670,7 @@ class Database:
                             "voice_converter": True,
                             "video_note_converter": True,
                             "4k_enhancement": True,
-                            "batch_processing_pro": True,
-                            "torrent_downloader": True,
-                            "torrent_multi_select": True
+                            "batch_processing_pro": True
                         }
                     },
                     "payment_methods": {
