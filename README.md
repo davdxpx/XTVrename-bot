@@ -13,7 +13,7 @@
   <a href="https://ffmpeg.org/"><img src="https://img.shields.io/badge/FFmpeg-Included-green.svg?logo=ffmpeg&logoColor=white" alt="FFmpeg"></a>
   <a href="https://www.mongodb.com/"><img src="https://img.shields.io/badge/MongoDB-Ready-47A248.svg?logo=mongodb&logoColor=white" alt="MongoDB"></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white" alt="Docker"></a>
-  <a href="https://github.com/davdxpx/XTV-MediaStudio/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-XTV_Public_v2.0-red.svg" alt="License"></a>
+  <a href="https://github.com/davdxpx/XTV-MediaStudio/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-XTV_Public_v3.0-red.svg" alt="License"></a>
 </p>
 
 The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram Bot** engineered for automated media processing, file renaming, and video metadata editing. It combines robust **FFmpeg** metadata injection with intelligent file renaming algorithms, designed specifically for maintaining large-scale media libraries on Telegram. Whether you need an **automated media manager**, a **TMDb movie scraper**, or a **video metadata editor**, 𝕏TV MediaStudio™ is the ultimate **media management solution**.
@@ -377,9 +377,14 @@ admin - ⛔ Access Global Configurations (Admins Only)
 
 ## 🧩 Credits & License
 
-This project is open-source under the **XTV Public License**.
-*   **Modifications**: You may fork and modify for personal use.
-*   **Attribution**: **You must retain the original author credits.** Unauthorized removal of the "Developed by 𝕏0L0™" notice is strictly prohibited.
+This project is released under the **XTV Public License v3.0** — a "Source Available" license designed to keep the code open while protecting the identity and branding of XTV Network Global.
+
+Key points:
+*   **Hosting**: You may run this bot publicly or commercially, as long as the full XTV credits remain visible.
+*   **Forks**: Public forks are permitted — rebranding or removing credits is strictly prohibited.
+*   **Commercial Code Use**: Embedding this code in your own sold/licensed product requires a separate commercial license — open a [GitHub Issue](https://github.com/davdxpx/xtv-mediastudio/issues) or contact @davdxpx on Telegram.
+*   **Patch-Back Obligation**: All modifications (bugfixes, features, improvements) must be submitted as a Pull Request back to this repository.
+*   **Attribution**: **You must retain all original author credits in full.** Unauthorized removal of the "Developed by 𝕏0L0™" notice or any XTV branding is strictly prohibited.
 
 ---
 <div align="center">
