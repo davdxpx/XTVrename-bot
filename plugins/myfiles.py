@@ -50,14 +50,14 @@ async def safe_edit_or_send(client, callback_query, text, markup, photo=None):
                     new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
                     try:
                         await callback_query.message.delete()
-                    except:
+                    except Exception:
                         pass
             else:
                 # Text to Photo: Send new, then delete old
                 new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
                 try:
                     await callback_query.message.delete()
-                except:
+                except Exception:
                     pass
         else:
             # We are transitioning TO a text message
@@ -66,7 +66,7 @@ async def safe_edit_or_send(client, callback_query, text, markup, photo=None):
                 new_msg = await client.send_message(chat_id=callback_query.message.chat.id, text=text, reply_markup=markup)
                 try:
                     await callback_query.message.delete()
-                except:
+                except Exception:
                     pass
             else:
                 # Text to Text: Just edit

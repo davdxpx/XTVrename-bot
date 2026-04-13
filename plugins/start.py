@@ -325,7 +325,7 @@ async def handle_start_command_unique(client, message):
     all_avail_ids = ["rename"]
     for t_id in tool_map:
         if t_id == "rename": continue
-        if toggles.get(t_id, True) or (Config.PUBLIC_MODE and is_premium_user and pf.get(t_id, False)):
+        if toggles.get(t_id, True) and (pf.get(t_id, True) if pf else True):
             all_avail_ids.append(t_id)
 
     unselected_tools = [t for t in all_avail_ids if t not in selected_tools]
@@ -831,7 +831,7 @@ async def handle_other_features_menu(client, callback_query):
 
         is_avail = t_id == "rename"
         if not is_avail:
-            is_avail = toggles.get(t_id, True) or pf.get(t_id, False)
+            is_avail = toggles.get(t_id, True) and (pf.get(t_id, True) if pf else True)
 
         if is_avail:
             buttons.append([InlineKeyboardButton(tool_map[t_id][0], callback_data=tool_map[t_id][1])])

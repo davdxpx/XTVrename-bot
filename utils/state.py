@@ -4,6 +4,11 @@ _STATE_TTL = 3600  # 1 hour — sessions expire after inactivity
 
 user_data = {}
 _timestamps = {}
+_on_expire_callbacks = []
+
+def register_expire_callback(fn):
+    """Register a callback to be called with user_id when a session expires."""
+    _on_expire_callbacks.append(fn)
 
 # === Helper Functions ===
 def _touch(user_id):
@@ -56,6 +61,12 @@ def cleanup_expired():
     for uid in expired:
         user_data.pop(uid, None)
         _timestamps.pop(uid, None)
+        _db_persist_pending.discard(uid)
+        for cb in _on_expire_callbacks:
+            try:
+                cb(uid)
+            except Exception:
+                pass
     return len(expired)
 
 # --------------------------------------------------------------------------

@@ -66,7 +66,7 @@ async def list_users(client, callback):
     try:
         _, mode, page = callback.data.split("|")
         page = int(page)
-    except:
+    except Exception:
         mode = "all"
         page = 0
 
@@ -134,7 +134,7 @@ async def view_user_profile(client, callback):
 
     try:
         target_id = int(callback.data.split("|")[1])
-    except:
+    except Exception:
         await callback.answer("Invalid User ID", show_alert=True)
         return
 

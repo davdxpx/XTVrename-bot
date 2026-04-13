@@ -151,16 +151,30 @@ async def get_admin_access_limits_menu():
     buttons = []
 
     if Config.PUBLIC_MODE:
+        config = await db.get_public_config()
+        prem_enabled = config.get("premium_system_enabled", False)
+        deluxe_enabled = config.get("premium_deluxe_enabled", False)
+        trial_enabled = config.get("premium_trial_enabled", False)
+        myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+
+        def _status(s): return "✅ ON" if s else "❌ OFF"
+
+        buttons.append([InlineKeyboardButton("━━━ 🔧 System Toggles ━━━", callback_data="noop")])
+        buttons.append([
+            InlineKeyboardButton(f"💎 Premium: {_status(prem_enabled)}", callback_data="admin_quick_toggle_premium"),
+            InlineKeyboardButton(f"👑 Deluxe: {_status(deluxe_enabled)}", callback_data="admin_quick_toggle_deluxe")
+        ])
+        buttons.append([
+            InlineKeyboardButton(f"⏳ Trial: {_status(trial_enabled)}", callback_data="admin_quick_toggle_trial"),
+            InlineKeyboardButton(f"📁 MyFiles: {_status(myfiles_enabled)}", callback_data="admin_quick_toggle_myfiles")
+        ])
+        buttons.append([InlineKeyboardButton("━━━ ⚙️ Configuration ━━━", callback_data="noop")])
+        buttons.append([InlineKeyboardButton("🛠️ Feature Toggles", callback_data="admin_feature_toggles")])
         buttons.append([InlineKeyboardButton("📋 Per-Plan Settings", callback_data="admin_per_plan_limits")])
         buttons.append([InlineKeyboardButton("🌍 Global Daily Egress Limit", callback_data="admin_global_daily_egress")])
     else:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    "🌍 Set Global Daily Egress Limit", callback_data="admin_global_daily_egress"
-                )
-            ]
-        )
+        buttons.append([InlineKeyboardButton("🛠️ Feature Toggles", callback_data="admin_feature_toggles")])
+        buttons.append([InlineKeyboardButton("🌍 Set Global Daily Egress Limit", callback_data="admin_global_daily_egress")])
 
     buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
     return InlineKeyboardMarkup(buttons)
@@ -243,6 +257,42 @@ async def admin_callback(client, callback_query):
         raise ContinuePropagation
     data = callback_query.data
     debug(f"Admin callback: {data} from user {user_id}")
+
+    # --- Quick System Toggles (Settings menu) ---
+    if data == "admin_quick_toggle_premium":
+        config = await db.get_public_config()
+        enabled = config.get("premium_system_enabled", False)
+        await db.update_public_config("premium_system_enabled", not enabled)
+        await callback_query.answer(f"Premium System {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
+
+    if data == "admin_quick_toggle_deluxe":
+        config = await db.get_public_config()
+        enabled = config.get("premium_deluxe_enabled", False)
+        await db.update_public_config("premium_deluxe_enabled", not enabled)
+        await callback_query.answer(f"Deluxe Plan {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
+
+    if data == "admin_quick_toggle_trial":
+        config = await db.get_public_config()
+        enabled = config.get("premium_trial_enabled", False)
+        await db.update_public_config("premium_trial_enabled", not enabled)
+        await callback_query.answer(f"Trial Mode {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
+
+    if data == "admin_quick_toggle_myfiles":
+        enabled = await db.get_setting("myfiles_enabled", default=False)
+        await db.update_setting("myfiles_enabled", not enabled)
+        await callback_query.answer(f"MyFiles System {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
 
     if data == "admin_myfiles_settings":
         myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
@@ -348,15 +398,26 @@ async def admin_callback(client, callback_query):
             features = plan_settings.get("features", {})
             feat_list = []
 
-            # Global toggles apply to everyone if enabled, otherwise check plan override
-            if global_toggles.get("subtitle_extractor", True) or features.get("subtitle_extractor", False):
-                feat_list.append("💬 Subtitle Extractor")
-            if global_toggles.get("watermarker", True) or features.get("watermarker", False):
-                feat_list.append("🎨 Image Watermarker")
-            if global_toggles.get("file_converter", True) or features.get("file_converter", False):
-                feat_list.append("🔄 File Converter")
-            if global_toggles.get("audio_editor", True) or features.get("audio_editor", False):
-                feat_list.append("🎵 Audio Editor")
+            # Media tools: both global AND per-plan must be enabled
+            tool_checks = [
+                ("subtitle_extractor", "💬 Subtitle Extractor"),
+                ("watermarker", "🎨 Image Watermarker"),
+                ("file_converter", "🔄 File Converter"),
+                ("audio_editor", "🎵 Audio Editor"),
+                ("video_trimmer", "✂️ Video Trimmer"),
+                ("media_info", "ℹ️ Media Info"),
+                ("voice_converter", "🎙️ Voice Converter"),
+                ("video_note_converter", "⭕ Video Note"),
+                ("4k_enhancement", "📺 4K Enhancement"),
+                ("batch_processing_pro", "📦 Batch Pro"),
+            ]
+            for feat_key, label in tool_checks:
+                global_on = global_toggles.get(feat_key, True)
+                plan_on = features.get(feat_key, global_on)
+                if global_on and plan_on:
+                    feat_list.append(label)
+
+            # Account perks
             if features.get("priority_queue", False):
                 feat_list.append("🚀 Priority Queue")
             if features.get("batch_sharing", False):
@@ -677,7 +738,7 @@ async def admin_callback(client, callback_query):
                 if len(parts) >= 3:
                     try:
                         page = int(parts[2])
-                    except:
+                    except (ValueError, IndexError):
                         pass
 
             channels = await db.get_dumb_channels()
@@ -1008,7 +1069,7 @@ async def admin_callback(client, callback_query):
                     p['user_id'],
                     f"✅ **Payment Approved!**\n\nYour payment for the **Premium {p['plan'].capitalize()} Plan** ({p['duration_months']} Months) has been verified.\nYour account is now upgraded. Enjoy!"
                 )
-            except:
+            except Exception:
                 pass
 
             await callback_query.answer("Payment Approved & User Upgraded!", show_alert=True)
@@ -1031,7 +1092,7 @@ async def admin_callback(client, callback_query):
                     p['user_id'],
                     f"❌ **Payment Rejected**\n\nYour payment (ID: `{payment_id}`) for the Premium {p['plan'].capitalize()} Plan could not be verified. Please contact support."
                 )
-            except:
+            except Exception:
                 pass
 
             await callback_query.answer("Payment Rejected.", show_alert=True)
@@ -1050,13 +1111,17 @@ async def admin_callback(client, callback_query):
         info_en = toggles.get("media_info", True)
         voice_en = toggles.get("voice_converter", True)
         vnote_en = toggles.get("video_note_converter", True)
+        four_k_en = toggles.get("4k_enhancement", True)
+        batch_pro_en = toggles.get("batch_processing_pro", True)
 
         def emoji(state): return "✅" if state else "❌"
 
         text = (
-            "⚙️ **Feature Toggles**\n"
+            "⚙️ **Global Feature Toggles**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Enable or disable specific features globally.\n\n"
+            "Enable or disable features globally (master switch).\n"
+            "> Disabled features are hidden for **all** users & plans.\n"
+            "> Per-plan overrides can be set in Per-Plan Settings.\n\n"
             "> **Performance Impact:**\n"
             "> • **File Converter:** High CPU & RAM\n"
             "> • **Watermarker / Trimmer:** Medium CPU\n"
@@ -1066,14 +1131,16 @@ async def admin_callback(client, callback_query):
         )
 
         buttons = [
-            [InlineKeyboardButton(f"{emoji(conv_en)} 🔀 File Converter", callback_data="admin_toggle_file_converter")],
-            [InlineKeyboardButton(f"{emoji(sub_en)} 📝 Subtitle Extractor", callback_data="admin_toggle_subtitle_extractor")],
-            [InlineKeyboardButton(f"{emoji(wm_en)} ©️ Image Watermarker", callback_data="admin_toggle_watermarker")],
-            [InlineKeyboardButton(f"{emoji(audio_en)} 🎵 Audio Editor", callback_data="admin_toggle_audio_editor")],
-            [InlineKeyboardButton(f"{emoji(trim_en)} ✂️ Video Trimmer", callback_data="admin_toggle_video_trimmer")],
-            [InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_toggle_media_info")],
-            [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_toggle_voice_converter")],
-            [InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_toggle_video_note_converter")],
+            [InlineKeyboardButton(f"{emoji(conv_en)} 🔀 File Converter", callback_data="admin_gtoggle_file_converter"),
+             InlineKeyboardButton(f"{emoji(sub_en)} 📝 Subtitle Extractor", callback_data="admin_gtoggle_subtitle_extractor")],
+            [InlineKeyboardButton(f"{emoji(wm_en)} ©️ Watermarker", callback_data="admin_gtoggle_watermarker"),
+             InlineKeyboardButton(f"{emoji(audio_en)} 🎵 Audio Editor", callback_data="admin_gtoggle_audio_editor")],
+            [InlineKeyboardButton(f"{emoji(trim_en)} ✂️ Video Trimmer", callback_data="admin_gtoggle_video_trimmer"),
+             InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_gtoggle_media_info")],
+            [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_gtoggle_voice_converter"),
+             InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_gtoggle_video_note_converter")],
+            [InlineKeyboardButton(f"{emoji(four_k_en)} 📺 4K Enhancement", callback_data="admin_gtoggle_4k_enhancement"),
+             InlineKeyboardButton(f"{emoji(batch_pro_en)} 📦 Batch Pro", callback_data="admin_gtoggle_batch_processing_pro")],
             [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]
         ]
 
@@ -1083,17 +1150,35 @@ async def admin_callback(client, callback_query):
             pass
         return
 
+    if data.startswith("admin_gtoggle_"):
+        feature = data.replace("admin_gtoggle_", "")
+        toggles = await db.get_feature_toggles()
+        current_state = toggles.get(feature, True)
+        new_state = not current_state
+        await db.update_feature_toggle(feature, new_state)
+        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} {feature.replace('_', ' ').title()}.", show_alert=True)
+        callback_query.data = "admin_feature_toggles"
+        await admin_callback(client, callback_query)
+        return
+
     if data.startswith("admin_toggle_"):
-        parts = data.replace("admin_toggle_", "").rsplit("_", 1)
-        feature = parts[0]
-        plan_name = parts[1] if len(parts) > 1 else "free"
+        # Per-plan free toggles: admin_toggle_{feature}_{plan}
+        suffix = data.replace("admin_toggle_", "")
+        plan_name = None
+        for plan_suffix in ("_free", "_standard", "_deluxe"):
+            if suffix.endswith(plan_suffix):
+                plan_name = plan_suffix.lstrip("_")
+                feature = suffix[: -len(plan_suffix)]
+                break
+        if plan_name is None:
+            feature = suffix
+            plan_name = "free"
 
         toggles = await db.get_feature_toggles()
         current_state = toggles.get(feature, True)
         new_state = not current_state
         await db.update_feature_toggle(feature, new_state)
-        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} feature.", show_alert=True)
-        # Re-render the menu
+        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} {feature.replace('_', ' ').title()}.", show_alert=True)
         callback_query.data = f"admin_features_media_{plan_name}"
         await admin_callback(client, callback_query)
         return
@@ -1203,19 +1288,22 @@ async def admin_callback(client, callback_query):
                 [InlineKeyboardButton("🌟 Account Perks", callback_data=f"admin_features_perks_{plan_name}")],
                 [InlineKeyboardButton("🛠️ Media Tools", callback_data=f"admin_features_media_{plan_name}")],
                 [InlineKeyboardButton("🔒 Privacy Settings", callback_data=f"admin_features_privacy_{plan_name}")],
+                [InlineKeyboardButton("📁 MyFiles Limits", callback_data=f"admin_edit_plan_{plan_name}")],
                 [InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]
             ]
 
             if plan_name == "free":
                 text = (
                     "⚙️ **Free Plan Features**\n\n"
-                    "Select a category to configure **Baseline Features**.\n"
-                    "> __Note: Free Plan media tools apply globally by default.__"
+                    "Select a category to configure features for this plan.\n"
+                    "> __Free plan media tools use the global toggles.__\n"
+                    "> __Per-plan overrides are available for premium tiers.__"
                 )
             else:
                 text = (
                     f"⚙️ **{plan_name.capitalize()} Plan Features**\n\n"
-                    "Select a category to configure **Premium Overrides**."
+                    "Select a category to configure features for this plan.\n"
+                    "> Each tool can be individually enabled or disabled."
                 )
 
             try:
@@ -1265,74 +1353,69 @@ async def admin_callback(client, callback_query):
 
             def emoji(state): return "✅" if state else "❌"
 
+            # Define all media tools with their display info
+            tool_defs = [
+                ("subtitle_extractor", "🎬 Subtitle Extractor"),
+                ("watermarker", "🖼 Watermarker"),
+                ("file_converter", "🔄 Converter"),
+                ("audio_editor", "🎵 Audio Editor"),
+                ("video_trimmer", "✂️ Video Trimmer"),
+                ("media_info", "ℹ️ Media Info"),
+                ("voice_converter", "🎙️ Voice Converter"),
+                ("video_note_converter", "⭕ Video Note"),
+                ("4k_enhancement", "📺 4K Enhancement"),
+                ("batch_processing_pro", "📦 Batch Pro"),
+            ]
+
             buttons = []
             if plan_name == "free":
-                se = global_toggles.get("subtitle_extractor", True)
-                wm = global_toggles.get("watermarker", True)
-                fc = global_toggles.get("file_converter", True)
-                ae = global_toggles.get("audio_editor", True)
-                vt = global_toggles.get("video_trimmer", True)
-                mi = global_toggles.get("media_info", True)
-                vc = global_toggles.get("voice_converter", True)
-                vnc = global_toggles.get("video_note_converter", True)
-
-                buttons.append([
-                    InlineKeyboardButton(f"{emoji(se)} 🎬 Subtitle Extractor", callback_data=f"admin_toggle_subtitle_extractor_{plan_name}"),
-                    InlineKeyboardButton(f"{emoji(wm)} 🖼 Watermarker", callback_data=f"admin_toggle_watermarker_{plan_name}")
-                ])
-                buttons.append([
-                    InlineKeyboardButton(f"{emoji(fc)} 🔄 Converter", callback_data=f"admin_toggle_file_converter_{plan_name}"),
-                    InlineKeyboardButton(f"{emoji(ae)} 🎵 Audio Editor", callback_data=f"admin_toggle_audio_editor_{plan_name}")
-                ])
-                buttons.append([
-                    InlineKeyboardButton(f"{emoji(vt)} ✂️ Video Trimmer", callback_data=f"admin_toggle_video_trimmer_{plan_name}"),
-                    InlineKeyboardButton(f"{emoji(mi)} ℹ️ Media Info", callback_data=f"admin_toggle_media_info_{plan_name}")
-                ])
-                buttons.append([
-                    InlineKeyboardButton(f"{emoji(vc)} 🎙️ Voice Converter", callback_data=f"admin_toggle_voice_converter_{plan_name}"),
-                    InlineKeyboardButton(f"{emoji(vnc)} ⭕ Video Note", callback_data=f"admin_toggle_video_note_converter_{plan_name}")
-                ])
+                # Free plan uses global toggles directly
+                for i in range(0, len(tool_defs), 2):
+                    row = []
+                    for j in range(i, min(i + 2, len(tool_defs))):
+                        feat_key, label = tool_defs[j]
+                        state = global_toggles.get(feat_key, True)
+                        row.append(InlineKeyboardButton(
+                            f"{emoji(state)} {label}",
+                            callback_data=f"admin_toggle_{feat_key}_{plan_name}"
+                        ))
+                    buttons.append(row)
             else:
-                media_tools_row1 = []
-                media_tools_row2 = []
-                media_tools_row3 = []
-                media_tools_row4 = []
-
-                if not global_toggles.get("subtitle_extractor", True):
-                    se = features.get("subtitle_extractor", False)
-                    media_tools_row1.append(InlineKeyboardButton(f"{emoji(se)} 🎬 Subtitle Extractor", callback_data=f"admin_premium_feat_{plan_name}_subtitle_extractor"))
-                if not global_toggles.get("watermarker", True):
-                    wm = features.get("watermarker", False)
-                    media_tools_row1.append(InlineKeyboardButton(f"{emoji(wm)} 🖼 Watermarker", callback_data=f"admin_premium_feat_{plan_name}_watermarker"))
-                if not global_toggles.get("file_converter", True):
-                    fc = features.get("file_converter", False)
-                    media_tools_row2.append(InlineKeyboardButton(f"{emoji(fc)} 🔄 Converter", callback_data=f"admin_premium_feat_{plan_name}_file_converter"))
-                if not global_toggles.get("audio_editor", True):
-                    ae = features.get("audio_editor", False)
-                    media_tools_row2.append(InlineKeyboardButton(f"{emoji(ae)} 🎵 Audio Editor", callback_data=f"admin_premium_feat_{plan_name}_audio_editor"))
-                if not global_toggles.get("video_trimmer", True):
-                    vt = features.get("video_trimmer", False)
-                    media_tools_row3.append(InlineKeyboardButton(f"{emoji(vt)} ✂️ Video Trimmer", callback_data=f"admin_premium_feat_{plan_name}_video_trimmer"))
-                if not global_toggles.get("media_info", True):
-                    mi = features.get("media_info", False)
-                    media_tools_row3.append(InlineKeyboardButton(f"{emoji(mi)} ℹ️ Media Info", callback_data=f"admin_premium_feat_{plan_name}_media_info"))
-                if not global_toggles.get("voice_converter", True):
-                    vc = features.get("voice_converter", False)
-                    media_tools_row4.append(InlineKeyboardButton(f"{emoji(vc)} 🎙️ Voice Converter", callback_data=f"admin_premium_feat_{plan_name}_voice_converter"))
-                if not global_toggles.get("video_note_converter", True):
-                    vnc = features.get("video_note_converter", False)
-                    media_tools_row4.append(InlineKeyboardButton(f"{emoji(vnc)} ⭕ Video Note", callback_data=f"admin_premium_feat_{plan_name}_video_note_converter"))
-
-                if media_tools_row1: buttons.append(media_tools_row1)
-                if media_tools_row2: buttons.append(media_tools_row2)
-                if media_tools_row3: buttons.append(media_tools_row3)
-                if media_tools_row4: buttons.append(media_tools_row4)
-                if not media_tools_row1 and not media_tools_row2 and not media_tools_row3 and not media_tools_row4:
-                    buttons.append([InlineKeyboardButton("✅ All tools globally enabled", callback_data="noop")])
+                # Premium plans: show ALL tools with per-plan toggle
+                for i in range(0, len(tool_defs), 2):
+                    row = []
+                    for j in range(i, min(i + 2, len(tool_defs))):
+                        feat_key, label = tool_defs[j]
+                        # Per-plan state (defaults to True for premium)
+                        plan_state = features.get(feat_key, True)
+                        global_state = global_toggles.get(feat_key, True)
+                        # Effective = both global AND per-plan must be on
+                        effective = plan_state and global_state
+                        # Show indicator if globally off
+                        suffix = " ⛔" if not global_state else ""
+                        row.append(InlineKeyboardButton(
+                            f"{emoji(effective)} {label}{suffix}",
+                            callback_data=f"admin_premium_feat_{plan_name}_{feat_key}"
+                        ))
+                    buttons.append(row)
 
             buttons.append([InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")])
 
-            text = f"🛠️ **Media Tools ({plan_name.capitalize()})**\n\nConfigure media tools for this tier:"
+            if plan_name == "free":
+                text = (
+                    f"🛠️ **Media Tools (Free)**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"Toggle media tools for free users.\n"
+                    f"> These are the **global** toggles (apply to all non-premium users)."
+                )
+            else:
+                text = (
+                    f"🛠️ **Media Tools ({plan_name.capitalize()})**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"Toggle media tools for this plan.\n"
+                    f"> ⛔ = Globally disabled (enable in Feature Toggles first)\n"
+                    f"> Per-plan toggles control access within this tier."
+                )
 
             try:
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
@@ -1523,7 +1606,7 @@ async def admin_callback(client, callback_query):
                         usd_val = float(usd_str.replace("$", ""))
                         recommended_stars = int(usd_val / 0.015)
                         star_prompt = f"⭐ **Send the new Telegram Stars price (integer).**\n\nYour fiat price converts to roughly `{usd_str}`.\nWe recommend setting this to `{recommended_stars}` Stars (assuming ~$0.015 per Star)."
-                    except:
+                    except (ValueError, TypeError):
                         star_prompt = "⭐ **Send the new Telegram Stars price (integer).**"
 
                     prompts["stars"] = star_prompt
@@ -2331,7 +2414,9 @@ async def admin_callback(client, callback_query):
         try:
             reply_markup = await get_admin_access_limits_menu()
             await callback_query.message.edit_text(
-                "🔒 **Settings Menu**\n\n" "Select a category:",
+                "🔒 **Settings & Controls**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "Toggle system features on/off and configure plans, limits, and tools.",
                 reply_markup=reply_markup,
             )
         except MessageNotModified:

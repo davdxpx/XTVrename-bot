@@ -248,7 +248,7 @@ class TaskProcessor:
                         await self.client.send_message(self.user_id, summary_msg)
                         try:
                             await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                        except:
+                        except Exception:
                             pass
                         if queue_manager.batches.get(batch_id):
                             setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
@@ -499,7 +499,7 @@ class TaskProcessor:
                 if os.path.exists(self.input_path):
                     try:
                         os.remove(self.input_path)
-                    except:
+                    except OSError:
                         pass
                 if attempt < max_retries:
                     await asyncio.sleep(5)
@@ -1449,7 +1449,7 @@ class TaskProcessor:
                     from bson.objectid import ObjectId
                     try:
                         folder_id = ObjectId(dest_folder)
-                    except:
+                    except Exception:
                         pass
 
                 if (not dest_folder or dest_folder == "auto") and not skip_myfiles:
@@ -1621,7 +1621,7 @@ class TaskProcessor:
                             )
                             try:
                                 await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                            except:
+                            except Exception:
                                 pass
                             if queue_manager.batches.get(batch_id):
                                 setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
@@ -1713,7 +1713,7 @@ class TaskProcessor:
                     )
                     try:
                         await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                    except:
+                    except Exception:
                         pass
                 except Exception as e:
                     logger.warning(f"Failed to send single completion msg: {e}")
