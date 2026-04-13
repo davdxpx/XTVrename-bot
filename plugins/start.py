@@ -272,7 +272,6 @@ async def handle_start_command_unique(client, message):
     # Trigger smart swap check before rendering menu
     await perform_smart_swap_if_needed(user_id)
 
-
     await db.ensure_user(
         user_id=message.from_user.id,
         first_name=message.from_user.first_name,
@@ -281,6 +280,20 @@ async def handle_start_command_unique(client, message):
         language_code=message.from_user.language_code,
         is_bot=message.from_user.is_bot
     )
+
+    await render_start_menu(client, user_id, first_name=message.from_user.first_name, bot_name=bot_name, community_name=community_name)
+
+
+async def render_start_menu(client, user_id, message_to_edit=None, first_name="User", bot_name=None, community_name=None):
+    """Render the personalized start menu. Edits message_to_edit if provided, otherwise sends new."""
+    if not bot_name:
+        if Config.PUBLIC_MODE:
+            config = await db.get_public_config()
+            bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
+            community_name = config.get("community_name", "Our Community")
+        else:
+            bot_name = "**𝕏TV MediaStudio™**"
+            community_name = "official XTV"
 
     toggles = await db.get_feature_toggles()
     show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
@@ -307,7 +320,6 @@ async def handle_start_command_unique(client, message):
                     if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
                         show_other = True
 
-    # Map tool IDs to UI representation
     tool_map = {
         "rename": ("📁 Rename / Tag Media", "start_renaming"),
         "audio_editor": ("🎵 Audio Editor", "audio_editor_menu"),
@@ -324,22 +336,16 @@ async def handle_start_command_unique(client, message):
     selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]
 
     buttons = []
-
-    # Render selected tools directly on the start page (1 per row)
     for tool_id in selected_tools:
         if tool_id in tool_map:
-            # Check if user actually has access to this tool (toggles)
-            # 'rename' is always available
             is_avail = tool_id == "rename"
             if not is_avail:
                 is_avail = toggles.get(tool_id, True)
                 if Config.PUBLIC_MODE and is_premium_user:
                     is_avail = is_avail or pf.get(tool_id, False)
-
             if is_avail:
                 buttons.append([InlineKeyboardButton(tool_map[tool_id][0], callback_data=tool_map[tool_id][1])])
 
-    # Are there any tools left for "Other Features"?
     all_avail_ids = ["rename"]
     for t_id in tool_map:
         if t_id == "rename": continue
@@ -354,18 +360,17 @@ async def handle_start_command_unique(client, message):
     buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
 
     if is_premium_user:
-        await message.reply_text(
-            f"{status_emoji} **Welcome back, {message.from_user.first_name}!** {status_emoji}\n\n"
+        text = (
+            f"{status_emoji} **Welcome back, {first_name}!** {status_emoji}\n\n"
             f"> Your **Premium {plan_display}** status is Active ✅\n\n"
             f"I am {bot_name}, your advanced media processing engine by the {community_name}.\n\n"
             f"**Quick Actions:**\n"
             f"• Send me any media file to begin priority processing\n"
             f"• Explore your premium tools in the dashboard below\n\n"
-            f"Thank you for being a valued Premium member!",
-            reply_markup=InlineKeyboardMarkup(buttons),
+            f"Thank you for being a valued Premium member!"
         )
     else:
-        await message.reply_text(
+        text = (
             f"{bot_name}\n\n"
             f"Welcome to the {community_name} media processing and management bot.\n"
             f"This bot provides professional tools to organize and modify your files.\n\n"
@@ -373,9 +378,19 @@ async def handle_start_command_unique(client, message):
             f"💡 **Tip:** You don't need to click anything to begin!\n"
             f"Simply send or forward a file directly to me, and I will auto-detect the details.\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"Click below to start manually or to view the guide.",
-            reply_markup=InlineKeyboardMarkup(buttons),
+            f"Click below to start manually or to view the guide."
         )
+
+    markup = InlineKeyboardMarkup(buttons)
+    if message_to_edit:
+        try:
+            await message_to_edit.edit_text(text, reply_markup=markup)
+        except MessageNotModified:
+            pass
+        except Exception:
+            await client.send_message(user_id, text, reply_markup=markup)
+    else:
+        await client.send_message(user_id, text, reply_markup=markup)
 
 @Client.on_message(filters.command(["r", "rename"]) & filters.private, group=0)
 async def handle_rename_command(client, message):
