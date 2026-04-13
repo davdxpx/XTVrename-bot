@@ -145,6 +145,9 @@ async def broadcast_message_handler(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
 
+    if not state:
+        raise ContinuePropagation
+
     if state == "awaiting_broadcast_message":
         update_data(user_id, "broadcast_message_id", message.id)
         set_state(user_id, "broadcast_ready")

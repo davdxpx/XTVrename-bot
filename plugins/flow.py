@@ -437,13 +437,13 @@ async def handle_text_input(client, message):
 
     if not Config.PUBLIC_MODE:
         if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
-            return
+            raise ContinuePropagation
 
     state = get_state(user_id)
     logger.debug(f"Text input from {user_id}: {message.text} | State: {state}")
 
     if not state:
-        return
+        raise ContinuePropagation
 
     if state == "awaiting_dest_folder_name":
         folder_name = message.text.strip()
@@ -2139,6 +2139,9 @@ async def handle_archive_upload(client, message, user_id, file_name, state):
 async def handle_password_input(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
+
+    if not state:
+        raise ContinuePropagation
 
     if state == "awaiting_archive_password":
         password = message.text.strip()

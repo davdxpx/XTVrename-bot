@@ -1,5 +1,5 @@
 # --- Imports ---
-from pyrogram import Client, filters
+from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from config import Config
@@ -310,14 +310,12 @@ async def myfiles_text_handler(client: Client, message: Message):
     user_id = message.from_user.id
 
     if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
-        from pyrogram import ContinuePropagation
         raise ContinuePropagation
 
     state_info = await get_myfiles_state(user_id)
     state = state_info.get("state")
 
     if not state:
-        from pyrogram import ContinuePropagation
         raise ContinuePropagation
 
     if state == "awaiting_folder_name":
@@ -339,7 +337,7 @@ async def myfiles_text_handler(client: Client, message: Message):
             if count >= folder_limit:
                 await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Folders", callback_data="myfiles_cat_custom")]]))
                 await set_myfiles_state(user_id, {})
-                return
+                raise StopPropagation
 
         await db.folders.insert_one({
             "user_id": user_id,
@@ -366,7 +364,6 @@ async def myfiles_text_handler(client: Client, message: Message):
         await set_myfiles_state(user_id, {})
 
         # Stop propagation to prevent flow.py from processing this text
-        from pyrogram import StopPropagation
         raise StopPropagation
 
     if state.startswith("awaiting_rename_"):
@@ -379,31 +376,26 @@ async def myfiles_text_handler(client: Client, message: Message):
         if state_ts and _time.time() - state_ts > 600:
             await set_myfiles_state(user_id, {})
             await message.reply_text("Your rename session has expired. Please try again.")
-            from pyrogram import StopPropagation
             raise StopPropagation
 
         new_name = message.text.strip()
 
         if not new_name:
             await message.reply_text("Name cannot be empty. Please enter a valid name.")
-            from pyrogram import StopPropagation
             raise StopPropagation
 
         if len(new_name) > 255:
             await message.reply_text("Name is too long (max 255 characters). Please enter a shorter name.")
-            from pyrogram import StopPropagation
             raise StopPropagation
 
         if _re.search(r'[<>:"/\\|?*\x00-\x1f]', new_name):
             await message.reply_text("Name contains invalid characters. Please avoid: < > : \" / \\ | ? *")
-            from pyrogram import StopPropagation
             raise StopPropagation
 
         f = await db.files.find_one({"_id": ObjectId(file_id)})
         if not f:
             await message.reply_text("File no longer exists.")
             await set_myfiles_state(user_id, {})
-            from pyrogram import StopPropagation
             raise StopPropagation
 
         await db.files.update_one({"_id": ObjectId(file_id)}, {"$set": {"file_name": new_name}})
@@ -434,10 +426,8 @@ async def myfiles_text_handler(client: Client, message: Message):
 
         await set_myfiles_state(user_id, {})
 
-        from pyrogram import StopPropagation
         raise StopPropagation
 
-    from pyrogram import ContinuePropagation
     raise ContinuePropagation
 
 # === Handlers ===

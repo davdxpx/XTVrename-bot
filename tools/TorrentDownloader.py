@@ -3,7 +3,7 @@ import base64
 import os
 import uuid
 import time
-from pyrogram import Client, filters
+from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import MessageNotModified
 from plugins.user_setup import track_tool_usage
@@ -127,6 +127,9 @@ async def torrent_search_prompt(client, callback_query):
 async def torrent_message_handler(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
+    if not state or state not in ["awaiting_torrent_search", "awaiting_torrent_input"]:
+        raise ContinuePropagation
+
 
     if state == "awaiting_torrent_search":
         await message.delete()
@@ -211,6 +214,8 @@ async def torrent_message_handler(client, message):
             os.remove(file_path)
 
             await start_torrent_download_b64(client, user_id, message.chat.id, torrent_data, bot_msg_id)
+    else:
+        raise ContinuePropagation
 
 async def start_torrent_download(client, user_id, chat_id, magnet_link, bot_msg_id=None):
     dl_dir = f"./downloads/torrent_{user_id}_{uuid.uuid4()}"
