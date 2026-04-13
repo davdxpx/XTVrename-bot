@@ -123,10 +123,14 @@ async def torrent_search_prompt(client, callback_query):
     except MessageNotModified:
         pass
 
-@Client.on_message(filters.private & ~filters.command(["start", "help", "myfiles", "end", "t", "torrent"]), group=3)
+from pyrogram import ContinuePropagation
+@Client.on_message(filters.private & ~filters.command(["start", "help", "myfiles", "end", "t", "torrent"]), group=0)
 async def torrent_message_handler(client, message):
     user_id = message.from_user.id
     state = get_state(user_id)
+
+    if state not in ["awaiting_torrent_search", "awaiting_torrent_input"]:
+        raise ContinuePropagation
 
     if state == "awaiting_torrent_search":
         await message.delete()
@@ -134,9 +138,10 @@ async def torrent_message_handler(client, message):
 
         session_data = get_data(user_id)
 
-        plan = await db.get_user_plan(user_id)
+        user_doc = await db.get_user(user_id)
+        plan = user_doc.get('premium_plan', 'free') if user_doc and user_doc.get('is_premium') else 'free'
         last_search = session_data.get("last_search_time", 0)
-        is_free = plan.get('plan', 'free') == 'free'
+        is_free = plan == 'free'
 
         if is_free and time.time() - last_search < 30:
             rem = int(30 - (time.time() - last_search))
@@ -313,8 +318,10 @@ async def render_file_selection(client, user_id, chat_id, bot_msg_id):
         prefix = "✅ " if i in selected else "⬜️ "
         buttons.append([InlineKeyboardButton(f"{prefix}{name}", callback_data=f"tdl_sel_{i}")])
 
-    plan = await db.get_user_plan(user_id)
-    plan_settings = await db.get_plan_settings(plan.get('plan', 'free'))
+    user_doc = await db.get_user(user_id)
+    plan_name = user_doc.get('premium_plan', 'free') if user_doc and user_doc.get('is_premium') else 'free'
+    config = await db.get_public_config()
+    plan_settings = config.get(f'premium_{plan_name}', {})
     has_multi = plan_settings.get("features", {}).get("torrent_multi_select", False)
 
     action_row = []
@@ -339,8 +346,10 @@ async def tdl_sel_cb(client, callback_query):
     session_data = get_data(user_id)
     selected = session_data.get("selected_files", [])
 
-    plan = await db.get_user_plan(user_id)
-    plan_settings = await db.get_plan_settings(plan.get('plan', 'free'))
+    user_doc = await db.get_user(user_id)
+    plan_name = user_doc.get('premium_plan', 'free') if user_doc and user_doc.get('is_premium') else 'free'
+    config = await db.get_public_config()
+    plan_settings = config.get(f'premium_{plan_name}', {})
     has_multi = plan_settings.get("features", {}).get("torrent_multi_select", False)
 
     if not has_multi:

@@ -14,7 +14,8 @@ async def intercept_start_for_setup(client, message):
     # Fast path: check cache for complete setup
     setup_complete = await db.get_setting("is_bot_setup_complete", default=False, user_id=Config.CEO_ID)
     if setup_complete:
-        return # Fall through to regular start handler
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation # Fall through to regular start handler
 
     if user_id != Config.CEO_ID:
         await message.reply_text("🚧 **Bot is currently being set up by the Admin.**\nPlease come back later.")
