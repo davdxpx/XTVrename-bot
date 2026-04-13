@@ -881,8 +881,6 @@ async def handle_tmdb_selection(client, callback_query):
             client, user_id, callback_query.message, is_edit=True
         )
 
-import asyncio
-
 async def process_ready_file(client, user_id, message_obj, session_data):
     if session_data.get("type") == "general":
         data = {
