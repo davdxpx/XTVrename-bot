@@ -1071,7 +1071,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "link_anonymity" in user_settings:
             link_anon = user_settings["link_anonymity"]
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"link_anonymity": not link_anon}}, upsert=True)
+        await db.update_setting("link_anonymity", not link_anon, user_id)
         await callback_query.answer("Privacy setting updated", show_alert=False)
         callback_query.data = "myfiles_privacy_settings"
         await myfiles_callback(client, callback_query)
@@ -1096,7 +1096,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         elif is_premium:
             share_name = False
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"share_display_name": not share_name}}, upsert=True)
+        await db.update_setting("share_display_name", not share_name, user_id)
         await callback_query.answer("Privacy setting updated", show_alert=False)
         callback_query.data = "myfiles_privacy_settings"
         await myfiles_callback(client, callback_query)
@@ -1119,7 +1119,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "hide_forward_tags" in user_settings:
             hide_forward = user_settings["hide_forward_tags"]
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"hide_forward_tags": not hide_forward}}, upsert=True)
+        await db.update_setting("hide_forward_tags", not hide_forward, user_id)
         await callback_query.answer("Privacy setting updated", show_alert=False)
         callback_query.data = "myfiles_privacy_settings"
         await myfiles_callback(client, callback_query)
@@ -1131,7 +1131,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "myfiles_auto_permanent" in user_settings:
             auto_perm = user_settings["myfiles_auto_permanent"]
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"myfiles_auto_permanent": not auto_perm}}, upsert=True)
+        await db.update_setting("myfiles_auto_permanent", not auto_perm, user_id)
         await callback_query.answer("Setting updated", show_alert=False)
         callback_query.data = "settings_cat_myfiles"
         await myfiles_callback(client, callback_query)
