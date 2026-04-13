@@ -3330,7 +3330,6 @@ async def handle_admin_text(client, message):
         return
 
     if not state or state != "awaiting_user_lookup":
-        from pyrogram import ContinuePropagation
         raise ContinuePropagation
 
     if state == "awaiting_user_lookup":
@@ -4356,7 +4355,6 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
     state = get_state(message.from_user.id)
 
     if not state or state != "awaiting_user_lookup":
-        from pyrogram import ContinuePropagation
         raise ContinuePropagation
 
     if state == "awaiting_user_lookup":
