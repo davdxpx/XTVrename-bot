@@ -81,7 +81,7 @@ async def delete_setup(client, callback_query):
     if getattr(client, "user_bot", None):
         try:
             await client.user_bot.stop()
-        except:
+        except Exception:
             pass
         client.user_bot = None
 

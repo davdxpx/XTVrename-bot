@@ -677,7 +677,7 @@ async def admin_callback(client, callback_query):
                 if len(parts) >= 3:
                     try:
                         page = int(parts[2])
-                    except:
+                    except (ValueError, IndexError):
                         pass
 
             channels = await db.get_dumb_channels()
@@ -1008,7 +1008,7 @@ async def admin_callback(client, callback_query):
                     p['user_id'],
                     f"✅ **Payment Approved!**\n\nYour payment for the **Premium {p['plan'].capitalize()} Plan** ({p['duration_months']} Months) has been verified.\nYour account is now upgraded. Enjoy!"
                 )
-            except:
+            except Exception:
                 pass
 
             await callback_query.answer("Payment Approved & User Upgraded!", show_alert=True)
@@ -1031,7 +1031,7 @@ async def admin_callback(client, callback_query):
                     p['user_id'],
                     f"❌ **Payment Rejected**\n\nYour payment (ID: `{payment_id}`) for the Premium {p['plan'].capitalize()} Plan could not be verified. Please contact support."
                 )
-            except:
+            except Exception:
                 pass
 
             await callback_query.answer("Payment Rejected.", show_alert=True)
@@ -1066,14 +1066,14 @@ async def admin_callback(client, callback_query):
         )
 
         buttons = [
-            [InlineKeyboardButton(f"{emoji(conv_en)} 🔀 File Converter", callback_data="admin_toggle_file_converter")],
-            [InlineKeyboardButton(f"{emoji(sub_en)} 📝 Subtitle Extractor", callback_data="admin_toggle_subtitle_extractor")],
-            [InlineKeyboardButton(f"{emoji(wm_en)} ©️ Image Watermarker", callback_data="admin_toggle_watermarker")],
-            [InlineKeyboardButton(f"{emoji(audio_en)} 🎵 Audio Editor", callback_data="admin_toggle_audio_editor")],
-            [InlineKeyboardButton(f"{emoji(trim_en)} ✂️ Video Trimmer", callback_data="admin_toggle_video_trimmer")],
-            [InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_toggle_media_info")],
-            [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_toggle_voice_converter")],
-            [InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_toggle_video_note_converter")],
+            [InlineKeyboardButton(f"{emoji(conv_en)} 🔀 File Converter", callback_data="admin_gtoggle_file_converter")],
+            [InlineKeyboardButton(f"{emoji(sub_en)} 📝 Subtitle Extractor", callback_data="admin_gtoggle_subtitle_extractor")],
+            [InlineKeyboardButton(f"{emoji(wm_en)} ©️ Image Watermarker", callback_data="admin_gtoggle_watermarker")],
+            [InlineKeyboardButton(f"{emoji(audio_en)} 🎵 Audio Editor", callback_data="admin_gtoggle_audio_editor")],
+            [InlineKeyboardButton(f"{emoji(trim_en)} ✂️ Video Trimmer", callback_data="admin_gtoggle_video_trimmer")],
+            [InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_gtoggle_media_info")],
+            [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_gtoggle_voice_converter")],
+            [InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_gtoggle_video_note_converter")],
             [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]
         ]
 
@@ -1083,17 +1083,35 @@ async def admin_callback(client, callback_query):
             pass
         return
 
+    if data.startswith("admin_gtoggle_"):
+        feature = data.replace("admin_gtoggle_", "")
+        toggles = await db.get_feature_toggles()
+        current_state = toggles.get(feature, True)
+        new_state = not current_state
+        await db.update_feature_toggle(feature, new_state)
+        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} {feature.replace('_', ' ').title()}.", show_alert=True)
+        callback_query.data = "admin_feature_toggles"
+        await admin_callback(client, callback_query)
+        return
+
     if data.startswith("admin_toggle_"):
-        parts = data.replace("admin_toggle_", "").rsplit("_", 1)
-        feature = parts[0]
-        plan_name = parts[1] if len(parts) > 1 else "free"
+        # Per-plan free toggles: admin_toggle_{feature}_{plan}
+        suffix = data.replace("admin_toggle_", "")
+        plan_name = None
+        for plan_suffix in ("_free", "_standard", "_deluxe"):
+            if suffix.endswith(plan_suffix):
+                plan_name = plan_suffix.lstrip("_")
+                feature = suffix[: -len(plan_suffix)]
+                break
+        if plan_name is None:
+            feature = suffix
+            plan_name = "free"
 
         toggles = await db.get_feature_toggles()
         current_state = toggles.get(feature, True)
         new_state = not current_state
         await db.update_feature_toggle(feature, new_state)
-        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} feature.", show_alert=True)
-        # Re-render the menu
+        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} {feature.replace('_', ' ').title()}.", show_alert=True)
         callback_query.data = f"admin_features_media_{plan_name}"
         await admin_callback(client, callback_query)
         return
@@ -1523,7 +1541,7 @@ async def admin_callback(client, callback_query):
                         usd_val = float(usd_str.replace("$", ""))
                         recommended_stars = int(usd_val / 0.015)
                         star_prompt = f"⭐ **Send the new Telegram Stars price (integer).**\n\nYour fiat price converts to roughly `{usd_str}`.\nWe recommend setting this to `{recommended_stars}` Stars (assuming ~$0.015 per Star)."
-                    except:
+                    except (ValueError, TypeError):
                         star_prompt = "⭐ **Send the new Telegram Stars price (integer).**"
 
                     prompts["stars"] = star_prompt

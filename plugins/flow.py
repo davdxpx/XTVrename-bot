@@ -463,13 +463,13 @@ async def handle_text_input(client, message):
             if count >= folder_limit:
                 try:
                     await message.delete()
-                except:
+                except Exception:
                     pass
                 msg_id = get_data(user_id).get("dest_msg_id")
                 if msg_id:
                     try:
                         await client.edit_message_text(message.chat.id, msg_id, f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
-                    except:
+                    except Exception:
                         pass
                 else:
                     await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
@@ -487,7 +487,7 @@ async def handle_text_input(client, message):
 
         try:
             await message.delete()
-        except:
+        except Exception:
             pass
 
         msg_id = get_data(user_id).get("dest_msg_id")
@@ -498,7 +498,7 @@ async def handle_text_input(client, message):
         if msg_id:
             try:
                 await client.edit_message_text(message.chat.id, msg_id, f"✅ Folder **{folder_name}** created successfully and selected!")
-            except:
+            except Exception:
                 pass
 
             # Wait briefly then show dumb channel selection
@@ -635,31 +635,41 @@ async def handle_text_input(client, message):
 
     elif state.startswith("awaiting_episode_correction_"):
         msg_id = int(state.split("_")[-1])
-        if msg_id in file_sessions:
-            if message.text.isdigit():
-                file_sessions[msg_id]["episode"] = int(message.text)
-                set_state(user_id, "awaiting_file_upload")
-                asyncio.create_task(_persist_session_to_db(user_id))
-                await update_confirmation_message(client, msg_id, user_id)
-                await message.delete()
-            else:
-                await message.reply_text("Invalid number. Try again.")
+        if msg_id not in file_sessions:
+            await message.reply_text("Session expired. Please start a new session.")
+            clear_session(user_id)
+            return
+        if message.text.isdigit():
+            file_sessions[msg_id]["episode"] = int(message.text)
+            set_state(user_id, "awaiting_file_upload")
+            asyncio.create_task(_persist_session_to_db(user_id))
+            await update_confirmation_message(client, msg_id, user_id)
+            await message.delete()
+        else:
+            await message.reply_text("Invalid number. Try again.")
 
     elif state.startswith("awaiting_season_correction_"):
         msg_id = int(state.split("_")[-1])
-        if msg_id in file_sessions:
-            if message.text.isdigit():
-                file_sessions[msg_id]["season"] = int(message.text)
-                set_state(user_id, "awaiting_file_upload")
-                asyncio.create_task(_persist_session_to_db(user_id))
-                await update_confirmation_message(client, msg_id, user_id)
-                await message.delete()
-            else:
-                await message.reply_text("Invalid number. Try again.")
+        if msg_id not in file_sessions:
+            await message.reply_text("Session expired. Please start a new session.")
+            clear_session(user_id)
+            return
+        if message.text.isdigit():
+            file_sessions[msg_id]["season"] = int(message.text)
+            set_state(user_id, "awaiting_file_upload")
+            asyncio.create_task(_persist_session_to_db(user_id))
+            await update_confirmation_message(client, msg_id, user_id)
+            await message.delete()
+        else:
+            await message.reply_text("Invalid number. Try again.")
 
     elif state.startswith("awaiting_search_correction_"):
         msg_id = int(state.split("_")[-1])
-        if msg_id in file_sessions:
+        if msg_id not in file_sessions:
+            await message.reply_text("Session expired. Please start a new session.")
+            clear_session(user_id)
+            return
+        else:
             fs = file_sessions[msg_id]
             query = message.text
             mtype = fs["type"]
@@ -2026,8 +2036,12 @@ async def handle_file_upload(client, message):
         )
         batch_status_msgs[user_id] = msg
 
-    if user_id in batch_tasks:
-        batch_tasks[user_id].cancel()
+    old_task = batch_tasks.pop(user_id, None)
+    if old_task:
+        old_task.cancel()
+
+    if user_id not in batch_sessions:
+        return
 
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
@@ -2077,7 +2091,7 @@ async def handle_file_upload(client, message):
             delay = 1.0 if is_priority else 3.0
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
-                del batch_tasks[user_id]
+                batch_tasks.pop(user_id, None)
             await process_batch(client, user_id)
         except asyncio.CancelledError:
             pass
@@ -2132,7 +2146,7 @@ async def handle_archive_upload(client, message, user_id, file_name, state):
         logger.error(f"Archive processing error: {e}")
         try:
             await msg.edit_text(f"❌ Error processing archive: {e}")
-        except:
+        except Exception:
             pass
 
 @Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=4)
@@ -2234,8 +2248,9 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             bmsg = await client.send_message(user_id, "⏳ **Sorting Files...**\nPlease wait a moment.")
             batch_status_msgs[user_id] = bmsg
 
-        if user_id in batch_tasks:
-            batch_tasks[user_id].cancel()
+        old_task = batch_tasks.pop(user_id, None)
+        if old_task:
+            old_task.cancel()
 
         is_priority = False
         if Config.PUBLIC_MODE:
@@ -2314,7 +2329,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             delay = 1.0 if is_priority else 3.0
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
-                del batch_tasks[user_id]
+                batch_tasks.pop(user_id, None)
             await process_batch(client, user_id)
         except asyncio.CancelledError:
             pass
@@ -2391,8 +2406,12 @@ async def handle_auto_detection(client, message):
         )
         batch_status_msgs[user_id] = msg
 
-    if user_id in batch_tasks:
-        batch_tasks[user_id].cancel()
+    old_task = batch_tasks.pop(user_id, None)
+    if old_task:
+        old_task.cancel()
+
+    if user_id not in batch_sessions:
+        return
 
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
@@ -2443,7 +2462,7 @@ async def handle_auto_detection(client, message):
             delay = 1.0 if is_priority else 3.0
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
-                del batch_tasks[user_id]
+                batch_tasks.pop(user_id, None)
             await process_batch(client, user_id)
         except asyncio.CancelledError:
             pass
@@ -2625,6 +2644,7 @@ async def update_confirmation_message(client, msg_id, user_id):
 
 @Client.on_callback_query(filters.regex(r"^confirm_(\d+)$"))
 async def handle_confirm(client, callback_query):
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[1])
     user_id = callback_query.from_user.id
 
@@ -2634,10 +2654,18 @@ async def handle_confirm(client, callback_query):
 
     fs = file_sessions.pop(msg_id)
 
+    # Cancel expiry timer
+    task = _expiry_warnings.pop(user_id, None)
+    if task:
+        task.cancel()
+
     if fs.get("is_auto"):
         full_data = fs
     else:
         sd = get_data(user_id)
+        if not sd or not sd.get("type"):
+            await callback_query.message.edit_text("Session expired. Please start a new session.")
+            return
         full_data = sd.copy()
         full_data.update(fs)
 
@@ -2812,6 +2840,10 @@ async def handle_change_tmdb_init(client, callback_query):
     msg_id = int(callback_query.data.split("_")[2])
     user_id = callback_query.from_user.id
 
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
     set_state(user_id, f"awaiting_search_correction_{msg_id}")
     fs = file_sessions[msg_id]
     mtype = fs["type"]
@@ -2876,7 +2908,7 @@ async def handle_correct_tmdb_selection(client, callback_query):
     try:
         lang = await db.get_preferred_language(user_id)
         details = await tmdb.get_details(fs["type"], tmdb_id, language=lang)
-    except:
+    except Exception:
         return
 
     title = details.get("title") if fs["type"] == "movie" else details.get("name")

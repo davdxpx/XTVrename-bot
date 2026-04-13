@@ -221,7 +221,7 @@ async def handle_paid_manual(client, callback_query):
             f"Your Payment ID `{payment_id}` has been sent to the admins.\n"
             "Your account will be upgraded automatically once the transaction is verified."
         )
-    except:
+    except Exception:
         pass
 
     admin_ids = [Config.CEO_ID] + getattr(Config, "ADMIN_IDS", [])

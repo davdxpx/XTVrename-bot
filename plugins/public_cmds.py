@@ -98,7 +98,7 @@ async def info_command(client, message):
             try:
                 chat_info = await client.get_chat(legacy_channel)
                 channel_link = chat_info.invite_link or f"https://t.me/{chat_info.username}"
-            except:
+            except Exception:
                 pass
 
     if not channel_link:
@@ -181,7 +181,7 @@ async def user_settings_callback(client, callback_query):
                 if len(parts) >= 4:
                     try:
                         page = int(parts[3])
-                    except:
+                    except Exception:
                         pass
 
             channels = await db.get_dumb_channels(user_id)
