@@ -499,6 +499,7 @@ async def scrape_limetorrents(query: str, category: str = "all", page: int = 1) 
 
 async def search_torrents(query: str, category: str = "all") -> list:
     """Run all scrapers concurrently, deduplicate, sort by seeders."""
+    provider_names = ["1337x", "TorrentGalaxy", "LimeTorrents"]
     tasks = [
         scrape_1337x(query, category),
         scrape_torrentgalaxy(query, category),
@@ -507,11 +508,13 @@ async def search_torrents(query: str, category: str = "all") -> list:
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     all_results = []
-    for result in raw_results:
+    for i, result in enumerate(raw_results):
+        name = provider_names[i]
         if isinstance(result, Exception):
-            logger.error(f"Provider error: {result}")
+            logger.error(f"Provider {name} failed: {result}")
             continue
         if isinstance(result, list):
+            logger.info(f"Provider {name}: {len(result)} results")
             all_results.extend(result)
 
     # Deduplicate by info_hash where possible
