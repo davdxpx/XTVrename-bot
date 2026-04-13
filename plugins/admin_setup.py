@@ -1,4 +1,4 @@
-from pyrogram import Client, filters, StopPropagation
+from pyrogram import Client, filters, StopPropagation, ContinuePropagation
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from config import Config
 from database import db
@@ -14,7 +14,6 @@ async def intercept_start_for_setup(client, message):
     # Fast path: check cache for complete setup
     setup_complete = await db.get_setting("is_bot_setup_complete", default=False, user_id=Config.CEO_ID)
     if setup_complete:
-        from pyrogram import ContinuePropagation
         raise ContinuePropagation # Fall through to regular start handler
 
     if user_id != Config.CEO_ID:
@@ -23,7 +22,6 @@ async def intercept_start_for_setup(client, message):
 
     # Check if there's a specific admin session going on that should intercept this instead
     if user_id in admin_sessions and admin_sessions[user_id] in ["awaiting_setup_bot_name", "awaiting_setup_community_name", "awaiting_setup_timeout", "awaiting_setup_free_limits", "awaiting_setup_trial_length"]:
-        from pyrogram import ContinuePropagation
         raise ContinuePropagation # Let the text handler deal with it
 
     # Initiate or resume CEO setup
@@ -373,7 +371,6 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
 async def handle_setup_text_inputs(client, message):
     user_id = message.from_user.id
     if user_id not in admin_sessions:
-        from pyrogram import ContinuePropagation
         raise ContinuePropagation
 
     state = admin_sessions[user_id]

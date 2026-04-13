@@ -41,6 +41,8 @@ class Database:
             self.pending_payments = self.db["pending_payments"]
             self.files = self.db["files"]
             self.folders = self.db["folders"]
+            self.torrent_downloads = self.db["torrent_downloads"]
+            self.torrent_favorites = self.db["torrent_favorites"]
 
     def _invalidate_settings_cache(self, user_id=None):
         doc_id = self._get_doc_id(user_id)
@@ -98,6 +100,12 @@ class Database:
             await self.daily_stats.create_index("date")
             await self.pending_payments.create_index("user_id")
             await self.pending_payments.create_index("status")
+            await self.torrent_downloads.create_index("user_id")
+            await self.torrent_downloads.create_index([("user_id", 1), ("started_at", -1)])
+            await self.torrent_favorites.create_index("user_id")
+            await self.torrent_favorites.create_index(
+                [("user_id", 1), ("magnet", 1)], unique=True
+            )
             logger.info("Database indexes ensured.")
         except Exception as e:
             logger.warning(f"Could not create indexes: {e}")
@@ -1402,6 +1410,123 @@ class Database:
                 {"$set": {f"database_channels.{plan}": channel_id}},
                 upsert=True
             )
+
+    # --- Torrent Downloads ---
+
+    async def save_torrent_download(self, user_id: int, download_data: dict):
+        if self.torrent_downloads is None:
+            return None
+        download_data["user_id"] = user_id
+        if "started_at" not in download_data:
+            download_data["started_at"] = time.time()
+        result = await self.torrent_downloads.insert_one(download_data)
+        return result.inserted_id
+
+    async def update_torrent_download(self, download_id, update_data: dict):
+        if self.torrent_downloads is None:
+            return
+        from bson import ObjectId
+        if not isinstance(download_id, ObjectId):
+            download_id = ObjectId(download_id)
+        await self.torrent_downloads.update_one(
+            {"_id": download_id}, {"$set": update_data}
+        )
+
+    async def get_torrent_history(self, user_id: int, limit: int = 10, skip: int = 0):
+        if self.torrent_downloads is None:
+            return []
+        cursor = (
+            self.torrent_downloads
+            .find({"user_id": user_id})
+            .sort("started_at", -1)
+            .skip(skip)
+            .limit(limit)
+        )
+        return await cursor.to_list(length=limit)
+
+    async def get_torrent_stats(self, user_id: int) -> dict:
+        if self.torrent_downloads is None:
+            return {"total": 0, "completed": 0, "failed": 0}
+        total = await self.torrent_downloads.count_documents({"user_id": user_id})
+        completed = await self.torrent_downloads.count_documents(
+            {"user_id": user_id, "status": "completed"}
+        )
+        failed = await self.torrent_downloads.count_documents(
+            {"user_id": user_id, "status": "failed"}
+        )
+        return {"total": total, "completed": completed, "failed": failed}
+
+    # --- Torrent Favorites ---
+
+    async def save_torrent_favorite(self, user_id: int, data: dict):
+        if self.torrent_favorites is None:
+            return None
+        data["user_id"] = user_id
+        if "saved_at" not in data:
+            data["saved_at"] = time.time()
+        try:
+            result = await self.torrent_favorites.update_one(
+                {"user_id": user_id, "magnet": data.get("magnet")},
+                {"$set": data},
+                upsert=True,
+            )
+            return result.upserted_id
+        except Exception as e:
+            logger.error(f"Error saving torrent favorite: {e}")
+            return None
+
+    async def get_torrent_favorites(self, user_id: int, limit: int = 20):
+        if self.torrent_favorites is None:
+            return []
+        cursor = (
+            self.torrent_favorites
+            .find({"user_id": user_id})
+            .sort("saved_at", -1)
+            .limit(limit)
+        )
+        return await cursor.to_list(length=limit)
+
+    async def remove_torrent_favorite(self, user_id: int, favorite_id):
+        if self.torrent_favorites is None:
+            return
+        from bson import ObjectId
+        if not isinstance(favorite_id, ObjectId):
+            favorite_id = ObjectId(favorite_id)
+        await self.torrent_favorites.delete_one(
+            {"_id": favorite_id, "user_id": user_id}
+        )
+
+    # --- Torrent Search History ---
+
+    async def add_torrent_search(self, user_id: int, query: str):
+        if self.settings is None:
+            return
+        doc_id = self._get_doc_id(user_id)
+        try:
+            doc = await self.settings.find_one({"_id": doc_id})
+            history = doc.get("torrent_search_history", []) if doc else []
+            # Remove duplicates and add to front
+            history = [q for q in history if q != query]
+            history.insert(0, query)
+            history = history[:5]  # Keep last 5
+            await self.settings.update_one(
+                {"_id": doc_id},
+                {"$set": {"torrent_search_history": history}},
+                upsert=True,
+            )
+        except Exception as e:
+            logger.error(f"Error adding torrent search history: {e}")
+
+    async def get_torrent_search_history(self, user_id: int) -> list:
+        if self.settings is None:
+            return []
+        doc_id = self._get_doc_id(user_id)
+        try:
+            doc = await self.settings.find_one({"_id": doc_id})
+            return doc.get("torrent_search_history", []) if doc else []
+        except Exception as e:
+            logger.error(f"Error getting torrent search history: {e}")
+            return []
 
 db = Database()
 
