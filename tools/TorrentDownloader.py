@@ -21,10 +21,30 @@ RESULTS_PER_PAGE = 5
 MAX_RESULTS_PER_PROVIDER = 20
 SEARCH_TIMEOUT = 15  # seconds per provider
 SIZE_LIMITS = {
-    "free": 2 * 1024 * 1024 * 1024,       # 2 GB
+    "free": 2 * 1024 * 1024 * 1024,       # 2 GB (fallback defaults)
     "standard": 5 * 1024 * 1024 * 1024,    # 5 GB
     "deluxe": 0,                             # 0 = unlimited
 }
+
+
+async def _get_size_limit(user_id: int) -> tuple:
+    """Returns (size_limit_bytes, plan_name). In non-public mode, returns 0 (unlimited)."""
+    if not Config.PUBLIC_MODE:
+        return 0, "admin"
+
+    plan_name, _ = await _get_user_plan_info(user_id)
+    config = await db.get_public_config()
+
+    if plan_name == "free":
+        limit_mb = config.get("torrent_size_limit_mb_free", 2048)  # default 2 GB
+    else:
+        plan_settings = config.get(f"premium_{plan_name}", {})
+        limit_mb = plan_settings.get("torrent_size_limit_mb", 0)  # default unlimited for premium
+
+    if limit_mb <= 0:
+        return 0, plan_name
+
+    return limit_mb * 1024 * 1024, plan_name
 
 CATEGORY_MAP = {
     "all": {"1337x": "", "tgx": "", "lime": ""},
@@ -648,13 +668,13 @@ async def handle_torrent_menu(client, callback_query: CallbackQuery):
         return
 
     # Check plan for torrent feature
-    plan_name, plan_features = await _get_user_plan_info(user_id)
+    size_limit, plan_name = await _get_size_limit(user_id)
 
     text = (
         "\U0001F9F2 **Torrent Downloader**\n"
         f"{'━' * 26}\n\n"
         f"\U0001F4B3 **Plan:** {plan_name.title()}\n"
-        f"\U0001F4BE **Size Limit:** {_format_file_size(SIZE_LIMITS.get(plan_name, SIZE_LIMITS['free'])) if SIZE_LIMITS.get(plan_name, SIZE_LIMITS['free']) > 0 else 'Unlimited'}\n\n"
+        f"\U0001F4BE **Size Limit:** {_format_file_size(size_limit) if size_limit > 0 else 'Unlimited'}\n\n"
         "> Search and download torrents directly.\n"
         "> Files are processed through the bot pipeline.\n"
     )
@@ -931,8 +951,7 @@ async def handle_download_magnet(client, callback_query: CallbackQuery):
         return
 
     # Check size limit
-    plan_name, _ = await _get_user_plan_info(user_id)
-    size_limit = SIZE_LIMITS.get(plan_name, SIZE_LIMITS["free"])
+    size_limit, plan_name = await _get_size_limit(user_id)
     size_bytes = r.get("size_bytes", 0)
 
     if size_limit > 0 and size_bytes > 0 and size_bytes > size_limit:
@@ -1062,8 +1081,7 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
 
         # Check plan size limit after metadata
         if total_length > 0:
-            plan_name, _ = await _get_user_plan_info(user_id)
-            size_limit = SIZE_LIMITS.get(plan_name, SIZE_LIMITS["free"])
+            size_limit, plan_name = await _get_size_limit(user_id)
             if size_limit > 0 and total_length > size_limit:
                 try:
                     await loop.run_in_executor(None, lambda: server.aria2.remove(gid))

@@ -641,9 +641,11 @@ class Database:
                     "base_currency": "USD",
                     "stars_payment_enabled": False,
                     "xtv_pro_4gb_access": "all",
+                    "torrent_size_limit_mb_free": 2048,
                     "premium_standard": {
                         "daily_egress_mb": 0,
                         "daily_file_count": 0,
+                        "torrent_size_limit_mb": 5120,
                         "price_string": "0 USD",
                         "stars_price": 0,
                         "features": {
@@ -666,6 +668,7 @@ class Database:
                     "premium_deluxe": {
                         "daily_egress_mb": 0,
                         "daily_file_count": 0,
+                        "torrent_size_limit_mb": 0,
                         "price_string": "0 USD",
                         "stars_price": 0,
                         "features": {
