@@ -339,7 +339,8 @@ async def myfiles_text_handler(client: Client, message: Message):
             if count >= folder_limit:
                 await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Folders", callback_data="myfiles_cat_custom")]]))
                 await set_myfiles_state(user_id, {})
-                return
+                from pyrogram import StopPropagation
+                raise StopPropagation
 
         await db.folders.insert_one({
             "user_id": user_id,

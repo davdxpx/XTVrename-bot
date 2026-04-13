@@ -14,7 +14,8 @@ async def intercept_start_for_setup(client, message):
     # Fast path: check cache for complete setup
     setup_complete = await db.get_setting("is_bot_setup_complete", default=False, user_id=Config.CEO_ID)
     if setup_complete:
-        return # Fall through to regular start handler
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation # Fall through to regular start handler
 
     if user_id != Config.CEO_ID:
         await message.reply_text("🚧 **Bot is currently being set up by the Admin.**\nPlease come back later.")
@@ -22,7 +23,8 @@ async def intercept_start_for_setup(client, message):
 
     # Check if there's a specific admin session going on that should intercept this instead
     if user_id in admin_sessions and admin_sessions[user_id] in ["awaiting_setup_bot_name", "awaiting_setup_community_name", "awaiting_setup_timeout", "awaiting_setup_free_limits", "awaiting_setup_trial_length"]:
-        return # Let the text handler deal with it
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation # Let the text handler deal with it
 
     # Initiate or resume CEO setup
     await send_ceo_setup_menu(client, message.chat.id)
@@ -371,7 +373,8 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
 async def handle_setup_text_inputs(client, message):
     user_id = message.from_user.id
     if user_id not in admin_sessions:
-        raise StopPropagation
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
 
     state = admin_sessions[user_id]
 

@@ -419,6 +419,8 @@ async def manual_title_handler(client, message):
             await initiate_language_selection(client, user_id, message)
         else:
             await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif data.get("personal_type") == "photo":
         set_state(user_id, "awaiting_send_as")
         await message.reply_text(
@@ -443,6 +445,8 @@ async def manual_title_handler(client, message):
         )
     else:
         await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
 async def search_handler(client, message, media_type):
     user_id = message.from_user.id
@@ -517,13 +521,15 @@ async def handle_text_input(client, message):
 
     if not Config.PUBLIC_MODE:
         if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
-            return
+            from pyrogram import ContinuePropagation
+            raise ContinuePropagation
 
     state = get_state(user_id)
     logger.debug(f"Text input from {user_id}: {message.text} | State: {state}")
 
     if not state:
-        return
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
 
     if state == "awaiting_dest_folder_name":
         folder_name = message.text.strip()
@@ -596,20 +602,28 @@ async def handle_text_input(client, message):
             import asyncio
             await asyncio.sleep(1.5)
             await prompt_dumb_channel(client, user_id, msg, is_edit=True)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     if state == "awaiting_search_movie":
         await search_handler(client, message, "movie")
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif state == "awaiting_search_series":
         await search_handler(client, message, "series")
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif state == "awaiting_manual_title":
         await manual_title_handler(client, message)
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif state == "awaiting_system_filename":
         template = message.text.strip()
         await db.update_template("system_filename", template, user_id=user_id)
         set_state(user_id, None)
         await message.reply_text(f"✅ System Filename template updated to:\n`{template}`")
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state == "awaiting_general_name":
         user_id = message.from_user.id
@@ -653,6 +667,8 @@ async def handle_text_input(client, message):
         asyncio.create_task(delayed_cleanup())
 
         await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state and state.startswith("awaiting_audio_"):
         action = state.replace("awaiting_audio_", "")
@@ -673,7 +689,8 @@ async def handle_text_input(client, message):
 
         set_state(user_id, "awaiting_audio_menu")
         await render_audio_menu(client, message, user_id)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state == "awaiting_watermark_text":
         user_id = message.from_user.id
@@ -700,7 +717,8 @@ async def handle_text_input(client, message):
                 ]
             ),
         )
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state == "awaiting_language_custom":
         lang = message.text.strip().lower()
@@ -712,13 +730,16 @@ async def handle_text_input(client, message):
 
         update_data(user_id, "language", lang)
         await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state.startswith("awaiting_episode_correction_"):
         msg_id = int(state.split("_")[-1])
         if msg_id not in file_sessions:
             await message.reply_text("Session expired. Please start a new session.")
             clear_session(user_id)
-            return
+            from pyrogram import StopPropagation
+            raise StopPropagation
         if message.text.isdigit():
             file_sessions[msg_id]["episode"] = int(message.text)
             set_state(user_id, "awaiting_file_upload")
@@ -727,13 +748,16 @@ async def handle_text_input(client, message):
             await message.delete()
         else:
             await message.reply_text("Invalid number. Try again.")
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state.startswith("awaiting_season_correction_"):
         msg_id = int(state.split("_")[-1])
         if msg_id not in file_sessions:
             await message.reply_text("Session expired. Please start a new session.")
             clear_session(user_id)
-            return
+            from pyrogram import StopPropagation
+            raise StopPropagation
         if message.text.isdigit():
             file_sessions[msg_id]["season"] = int(message.text)
             set_state(user_id, "awaiting_file_upload")
@@ -742,13 +766,16 @@ async def handle_text_input(client, message):
             await message.delete()
         else:
             await message.reply_text("Invalid number. Try again.")
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state.startswith("awaiting_search_correction_"):
         msg_id = int(state.split("_")[-1])
         if msg_id not in file_sessions:
             await message.reply_text("Session expired. Please start a new session.")
             clear_session(user_id)
-            return
+            from pyrogram import StopPropagation
+            raise StopPropagation
         else:
             fs = file_sessions[msg_id]
             query = message.text
@@ -764,7 +791,8 @@ async def handle_text_input(client, message):
                     results = await tmdb.search_movie(query, language=lang)
             except Exception as e:
                 await msg.edit_text(f"Error: {e}")
-                return
+                from pyrogram import StopPropagation
+                raise StopPropagation
 
             if not results:
                 try:
@@ -782,7 +810,8 @@ async def handle_text_input(client, message):
                     )
                 except MessageNotModified:
                     pass
-                return
+                from pyrogram import StopPropagation
+                raise StopPropagation
 
             buttons = []
             for item in results:
@@ -805,6 +834,8 @@ async def handle_text_input(client, message):
                 )
             except MessageNotModified:
                 pass
+            from pyrogram import StopPropagation
+            raise StopPropagation
 
 @Client.on_callback_query(filters.regex(r"^manual_entry$"))
 async def handle_manual_entry(client, callback_query):
@@ -1014,6 +1045,8 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False, page=
                 await message_obj.edit_text(text, reply_markup=reply_markup)
             except MessageNotModified:
                 pass
+            from pyrogram import StopPropagation
+            raise StopPropagation
         else:
             await client.send_message(user_id, text, reply_markup=reply_markup)
         return
@@ -1544,7 +1577,8 @@ async def handle_file_upload(client, message):
         update_data(user_id, "audio_thumb_id", message.photo.file_id)
         set_state(user_id, "awaiting_audio_menu")
         await render_audio_menu(client, message, user_id)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     if state == "awaiting_watermark_image":
         if not getattr(message, "photo", None) and not getattr(
@@ -1620,7 +1654,8 @@ async def handle_file_upload(client, message):
                 ]
             ),
         )
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     if state == "awaiting_audio_file":
         if (
@@ -1645,7 +1680,8 @@ async def handle_file_upload(client, message):
 
         set_state(user_id, "awaiting_audio_menu")
         await render_audio_menu(client, message, user_id)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     # === VIDEO TRIMMER STATES ===
     if state == "awaiting_trim_file":

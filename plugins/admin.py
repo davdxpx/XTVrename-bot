@@ -3247,6 +3247,10 @@ async def handle_admin_text(client, message):
             await message.reply("❌ Invalid number. Enter days (e.g. 30).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{state['target_id']}")]]))
         return
 
+    if not state or state != "awaiting_user_lookup":
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
+
     if state == "awaiting_user_lookup":
         val = message.text.strip()
         from utils.state import clear_session
@@ -4230,6 +4234,10 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
     from utils.state import get_state, clear_session
 
     state = get_state(message.from_user.id)
+
+    if not state or state != "awaiting_user_lookup":
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
 
     if state == "awaiting_user_lookup":
         val = message.text.strip()
