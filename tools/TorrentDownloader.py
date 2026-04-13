@@ -548,9 +548,7 @@ async def render_search_results(client, user_id: int, chat_id: int, bot_msg_id: 
                 chat_id, bot_msg_id,
                 f"🔍 **No Results Found**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"Try a different search term or category.\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"Try a different search term or category.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back to Menu", callback_data="torrent_downloader_menu")]
                 ])
@@ -651,9 +649,7 @@ def _render_file_selection_text(files: list, selected: set, sort_by: str = "defa
 
     text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
     text += f"> **Selected:** `{len(selected)}/{len(files)} files`\n"
-    text += f"> **Total Size:** `{_format_file_size(total_selected_size)}`\n"
-    text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
-    text += f"{XTVEngine.get_signature()}"
+    text += f"> **Total Size:** `{_format_file_size(total_selected_size)}`"
 
     return text
 
@@ -677,9 +673,7 @@ async def handle_torrent_menu(client, callback_query: CallbackQuery):
                 f"🧲 **Torrent Downloader**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
                 f"⚠️ aria2 service is not available.\n"
-                f"Please contact the admin to restart the aria2 daemon.\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"Please contact the admin to restart the aria2 daemon.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="help_close")]
                 ])
@@ -698,9 +692,7 @@ async def handle_torrent_menu(client, callback_query: CallbackQuery):
         f"> **Plan:** `{plan_name.title()}`\n"
         f"> **Size Limit:** {limit_display}\n\n"
         f"Search and download torrents directly.\n"
-        f"Files are processed through the bot pipeline.\n"
-        f"\n━━━━━━━━━━━━━━━━━━━━\n"
-        f"{XTVEngine.get_signature()}"
+        f"Files are processed through the bot pipeline."
     )
 
     buttons = [
@@ -755,9 +747,7 @@ async def handle_torrent_search_prompt(client, callback_query: CallbackQuery):
         await callback_query.message.edit_text(
             f"🏷 **Select Category**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"Choose a category to narrow your search.\n"
-            f"\n━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature()}",
+            f"Choose a category to narrow your search.",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
     except MessageNotModified:
@@ -780,9 +770,7 @@ async def handle_category_select(client, callback_query: CallbackQuery):
             f"🔍 **Search Torrents** — {category.title()}\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"Send me the torrent name or keywords to search.\n\n"
-            f"_(Send /cancel to abort)_\n"
-            f"\n━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature()}",
+            f"__(Send /cancel to abort)__",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("❌ Cancel", callback_data="torrent_downloader_menu")]
             ]),
@@ -821,7 +809,7 @@ async def torrent_message_handler(client, message):
         status_msg = await message.reply_text(
             f"🔎 **Searching** `{query}` in **{category.title()}**...\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"_Checking multiple providers..._\n"
+            f"__Checking multiple providers...__\n"
             f"\n━━━━━━━━━━━━━━━━━━━━\n"
             f"{XTVEngine.get_signature()}"
         )
@@ -913,9 +901,7 @@ async def handle_info_view(client, callback_query: CallbackQuery):
         f"> {seed_emoji} **Seeders:** `{seeders}`\n"
         f"> 🔴 **Leechers:** `{r.get('leechers', 0)}`\n"
         f"> **Date:** `{r.get('date', 'Unknown')}`\n"
-        f"> **Provider:** `{r.get('provider', 'Unknown')}`\n"
-        f"\n━━━━━━━━━━━━━━━━━━━━\n"
-        f"{XTVEngine.get_signature()}"
+        f"> **Provider:** `{r.get('provider', 'Unknown')}`"
     )
 
     buttons = [
@@ -984,9 +970,7 @@ async def handle_download_magnet(client, callback_query: CallbackQuery):
             await callback_query.message.edit_text(
                 f"❌ **Could Not Retrieve Magnet**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"This torrent may no longer be available.\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"This torrent may no longer be available.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="tdl_back_results")]
                 ])
@@ -1007,9 +991,7 @@ async def handle_download_magnet(client, callback_query: CallbackQuery):
                 f"This torrent exceeds your plan's size limit.\n\n"
                 f"> **Size:** `{_format_file_size(size_bytes)}`\n"
                 f"> **Plan ({plan_name.title()}):** `{_format_file_size(size_limit)}`\n\n"
-                f"Upgrade your plan for larger downloads.\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"Upgrade your plan for larger downloads.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="tdl_back_results")]
                 ])
@@ -1094,9 +1076,7 @@ async def start_torrent_download(client, user_id: int, chat_id: int, msg_id: int
                 chat_id, msg_id,
                 f"❌ **Download Failed**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"`{e}`\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"`{e}`",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
@@ -1156,9 +1136,7 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
                         f"━━━━━━━━━━━━━━━━━━━━\n\n"
                         f"Torrent exceeds your plan's size limit.\n\n"
                         f"> **Torrent Size:** `{_format_file_size(total_length)}`\n"
-                        f"> **Your Limit ({plan_name.title()}):** `{_format_file_size(size_limit)}`\n"
-                        f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                        f"{XTVEngine.get_signature()}",
+                        f"> **Your Limit ({plan_name.title()}):** `{_format_file_size(size_limit)}`",
                         reply_markup=InlineKeyboardMarkup([
                             [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                         ])
@@ -1222,9 +1200,7 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
                     chat_id, msg_id,
                     f"❌ **Download Failed**\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                    f"`{error_msg}`\n"
-                    f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                    f"{XTVEngine.get_signature()}",
+                    f"`{error_msg}`",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                     ])
@@ -1310,9 +1286,7 @@ async def render_file_selection(client, user_id: int, chat_id: int, msg_id: int)
                 chat_id, msg_id,
                 f"⚠️ **No Files Found**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"No downloadable files were found in this torrent.\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"No downloadable files were found in this torrent.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
@@ -1415,9 +1389,7 @@ async def tdl_cancel_cb(client, callback_query: CallbackQuery):
         await callback_query.message.edit_text(
             f"❌ **Torrent Operation Cancelled**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"The operation has been cancelled.\n"
-            f"\n━━━━━━━━━━━━━━━━━━━━\n"
-            f"{XTVEngine.get_signature()}",
+            f"The operation has been cancelled.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 Back to Menu", callback_data="torrent_downloader_menu")]
             ])
@@ -1530,9 +1502,7 @@ async def handle_favorites_list(client, callback_query: CallbackQuery):
             await callback_query.message.edit_text(
                 f"⭐ **Favorites**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"No saved favorites yet.\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"No saved favorites yet.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
@@ -1642,9 +1612,7 @@ async def handle_search_history(client, callback_query: CallbackQuery):
             await callback_query.message.edit_text(
                 f"📜 **Recent Searches**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"No search history yet.\n"
-                f"\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature()}",
+                f"No search history yet.",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
@@ -1694,7 +1662,7 @@ async def handle_history_rerun(client, callback_query: CallbackQuery):
         await callback_query.message.edit_text(
             f"🔎 **Searching** `{query}`...\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"_Checking multiple providers..._\n"
+            f"__Checking multiple providers...__\n"
             f"\n━━━━━━━━━━━━━━━━━━━━\n"
             f"{XTVEngine.get_signature()}"
         )
@@ -1743,7 +1711,7 @@ async def render_download_history(client, user_id, chat_id, msg_id, page=0):
     )
 
     if not history:
-        text += "_No downloads yet._\n"
+        text += "__No downloads yet.__\n"
 
     for i, dl in enumerate(history):
         status_icon = {
@@ -1761,9 +1729,6 @@ async def render_download_history(client, user_id, chat_id, msg_id, page=0):
             f"{status_icon} **{name}**\n"
             f"   💾 `{dl.get('size', '?')}` | `{dl.get('provider', '?')}`\n\n"
         )
-
-    text += f"━━━━━━━━━━━━━━━━━━━━\n"
-    text += f"{XTVEngine.get_signature()}"
 
     update_data(user_id, "dl_hist_page", page)
 
