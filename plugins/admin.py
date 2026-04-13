@@ -17,7 +17,8 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
     pro_btn_text = "🚀 Manage 𝕏TV Pro™" if pro_session else "🚀 Setup 𝕏TV Pro™"
 
     keyboard = []
-
+    myfiles_txt = "📁 MyFiles Settings" if myfiles_enabled else "📁 Setup MyFiles™"
+    
     keyboard.append(
         [InlineKeyboardButton("👤 User Management", callback_data="admin_users_menu")]
     )
@@ -63,7 +64,6 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
                 ),
             ]
         )
-        myfiles_txt = "📁 MyFiles Settings" if myfiles_enabled else "📁 Setup MyFiles™"
         keyboard.append(
             [
                 InlineKeyboardButton(
