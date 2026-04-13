@@ -52,22 +52,28 @@ async def render_stage_1(client, chat_id, edit_message=None):
         "> __Tip: You can use the Skip button if you want to keep the defaults.__"
     )
 
-    config = {}
+    buttons = []
+
     if Config.PUBLIC_MODE:
         config = await db.get_public_config()
+        bot_name = config.get("bot_name", "𝕏TV MediaStudio™")
+        community = config.get("community_name", "Our Community")
 
-    bot_name = config.get("bot_name", "𝕏TV MediaStudio™") if Config.PUBLIC_MODE else "𝕏TV MediaStudio™"
-    community = config.get("community_name", "Our Community") if Config.PUBLIC_MODE else "official XTV"
+        text += f"\n\n**Current Bot Name:** `{bot_name}`"
+        text += f"\n**Current Community Name:** `{community}`"
 
-    text += f"\n\n**Current Bot Name:** `{bot_name}`"
-    text += f"\n**Current Community Name:** `{community}`"
+        buttons.extend([
+            [InlineKeyboardButton("✏️ Edit Bot Name", callback_data="setup_set_bot_name")],
+            [InlineKeyboardButton("✏️ Edit Community Name", callback_data="setup_set_community_name")]
+        ])
+    else:
+        text += "\n\n**(Note: Bot Name and Community Name customization are only available in Public Mode. You can skip this.)**"
 
-    buttons = [
-        [InlineKeyboardButton("✏️ Edit Bot Name", callback_data="setup_set_bot_name")],
-        [InlineKeyboardButton("✏️ Edit Community Name", callback_data="setup_set_community_name")],
+    buttons.extend([
         [InlineKeyboardButton("🌐 Set Language (Coming Soon)", callback_data="setup_noop")],
         [InlineKeyboardButton("➡️ Next Stage", callback_data="setup_next_2.0")]
-    ]
+    ])
+
     if edit_message:
         try:
             await edit_message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
