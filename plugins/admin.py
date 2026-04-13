@@ -119,6 +119,51 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
 
     return InlineKeyboardMarkup(keyboard)
 
+async def get_admin_force_sub_menu():
+    config = await db.get_public_config()
+    channels = config.get("force_sub_channels", [])
+    legacy_ch = config.get("force_sub_channel")
+
+    num_channels = len(channels) if channels else (1 if legacy_ch else 0)
+    status = "ON" if num_channels > 0 else "OFF"
+
+    banner_set = "✅ Set" if config.get("force_sub_banner_file_id") else "❌ None"
+    msg_set = "Custom" if config.get("force_sub_message_text") else "Default"
+
+    btn_emoji = config.get("force_sub_button_emoji", "📢")
+    btn_label = config.get("force_sub_button_label", "Join Channel")
+
+    text = (
+        f"📡 **Force-Sub Config**\n"
+        f"Channels: {num_channels} configured\n"
+        f"Banner: {banner_set}\n"
+        f"Message: {msg_set}\n"
+        f"Button: {btn_emoji} {btn_label}\n\n"
+        f"Select an option to configure:"
+    )
+
+    keyboard = [
+        [InlineKeyboardButton(f"📡 Force-Sub: {status}", callback_data="admin_fs_toggle")],
+        [InlineKeyboardButton("➕ Add Channel", callback_data="admin_fs_add_channel"),
+         InlineKeyboardButton("📋 Manage Channels", callback_data="admin_fs_manage_channels")],
+        [InlineKeyboardButton("🖼 Set Banner", callback_data="admin_fs_set_banner")]
+    ]
+
+    if config.get("force_sub_banner_file_id"):
+        keyboard[-1].append(InlineKeyboardButton("🗑 Remove Banner", callback_data="admin_fs_rem_banner"))
+
+    keyboard.append([
+        InlineKeyboardButton("✏️ Edit Message", callback_data="admin_fs_edit_msg"),
+        InlineKeyboardButton("↩️ Reset Message", callback_data="admin_fs_reset_msg")
+    ])
+    keyboard.append([
+        InlineKeyboardButton("🔘 Edit Button", callback_data="admin_fs_edit_btn"),
+        InlineKeyboardButton("🎉 Edit Welcome Msg", callback_data="admin_fs_edit_welcome")
+    ])
+    keyboard.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
+
+    return text, InlineKeyboardMarkup(keyboard)
+
 def get_admin_templates_menu():
     return InlineKeyboardMarkup(
         [
@@ -411,6 +456,7 @@ async def admin_callback(client, callback_query):
                 ("media_info", "ℹ️ Media Info"),
                 ("voice_converter", "🎙️ Voice Converter"),
                 ("video_note_converter", "⭕ Video Note"),
+                ("torrent_downloader", "🧲 Torrent Downloader"),
                 ("4k_enhancement", "📺 4K Enhancement"),
                 ("batch_processing_pro", "📦 Batch Pro"),
             ]
@@ -1114,6 +1160,7 @@ async def admin_callback(client, callback_query):
         info_en = toggles.get("media_info", True)
         voice_en = toggles.get("voice_converter", True)
         vnote_en = toggles.get("video_note_converter", True)
+        torrent_en = toggles.get("torrent_downloader", True)
         four_k_en = toggles.get("4k_enhancement", True)
         batch_pro_en = toggles.get("batch_processing_pro", True)
 
@@ -1142,6 +1189,7 @@ async def admin_callback(client, callback_query):
              InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_gtoggle_media_info")],
             [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_gtoggle_voice_converter"),
              InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_gtoggle_video_note_converter")],
+            [InlineKeyboardButton(f"{emoji(torrent_en)} 🧲 Torrent Downloader", callback_data="admin_gtoggle_torrent_downloader")],
             [InlineKeyboardButton(f"{emoji(four_k_en)} 📺 4K Enhancement", callback_data="admin_gtoggle_4k_enhancement"),
              InlineKeyboardButton(f"{emoji(batch_pro_en)} 📦 Batch Pro", callback_data="admin_gtoggle_batch_processing_pro")],
             [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]
@@ -1366,6 +1414,7 @@ async def admin_callback(client, callback_query):
                 ("media_info", "ℹ️ Media Info"),
                 ("voice_converter", "🎙️ Voice Converter"),
                 ("video_note_converter", "⭕ Video Note"),
+                ("torrent_downloader", "🧲 Torrent Downloader"),
                 ("4k_enhancement", "📺 4K Enhancement"),
                 ("batch_processing_pro", "📦 Batch Pro"),
             ]
@@ -1886,53 +1935,9 @@ async def admin_callback(client, callback_query):
             return
 
         elif data == "admin_force_sub_menu":
-            config = await db.get_public_config()
-            channels = config.get("force_sub_channels", [])
-            legacy_ch = config.get("force_sub_channel")
-
-            num_channels = len(channels) if channels else (1 if legacy_ch else 0)
-            status = "ON" if num_channels > 0 else "OFF"
-
-            banner_set = "✅ Set" if config.get("force_sub_banner_file_id") else "❌ None"
-            msg_set = "Custom" if config.get("force_sub_message_text") else "Default"
-
-            btn_emoji = config.get("force_sub_button_emoji", "📢")
-            btn_label = config.get("force_sub_button_label", "Join Channel")
-
-            text = (
-                f"📡 **Force-Sub Config**\n"
-                f"Channels: {num_channels} configured\n"
-                f"Banner: {banner_set}\n"
-                f"Message: {msg_set}\n"
-                f"Button: {btn_emoji} {btn_label}\n\n"
-                f"Select an option to configure:"
-            )
-
-            keyboard = [
-                [InlineKeyboardButton(f"📡 Force-Sub: {status}", callback_data="admin_fs_toggle")],
-                [InlineKeyboardButton("➕ Add Channel", callback_data="admin_fs_add_channel"),
-                 InlineKeyboardButton("📋 Manage Channels", callback_data="admin_fs_manage_channels")],
-                [InlineKeyboardButton("🖼 Set Banner", callback_data="admin_fs_set_banner")]
-            ]
-
-            if config.get("force_sub_banner_file_id"):
-                keyboard[-1].append(InlineKeyboardButton("🗑 Remove Banner", callback_data="admin_fs_rem_banner"))
-
-            keyboard.append([
-                InlineKeyboardButton("✏️ Edit Message", callback_data="admin_fs_edit_msg"),
-                InlineKeyboardButton("↩️ Reset Message", callback_data="admin_fs_reset_msg")
-            ])
-            keyboard.append([
-                InlineKeyboardButton("🔘 Edit Button", callback_data="admin_fs_edit_btn"),
-                InlineKeyboardButton("🎉 Edit Welcome Msg", callback_data="admin_fs_edit_welcome")
-            ])
-            keyboard.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
-
+            text, kb = await get_admin_force_sub_menu()
             try:
-                await callback_query.message.edit_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
+                await callback_query.message.edit_text(text, reply_markup=kb)
             except MessageNotModified:
                 pass
             return
@@ -2804,12 +2809,17 @@ async def admin_callback(client, callback_query):
                                 "⚙️ Workflow Mode", callback_data="admin_general_workflow"
                             )
                         ],
+                        [InlineKeyboardButton("🎨 Preferences", callback_data="admin_general_preferences")],
                         [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
                     ]
                 ),
             )
         except MessageNotModified:
             pass
+    elif data == "admin_general_preferences":
+        from plugins.user_setup import send_user_tool_preferences_setup
+        await send_user_tool_preferences_setup(client, user_id, callback_query)
+        return
     elif data == "admin_general_workflow":
         current_mode = await db.get_workflow_mode(None)
         mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Rename Mode"

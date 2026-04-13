@@ -317,7 +317,8 @@ async def handle_start_command_unique(client, message):
         "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
-        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu")
+        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
+        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
     user_settings = await db.get_settings(user_id)
@@ -760,7 +761,7 @@ async def handle_torrent_command(client, message):
         await message.reply_text("❌ This feature is currently disabled by the Admin.")
         return
 
-    from tools.TorrentDownloader import handle_torrent_downloader_menu
+    from tools.TorrentDownloader import handle_torrent_menu
     await track_tool_usage(user_id, "torrent_downloader")
 
     class MockCallbackQuery:
@@ -775,7 +776,7 @@ async def handle_torrent_command(client, message):
     mock_cb = MockCallbackQuery(message)
     msg = await message.reply_text("Loading Torrent Downloader...")
     mock_cb.message = msg
-    await handle_torrent_downloader_menu(client, mock_cb)
+    await handle_torrent_menu(client, mock_cb)
 
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
@@ -876,7 +877,8 @@ async def handle_other_features_menu(client, callback_query):
         "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
-        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu")
+        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
+        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
     buttons = []
@@ -1097,7 +1099,8 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/trim` — Trim/cut video by timestamp\n"
                 "• `/mediainfo` or `/mi` — Show detailed media file info\n"
                 "• `/voice` or `/v` — Convert audio to voice note\n"
-                "• `/videonote` or `/vn` — Convert video to round note"
+                "• `/videonote` or `/vn` — Convert video to round note\n"
+                "• `/torrent` or `/t` — Search & download torrents"
             )
         elif cmd == "files":
             text = (
