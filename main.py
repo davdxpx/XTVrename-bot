@@ -49,7 +49,6 @@ import tools.VideoTrimmer
 import tools.MediaInfo
 import tools.VoiceNoteConverter
 import tools.VideoNoteConverter
-import tools.TorrentDownloader
 
 def register_tool_handlers(client, module):
     for name in dir(module):
@@ -69,7 +68,6 @@ register_tool_handlers(app, tools.VideoTrimmer)
 register_tool_handlers(app, tools.MediaInfo)
 register_tool_handlers(app, tools.VoiceNoteConverter)
 register_tool_handlers(app, tools.VideoNoteConverter)
-register_tool_handlers(app, tools.TorrentDownloader)
 
 user_bot = None
 
@@ -213,7 +211,9 @@ if __name__ == "__main__":
                 await asyncio.sleep(1800)  # Every 30 minutes
                 try:
                     from utils.state import cleanup_expired as state_cleanup_fn
-                    state_cleanup_fn()
+                    expired = state_cleanup_fn()
+                    if expired:
+                        logger.info(f"Cleaned {expired} expired user sessions.")
                 except Exception as e:
                     logger.debug(f"State cleanup: {e}")
                 try:
@@ -221,6 +221,14 @@ if __name__ == "__main__":
                     queue_manager.cleanup_completed()
                 except Exception as e:
                     logger.debug(f"Queue cleanup: {e}")
+                try:
+                    from plugins.flow import cleanup_stale_file_sessions, cleanup_stale_debounce_entries
+                    cleaned_fs = cleanup_stale_file_sessions()
+                    cleaned_db = cleanup_stale_debounce_entries()
+                    if cleaned_fs or cleaned_db:
+                        logger.info(f"Flow cleanup: {cleaned_fs} file sessions, {cleaned_db} debounce entries.")
+                except Exception as e:
+                    logger.debug(f"Flow cleanup: {e}")
 
         logger.info("Scheduling background tasks...")
         app.loop.create_task(db_cleanup())

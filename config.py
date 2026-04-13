@@ -8,7 +8,7 @@ load_dotenv()
 
 
 class Config:
-    VERSION = "v1.5.1T"
+    VERSION = "v1.5.2T"
     MYFILES_VERSION = "2.1"
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     API_ID = int(os.getenv("API_ID", 0))

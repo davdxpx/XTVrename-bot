@@ -33,6 +33,13 @@ async def handle_start_command_unique(client, message):
             try:
                 group_doc = await db.db.file_groups.find_one({"group_id": group_id})
                 if group_doc:
+                    # Check if link has expired
+                    import datetime as _dt
+                    expires_at = group_doc.get("expires_at")
+                    if expires_at and _dt.datetime.utcnow() > expires_at:
+                        await message.reply_text("⏳ **Link Expired**\n\nThis share link has expired and is no longer available.")
+                        raise StopPropagation
+
                     if not Config.PUBLIC_MODE:
                         if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
                             await message.reply_text("❌ Access Denied.")
@@ -60,6 +67,10 @@ async def handle_start_command_unique(client, message):
                             share_display_name = owner_settings["share_display_name"]
                         elif is_owner_premium:
                             # For premium users, disabled by default for privacy reasons
+                            share_display_name = False
+
+                        # privacy_hide_username overrides display name
+                        if owner_settings and owner_settings.get("privacy_hide_username", False):
                             share_display_name = False
 
                         if share_display_name and owner_doc:
@@ -140,6 +151,7 @@ async def handle_start_command_unique(client, message):
                     owner_name = "A user"
                     is_owner_premium = False
                     share_display_name = True
+                    protect = False
 
                     if owner_id:
                         owner_doc = await db.get_user(owner_id)
@@ -150,6 +162,10 @@ async def handle_start_command_unique(client, message):
                         owner_settings = await db.get_settings(owner_id)
                         if owner_settings and "share_display_name" in owner_settings:
                             share_display_name = owner_settings["share_display_name"]
+                        if owner_settings and owner_settings.get("privacy_hide_username", False):
+                            share_display_name = False
+                        if owner_settings and "hide_forward_tags" in owner_settings:
+                            protect = owner_settings["hide_forward_tags"]
 
                     if share_display_name and owner_name != "A user":
                         share_text = f"> **{owner_name}** has shared this file with you."
@@ -163,7 +179,8 @@ async def handle_start_command_unique(client, message):
                         await client.copy_message(
                             chat_id=user_id,
                             from_chat_id=f["channel_id"],
-                            message_id=f["message_id"]
+                            message_id=f["message_id"],
+                            protect_content=protect
                         )
                     except PeerIdInvalid:
                         try:
@@ -171,7 +188,8 @@ async def handle_start_command_unique(client, message):
                             await client.copy_message(
                                 chat_id=user_id,
                                 from_chat_id=f["channel_id"],
-                                message_id=f["message_id"]
+                                message_id=f["message_id"],
+                                protect_content=protect
                             )
                         except Exception as inner_e:
                             logger.error(f"Error serving shared file (Peer fallback failed): {inner_e}")
@@ -299,8 +317,7 @@ async def handle_start_command_unique(client, message):
         "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
-        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu")
+        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu")
     }
 
     user_settings = await db.get_settings(user_id)
@@ -326,7 +343,7 @@ async def handle_start_command_unique(client, message):
     all_avail_ids = ["rename"]
     for t_id in tool_map:
         if t_id == "rename": continue
-        if toggles.get(t_id, True) or (Config.PUBLIC_MODE and is_premium_user and pf.get(t_id, False)):
+        if toggles.get(t_id, True) and (pf.get(t_id, True) if pf else True):
             all_avail_ids.append(t_id)
 
     unselected_tools = [t for t in all_avail_ids if t not in selected_tools]
@@ -859,8 +876,7 @@ async def handle_other_features_menu(client, callback_query):
         "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
-        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu")
+        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu")
     }
 
     buttons = []
@@ -871,7 +887,7 @@ async def handle_other_features_menu(client, callback_query):
 
         is_avail = t_id == "rename"
         if not is_avail:
-            is_avail = toggles.get(t_id, True) or pf.get(t_id, False)
+            is_avail = toggles.get(t_id, True) and (pf.get(t_id, True) if pf else True)
 
         if is_avail:
             buttons.append([InlineKeyboardButton(tool_map[t_id][0], callback_data=tool_map[t_id][1])])
@@ -1081,8 +1097,7 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/trim` — Trim/cut video by timestamp\n"
                 "• `/mediainfo` or `/mi` — Show detailed media file info\n"
                 "• `/voice` or `/v` — Convert audio to voice note\n"
-                "• `/videonote` or `/vn` — Convert video to round note\n"
-                "• `/torrent` or `/t` — Download and process torrents"
+                "• `/videonote` or `/vn` — Convert video to round note"
             )
         elif cmd == "files":
             text = (
@@ -1130,7 +1145,6 @@ async def handle_help_callbacks(client, callback_query):
                          InlineKeyboardButton("ℹ️ Media Info", callback_data="help_tool_mediainfo")],
                         [InlineKeyboardButton("🎙️ Voice Converter", callback_data="help_tool_voice"),
                          InlineKeyboardButton("⭕ Video Note", callback_data="help_tool_videonote")],
-                        [InlineKeyboardButton("🧲 Torrent Downloader", callback_data="help_tool_torrent")],
                         [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
                     ]
                 )
@@ -1230,16 +1244,6 @@ async def handle_help_callbacks(client, callback_query):
                 "**What it does:**\n"
                 "Converts a video into a Telegram round video note. The video is cropped to square, scaled to 384px, and limited to 60 seconds.\n\n"
                 "• **Shortcut:** `/vn` or `/videonote`."
-            )
-        elif tool == "torrent":
-            text = (
-                "**🧲 Torrent Downloader**\n\n"
-                "> Download and process torrents directly.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Allows you to search, manage, and download torrent files and magnet links. Downloaded files can then be processed directly using the bot's media tools.\n\n"
-                "• Send a magnet link or `.torrent` file, or search using the built-in scraper.\n"
-                "• **Shortcut:** `/t` or `/torrent`."
             )
 
         try:

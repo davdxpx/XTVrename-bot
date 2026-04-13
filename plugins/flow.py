@@ -21,6 +21,7 @@ logger = get_logger("plugins.flow")
 logger.info("Loading plugins.flow...")
 
 file_sessions = {}
+_file_session_timestamps = {}
 
 batch_sessions = {}
 
@@ -30,6 +31,43 @@ batch_status_msgs = {}
 
 _processing_callbacks = {}
 _expiry_warnings = {}
+
+import time as _time
+
+def _touch_file_session(msg_id):
+    """Track when a file_session entry was last accessed."""
+    _file_session_timestamps[msg_id] = _time.time()
+
+def cleanup_stale_file_sessions(max_age_seconds: int = 7200):
+    """Remove file_sessions entries older than max_age_seconds (default 2 hours)."""
+    now = _time.time()
+    stale = [mid for mid, ts in _file_session_timestamps.items() if now - ts > max_age_seconds]
+    for mid in stale:
+        file_sessions.pop(mid, None)
+        _file_session_timestamps.pop(mid, None)
+    return len(stale)
+
+def cleanup_stale_debounce_entries(max_age_seconds: int = 300):
+    """Remove debounce entries older than max_age_seconds."""
+    now = _time.time()
+    stale_keys = [k for k, v in _processing_callbacks.items() if now - v > max_age_seconds]
+    for k in stale_keys:
+        _processing_callbacks.pop(k, None)
+    return len(stale_keys)
+
+def _on_session_expired(user_id):
+    """Called by state.py when a session naturally expires."""
+    task = _expiry_warnings.pop(user_id, None)
+    if task:
+        task.cancel()
+    batch_sessions.pop(user_id, None)
+    task = batch_tasks.pop(user_id, None)
+    if task:
+        task.cancel()
+    batch_status_msgs.pop(user_id, None)
+
+from utils.state import register_expire_callback
+register_expire_callback(_on_session_expired)
 
 async def _persist_session_to_db(user_id: int):
     """Save critical session data to DB for crash recovery."""
@@ -53,39 +91,81 @@ async def _clear_persisted_session(user_id: int):
     await _db.clear_flow_session(user_id)
 
 async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 3300):
-    """Warn user 5 minutes before the 1-hour session expiry."""
+    """Warn user 5 minutes before session expiry, then confirm cancellation on actual expiry."""
     try:
         await asyncio.sleep(delay_seconds)
         state = get_state(user_id)
-        if state:
-            await client.send_message(
-                user_id,
-                "Your renaming session will expire in **5 minutes** due to inactivity.\n"
-                "Send a file or press Cancel to avoid losing your progress.",
+        if not state:
+            _expiry_warnings.pop(user_id, None)
+            return
+
+        warning_msg = await client.send_message(
+            user_id,
+            "⚠️ Your renaming session will expire in **5 minutes** due to inactivity.\n"
+            "Send a file or press Cancel to avoid losing your progress.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel Session", callback_data="cancel_rename")]
+            ])
+        )
+
+        # Wait the remaining 5 minutes
+        await asyncio.sleep(300)
+
+        # Check if session is still active (user may have interacted)
+        state = get_state(user_id)
+        if not state:
+            # Session was already ended by user action
+            try:
+                await warning_msg.edit_text(
+                    "✅ Your session was already ended.",
+                    reply_markup=None
+                )
+            except Exception:
+                pass
+            _expiry_warnings.pop(user_id, None)
+            return
+
+        # Session is still active — expire it now
+        clear_session(user_id)
+        await _clear_persisted_session(user_id)
+        _expiry_warnings.pop(user_id, None)
+
+        try:
+            await warning_msg.edit_text(
+                "❌ **Session Expired**\n\n"
+                "Your renaming session has been cancelled due to inactivity.\n"
+                "Send a file or use /start to begin a new session.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("❌ Cancel Session", callback_data="cancel_rename")]
+                    [InlineKeyboardButton("🔄 Start New Session", callback_data="force_start_renaming")]
                 ])
             )
+        except Exception:
+            pass
+
     except asyncio.CancelledError:
-        pass
-    except Exception:
-        pass
+        _expiry_warnings.pop(user_id, None)
+    except Exception as e:
+        logger.debug(f"Expiry warning error for {user_id}: {e}")
+        _expiry_warnings.pop(user_id, None)
 
 def _start_expiry_timer(client, user_id: int):
     """Start or restart the expiry warning timer."""
-    if user_id in _expiry_warnings:
-        _expiry_warnings[user_id].cancel()
+    old_task = _expiry_warnings.pop(user_id, None)
+    if old_task:
+        old_task.cancel()
     _expiry_warnings[user_id] = asyncio.create_task(_schedule_expiry_warning(client, user_id))
 
 def _debounce_callback(user_id: int, callback_id: str) -> bool:
     """Returns True if this callback should be skipped (duplicate rapid-fire)."""
-    import time as _t
     key = f"{user_id}:{callback_id}"
-    now = _t.time()
+    now = _time.time()
     last = _processing_callbacks.get(key, 0)
     if now - last < 0.5:
         return True
     _processing_callbacks[key] = now
+    # Periodic inline cleanup: prune entries older than 60s when dict gets large
+    if len(_processing_callbacks) > 500:
+        cleanup_stale_debounce_entries(60)
     return False
 
 # === Helper Functions ===
@@ -339,6 +419,8 @@ async def manual_title_handler(client, message):
             await initiate_language_selection(client, user_id, message)
         else:
             await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif data.get("personal_type") == "photo":
         set_state(user_id, "awaiting_send_as")
         await message.reply_text(
@@ -363,6 +445,8 @@ async def manual_title_handler(client, message):
         )
     else:
         await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
 async def search_handler(client, message, media_type):
     user_id = message.from_user.id
@@ -437,13 +521,15 @@ async def handle_text_input(client, message):
 
     if not Config.PUBLIC_MODE:
         if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
-            return
+            from pyrogram import ContinuePropagation
+            raise ContinuePropagation
 
     state = get_state(user_id)
     logger.debug(f"Text input from {user_id}: {message.text} | State: {state}")
 
     if not state:
-        return
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
 
     if state == "awaiting_dest_folder_name":
         folder_name = message.text.strip()
@@ -463,13 +549,13 @@ async def handle_text_input(client, message):
             if count >= folder_limit:
                 try:
                     await message.delete()
-                except:
+                except Exception:
                     pass
                 msg_id = get_data(user_id).get("dest_msg_id")
                 if msg_id:
                     try:
                         await client.edit_message_text(message.chat.id, msg_id, f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
-                    except:
+                    except Exception:
                         pass
                 else:
                     await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
@@ -487,7 +573,7 @@ async def handle_text_input(client, message):
 
         try:
             await message.delete()
-        except:
+        except Exception:
             pass
 
         msg_id = get_data(user_id).get("dest_msg_id")
@@ -498,7 +584,7 @@ async def handle_text_input(client, message):
         if msg_id:
             try:
                 await client.edit_message_text(message.chat.id, msg_id, f"✅ Folder **{folder_name}** created successfully and selected!")
-            except:
+            except Exception:
                 pass
 
             # Wait briefly then show dumb channel selection
@@ -516,20 +602,28 @@ async def handle_text_input(client, message):
             import asyncio
             await asyncio.sleep(1.5)
             await prompt_dumb_channel(client, user_id, msg, is_edit=True)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     if state == "awaiting_search_movie":
         await search_handler(client, message, "movie")
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif state == "awaiting_search_series":
         await search_handler(client, message, "series")
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif state == "awaiting_manual_title":
         await manual_title_handler(client, message)
+        from pyrogram import StopPropagation
+        raise StopPropagation
     elif state == "awaiting_system_filename":
         template = message.text.strip()
         await db.update_template("system_filename", template, user_id=user_id)
         set_state(user_id, None)
         await message.reply_text(f"✅ System Filename template updated to:\n`{template}`")
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state == "awaiting_general_name":
         user_id = message.from_user.id
@@ -573,6 +667,8 @@ async def handle_text_input(client, message):
         asyncio.create_task(delayed_cleanup())
 
         await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state and state.startswith("awaiting_audio_"):
         action = state.replace("awaiting_audio_", "")
@@ -593,7 +689,8 @@ async def handle_text_input(client, message):
 
         set_state(user_id, "awaiting_audio_menu")
         await render_audio_menu(client, message, user_id)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state == "awaiting_watermark_text":
         user_id = message.from_user.id
@@ -620,7 +717,8 @@ async def handle_text_input(client, message):
                 ]
             ),
         )
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state == "awaiting_language_custom":
         lang = message.text.strip().lower()
@@ -632,34 +730,53 @@ async def handle_text_input(client, message):
 
         update_data(user_id, "language", lang)
         await prompt_destination_folder(client, user_id, message, is_edit=False)
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state.startswith("awaiting_episode_correction_"):
         msg_id = int(state.split("_")[-1])
-        if msg_id in file_sessions:
-            if message.text.isdigit():
-                file_sessions[msg_id]["episode"] = int(message.text)
-                set_state(user_id, "awaiting_file_upload")
-                asyncio.create_task(_persist_session_to_db(user_id))
-                await update_confirmation_message(client, msg_id, user_id)
-                await message.delete()
-            else:
-                await message.reply_text("Invalid number. Try again.")
+        if msg_id not in file_sessions:
+            await message.reply_text("Session expired. Please start a new session.")
+            clear_session(user_id)
+            from pyrogram import StopPropagation
+            raise StopPropagation
+        if message.text.isdigit():
+            file_sessions[msg_id]["episode"] = int(message.text)
+            set_state(user_id, "awaiting_file_upload")
+            asyncio.create_task(_persist_session_to_db(user_id))
+            await update_confirmation_message(client, msg_id, user_id)
+            await message.delete()
+        else:
+            await message.reply_text("Invalid number. Try again.")
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state.startswith("awaiting_season_correction_"):
         msg_id = int(state.split("_")[-1])
-        if msg_id in file_sessions:
-            if message.text.isdigit():
-                file_sessions[msg_id]["season"] = int(message.text)
-                set_state(user_id, "awaiting_file_upload")
-                asyncio.create_task(_persist_session_to_db(user_id))
-                await update_confirmation_message(client, msg_id, user_id)
-                await message.delete()
-            else:
-                await message.reply_text("Invalid number. Try again.")
+        if msg_id not in file_sessions:
+            await message.reply_text("Session expired. Please start a new session.")
+            clear_session(user_id)
+            from pyrogram import StopPropagation
+            raise StopPropagation
+        if message.text.isdigit():
+            file_sessions[msg_id]["season"] = int(message.text)
+            set_state(user_id, "awaiting_file_upload")
+            asyncio.create_task(_persist_session_to_db(user_id))
+            await update_confirmation_message(client, msg_id, user_id)
+            await message.delete()
+        else:
+            await message.reply_text("Invalid number. Try again.")
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     elif state.startswith("awaiting_search_correction_"):
         msg_id = int(state.split("_")[-1])
-        if msg_id in file_sessions:
+        if msg_id not in file_sessions:
+            await message.reply_text("Session expired. Please start a new session.")
+            clear_session(user_id)
+            from pyrogram import StopPropagation
+            raise StopPropagation
+        else:
             fs = file_sessions[msg_id]
             query = message.text
             mtype = fs["type"]
@@ -674,7 +791,8 @@ async def handle_text_input(client, message):
                     results = await tmdb.search_movie(query, language=lang)
             except Exception as e:
                 await msg.edit_text(f"Error: {e}")
-                return
+                from pyrogram import StopPropagation
+                raise StopPropagation
 
             if not results:
                 try:
@@ -692,7 +810,8 @@ async def handle_text_input(client, message):
                     )
                 except MessageNotModified:
                     pass
-                return
+                from pyrogram import StopPropagation
+                raise StopPropagation
 
             buttons = []
             for item in results:
@@ -715,6 +834,8 @@ async def handle_text_input(client, message):
                 )
             except MessageNotModified:
                 pass
+            from pyrogram import StopPropagation
+            raise StopPropagation
 
 @Client.on_callback_query(filters.regex(r"^manual_entry$"))
 async def handle_manual_entry(client, callback_query):
@@ -790,8 +911,6 @@ async def handle_tmdb_selection(client, callback_query):
         await prompt_destination_folder(
             client, user_id, callback_query.message, is_edit=True
         )
-
-import asyncio
 
 async def process_ready_file(client, user_id, message_obj, session_data):
     if session_data.get("type") == "general":
@@ -926,6 +1045,8 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False, page=
                 await message_obj.edit_text(text, reply_markup=reply_markup)
             except MessageNotModified:
                 pass
+            from pyrogram import StopPropagation
+            raise StopPropagation
         else:
             await client.send_message(user_id, text, reply_markup=reply_markup)
         return
@@ -1301,6 +1422,7 @@ async def process_batch(client, user_id):
 
         msg = await message.reply_text("Processing file...", quote=True)
         file_sessions[msg.id] = data
+        _touch_file_session(msg.id)
 
         if is_auto:
             await update_auto_detected_message(client, msg.id, user_id)
@@ -1455,7 +1577,8 @@ async def handle_file_upload(client, message):
         update_data(user_id, "audio_thumb_id", message.photo.file_id)
         set_state(user_id, "awaiting_audio_menu")
         await render_audio_menu(client, message, user_id)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     if state == "awaiting_watermark_image":
         if not getattr(message, "photo", None) and not getattr(
@@ -1531,7 +1654,8 @@ async def handle_file_upload(client, message):
                 ]
             ),
         )
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     if state == "awaiting_audio_file":
         if (
@@ -1556,7 +1680,8 @@ async def handle_file_upload(client, message):
 
         set_state(user_id, "awaiting_audio_menu")
         await render_audio_menu(client, message, user_id)
-        return
+        from pyrogram import StopPropagation
+        raise StopPropagation
 
     # === VIDEO TRIMMER STATES ===
     if state == "awaiting_trim_file":
@@ -2009,6 +2134,7 @@ async def handle_file_upload(client, message):
     )
 
     is_priority = False
+    has_batch_pro = False
     if Config.PUBLIC_MODE:
         user_doc = await db.get_user(user_id)
         if user_doc and user_doc.get("is_premium"):
@@ -2016,7 +2142,15 @@ async def handle_file_upload(client, message):
             config = await db.get_public_config()
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
-                is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+                plan_features = plan_settings.get("features", {})
+                is_priority = plan_features.get("priority_queue", False)
+                # Check batch_processing_pro: global toggle AND per-plan
+                global_toggles = await db.get_feature_toggles()
+                has_batch_pro = global_toggles.get("batch_processing_pro", True) and plan_features.get("batch_processing_pro", False)
+    else:
+        # Private mode: check global toggle only
+        global_toggles = await db.get_feature_toggles()
+        has_batch_pro = global_toggles.get("batch_processing_pro", True)
 
     if user_id not in batch_sessions:
         batch_id = queue_manager.create_batch()
@@ -2026,8 +2160,12 @@ async def handle_file_upload(client, message):
         )
         batch_status_msgs[user_id] = msg
 
-    if user_id in batch_tasks:
-        batch_tasks[user_id].cancel()
+    old_task = batch_tasks.pop(user_id, None)
+    if old_task:
+        old_task.cancel()
+
+    if user_id not in batch_sessions:
+        return
 
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
@@ -2067,17 +2205,17 @@ async def handle_file_upload(client, message):
         "specials": metadata.get("specials", []),
         "codec": metadata.get("codec", ""),
         "audio": metadata.get("audio", ""),
+        "has_batch_pro": has_batch_pro,
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})
 
     async def wait_and_process():
         try:
-            # Give non-priority users a slightly longer collection window to allow Priority users
-            # to jump into the processing loop faster.
-            delay = 1.0 if is_priority else 3.0
+            # Batch Pro users get faster collection, priority users fastest
+            delay = 1.0 if is_priority else (3.0 if has_batch_pro else 5.0)
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
-                del batch_tasks[user_id]
+                batch_tasks.pop(user_id, None)
             await process_batch(client, user_id)
         except asyncio.CancelledError:
             pass
@@ -2132,7 +2270,7 @@ async def handle_archive_upload(client, message, user_id, file_name, state):
         logger.error(f"Archive processing error: {e}")
         try:
             await msg.edit_text(f"❌ Error processing archive: {e}")
-        except:
+        except Exception:
             pass
 
 @Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=4)
@@ -2234,10 +2372,12 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             bmsg = await client.send_message(user_id, "⏳ **Sorting Files...**\nPlease wait a moment.")
             batch_status_msgs[user_id] = bmsg
 
-        if user_id in batch_tasks:
-            batch_tasks[user_id].cancel()
+        old_task = batch_tasks.pop(user_id, None)
+        if old_task:
+            old_task.cancel()
 
         is_priority = False
+        has_batch_pro = False
         if Config.PUBLIC_MODE:
             user_doc = await db.get_user(user_id)
             if user_doc and user_doc.get("is_premium"):
@@ -2245,7 +2385,13 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
                 config = await db.get_public_config()
                 if config.get("premium_system_enabled", False):
                     plan_settings = config.get(f"premium_{plan_name}", {})
-                    is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+                    plan_features = plan_settings.get("features", {})
+                    is_priority = plan_features.get("priority_queue", False)
+                    global_toggles = await db.get_feature_toggles()
+                    has_batch_pro = global_toggles.get("batch_processing_pro", True) and plan_features.get("batch_processing_pro", False)
+        else:
+            global_toggles = await db.get_feature_toggles()
+            has_batch_pro = global_toggles.get("batch_processing_pro", True)
 
         batch_id = batch_sessions[user_id]["batch_id"]
         item_id = str(uuid.uuid4())
@@ -2302,6 +2448,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             "specials": metadata.get("specials", []),
             "codec": metadata.get("codec", ""),
             "audio": metadata.get("audio", ""),
+            "has_batch_pro": has_batch_pro,
         }
 
         batch_sessions[user_id]["items"].append({"message": dummy_msg, "data": data})
@@ -2311,10 +2458,10 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
 
     async def wait_and_process():
         try:
-            delay = 1.0 if is_priority else 3.0
+            delay = 1.0 if is_priority else (3.0 if has_batch_pro else 5.0)
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
-                del batch_tasks[user_id]
+                batch_tasks.pop(user_id, None)
             await process_batch(client, user_id)
         except asyncio.CancelledError:
             pass
@@ -2374,6 +2521,7 @@ async def handle_auto_detection(client, message):
             default_dumb_channel = ser_ch
 
     is_priority = False
+    has_batch_pro = False
     if Config.PUBLIC_MODE:
         user_doc = await db.get_user(user_id)
         if user_doc and user_doc.get("is_premium"):
@@ -2381,7 +2529,13 @@ async def handle_auto_detection(client, message):
             config = await db.get_public_config()
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
-                is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+                plan_features = plan_settings.get("features", {})
+                is_priority = plan_features.get("priority_queue", False)
+                global_toggles = await db.get_feature_toggles()
+                has_batch_pro = global_toggles.get("batch_processing_pro", True) and plan_features.get("batch_processing_pro", False)
+    else:
+        global_toggles = await db.get_feature_toggles()
+        has_batch_pro = global_toggles.get("batch_processing_pro", True)
 
     if user_id not in batch_sessions:
         batch_id = queue_manager.create_batch()
@@ -2391,8 +2545,12 @@ async def handle_auto_detection(client, message):
         )
         batch_status_msgs[user_id] = msg
 
-    if user_id in batch_tasks:
-        batch_tasks[user_id].cancel()
+    old_task = batch_tasks.pop(user_id, None)
+    if old_task:
+        old_task.cancel()
+
+    if user_id not in batch_sessions:
+        return
 
     batch_id = batch_sessions[user_id]["batch_id"]
     item_id = str(uuid.uuid4())
@@ -2435,15 +2593,16 @@ async def handle_auto_detection(client, message):
         "specials": metadata.get("specials", []),
         "codec": metadata.get("codec", ""),
         "audio": metadata.get("audio", ""),
+        "has_batch_pro": has_batch_pro,
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})
 
     async def wait_and_process():
         try:
-            delay = 1.0 if is_priority else 3.0
+            delay = 1.0 if is_priority else (3.0 if has_batch_pro else 5.0)
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
-                del batch_tasks[user_id]
+                batch_tasks.pop(user_id, None)
             await process_batch(client, user_id)
         except asyncio.CancelledError:
             pass
@@ -2625,6 +2784,7 @@ async def update_confirmation_message(client, msg_id, user_id):
 
 @Client.on_callback_query(filters.regex(r"^confirm_(\d+)$"))
 async def handle_confirm(client, callback_query):
+    await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[1])
     user_id = callback_query.from_user.id
 
@@ -2633,11 +2793,20 @@ async def handle_confirm(client, callback_query):
         return
 
     fs = file_sessions.pop(msg_id)
+    _file_session_timestamps.pop(msg_id, None)
+
+    # Cancel expiry timer
+    task = _expiry_warnings.pop(user_id, None)
+    if task:
+        task.cancel()
 
     if fs.get("is_auto"):
         full_data = fs
     else:
         sd = get_data(user_id)
+        if not sd or not sd.get("type"):
+            await callback_query.message.edit_text("Session expired. Please start a new session.")
+            return
         full_data = sd.copy()
         full_data.update(fs)
 
@@ -2771,6 +2940,7 @@ async def handle_file_cancel(client, callback_query):
 
     if msg_id in file_sessions:
         fs = file_sessions.pop(msg_id)
+        _file_session_timestamps.pop(msg_id, None)
         if "file_message" in fs:
             media = fs["file_message"].document or fs["file_message"].video or fs["file_message"].audio or fs["file_message"].photo
             file_size = getattr(media, "file_size", 0) if media else 0
@@ -2811,6 +2981,10 @@ async def handle_change_tmdb_init(client, callback_query):
     await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     user_id = callback_query.from_user.id
+
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
 
     set_state(user_id, f"awaiting_search_correction_{msg_id}")
     fs = file_sessions[msg_id]
@@ -2876,7 +3050,7 @@ async def handle_correct_tmdb_selection(client, callback_query):
     try:
         lang = await db.get_preferred_language(user_id)
         details = await tmdb.get_details(fs["type"], tmdb_id, language=lang)
-    except:
+    except Exception:
         return
 
     title = details.get("title") if fs["type"] == "movie" else details.get("name")

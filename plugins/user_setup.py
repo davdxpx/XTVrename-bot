@@ -24,24 +24,28 @@ async def send_user_tool_preferences_setup(client, user_id, message_or_query):
     # Always available
     available_tools.append({"id": "rename", "name": "📁 Rename / Tag Media"})
 
-    if toggles.get("audio_editor", True) or pf.get("audio_editor", False):
+    # Feature available = global toggle ON AND (per-plan toggle ON or global default)
+    def _is_available(feat_key):
+        global_on = toggles.get(feat_key, True)
+        plan_on = pf.get(feat_key, True) if pf else True
+        return global_on and plan_on
+
+    if _is_available("audio_editor"):
         available_tools.append({"id": "audio_editor", "name": "🎵 Audio Editor"})
-    if toggles.get("file_converter", True) or pf.get("file_converter", False):
+    if _is_available("file_converter"):
         available_tools.append({"id": "file_converter", "name": "🔀 File Converter"})
-    if toggles.get("watermarker", True) or pf.get("watermarker", False):
+    if _is_available("watermarker"):
         available_tools.append({"id": "watermarker", "name": "©️ Watermarker"})
-    if toggles.get("subtitle_extractor", True) or pf.get("subtitle_extractor", False):
+    if _is_available("subtitle_extractor"):
         available_tools.append({"id": "subtitle_extractor", "name": "📝 Subtitle Extractor"})
-    if toggles.get("video_trimmer", True) or pf.get("video_trimmer", False):
+    if _is_available("video_trimmer"):
         available_tools.append({"id": "video_trimmer", "name": "✂️ Video Trimmer"})
-    if toggles.get("media_info", True) or pf.get("media_info", False):
+    if _is_available("media_info"):
         available_tools.append({"id": "media_info", "name": "ℹ️ Media Info"})
-    if toggles.get("voice_converter", True) or pf.get("voice_converter", False):
+    if _is_available("voice_converter"):
         available_tools.append({"id": "voice_converter", "name": "🎙️ Voice Converter"})
-    if toggles.get("video_note_converter", True) or pf.get("video_note_converter", False):
+    if _is_available("video_note_converter"):
         available_tools.append({"id": "video_note_converter", "name": "⭕ Video Note Converter"})
-    if toggles.get("torrent_downloader", True) or pf.get("torrent_downloader", False):
-        available_tools.append({"id": "torrent_downloader", "name": "🧲 Torrent Downloader"})
 
     user_settings = await db.get_settings(user_id)
     selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]

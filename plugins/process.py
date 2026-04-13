@@ -248,7 +248,7 @@ class TaskProcessor:
                         await self.client.send_message(self.user_id, summary_msg)
                         try:
                             await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                        except:
+                        except Exception:
                             pass
                         if queue_manager.batches.get(batch_id):
                             setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
@@ -319,18 +319,6 @@ class TaskProcessor:
         return True
 
     async def _download_media(self) -> bool:
-        local_file_path = self.data.get("local_file_path")
-        if local_file_path and os.path.exists(local_file_path):
-            await self._update_status(
-                "📥 **Importing Local File...**\n"
-                "━━━━━━━━━━━━━━━━━━━━\n\n"
-                "> Reading file from local storage...\n"
-                "\n━━━━━━━━━━━━━━━━━━━━\n"
-                f"{XTVEngine.get_signature(mode=self.mode)}"
-            )
-            self.input_path = local_file_path
-            return True
-
         await self._update_status(
             "📥 **Downloading Media...**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -511,7 +499,7 @@ class TaskProcessor:
                 if os.path.exists(self.input_path):
                     try:
                         os.remove(self.input_path)
-                    except:
+                    except OSError:
                         pass
                 if attempt < max_retries:
                     await asyncio.sleep(5)
@@ -1455,13 +1443,19 @@ class TaskProcessor:
                 dest_folder = self.data.get("dest_folder")
                 skip_myfiles = False
 
+                # Check if MyFiles system is globally enabled
+                myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+                is_admin = (self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS)
+                if not myfiles_enabled and not is_admin:
+                    skip_myfiles = True
+
                 if dest_folder == "none":
                     skip_myfiles = True
                 elif dest_folder and dest_folder != "root":
                     from bson.objectid import ObjectId
                     try:
                         folder_id = ObjectId(dest_folder)
-                    except:
+                    except Exception:
                         pass
 
                 if (not dest_folder or dest_folder == "auto") and not skip_myfiles:
@@ -1600,28 +1594,34 @@ class TaskProcessor:
 
                                     plan_features = config.get(f"premium_{plan}", {}).get("features", {})
                                     batch_sharing_enabled = plan_features.get("batch_sharing", False)
+                                    has_batch_pro = self.data.get("has_batch_pro", False)
                                     is_global_admin = (self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS)
 
-                                    if batch_sharing_enabled or is_global_admin or plan == "global":
-                                        privacy_feat = plan_features.get("privacy", {})
-                                        allow_anon = privacy_feat.get("link_anonymity", False)
-
+                                    if (batch_sharing_enabled and has_batch_pro) or is_global_admin or plan == "global":
                                         user_settings = await db.get_settings(self.user_id)
-                                        use_anon = False
-                                        if user_settings and "link_anonymity" in user_settings:
-                                            use_anon = user_settings["link_anonymity"]
+                                        use_anon = user_settings.get("link_anonymity", False) if user_settings else False
 
-                                        if allow_anon and use_anon:
+                                        if use_anon:
                                             group_id = f"{uuid.uuid4().hex[:16]}"
                                         else:
                                             group_id = f"{self.user_id}_{int(datetime.datetime.utcnow().timestamp())}"
 
-                                        await db.db.file_groups.insert_one({
+                                        group_doc = {
                                             "group_id": group_id,
                                             "user_id": self.user_id,
                                             "files": success_ids,
                                             "created_at": datetime.datetime.utcnow()
-                                        })
+                                        }
+
+                                        # Add expiry if auto-expire links is enabled
+                                        auto_expire = user_settings.get("privacy_auto_expire_links", False) if user_settings else False
+                                        if auto_expire:
+                                            dur = user_settings.get("privacy_link_expiry_duration", "24h") if user_settings else "24h"
+                                            dur_map = {"1h": 1, "6h": 6, "24h": 24, "7d": 168, "30d": 720}
+                                            hours = dur_map.get(dur, 24)
+                                            group_doc["expires_at"] = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
+
+                                        await db.db.file_groups.insert_one(group_doc)
 
                                         bot_me = await self.client.get_me()
                                         bot_username = bot_me.username
@@ -1633,7 +1633,7 @@ class TaskProcessor:
                             )
                             try:
                                 await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                            except:
+                            except Exception:
                                 pass
                             if queue_manager.batches.get(batch_id):
                                 setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
@@ -1725,7 +1725,7 @@ class TaskProcessor:
                     )
                     try:
                         await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                    except:
+                    except Exception:
                         pass
                 except Exception as e:
                     logger.warning(f"Failed to send single completion msg: {e}")
@@ -1793,15 +1793,6 @@ class TaskProcessor:
                 return
 
     async def _cleanup(self):
-        # Clean up any external cleanup directory first (e.g. from TorrentDownloader)
-        cleanup_dir = self.data.get("cleanup_dir")
-        if cleanup_dir and os.path.exists(cleanup_dir):
-            try:
-                import shutil
-                shutil.rmtree(cleanup_dir, ignore_errors=True)
-            except Exception as e:
-                logger.warning(f"Failed to remove temp dir {cleanup_dir}: {e}")
-
         for path in [self.input_path, self.output_path, self.thumb_path]:
             if path and os.path.exists(path):
                 try:

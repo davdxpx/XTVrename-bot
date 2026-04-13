@@ -50,14 +50,14 @@ async def safe_edit_or_send(client, callback_query, text, markup, photo=None):
                     new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
                     try:
                         await callback_query.message.delete()
-                    except:
+                    except Exception:
                         pass
             else:
                 # Text to Photo: Send new, then delete old
                 new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
                 try:
                     await callback_query.message.delete()
-                except:
+                except Exception:
                     pass
         else:
             # We are transitioning TO a text message
@@ -66,7 +66,7 @@ async def safe_edit_or_send(client, callback_query, text, markup, photo=None):
                 new_msg = await client.send_message(chat_id=callback_query.message.chat.id, text=text, reply_markup=markup)
                 try:
                     await callback_query.message.delete()
-                except:
+                except Exception:
                     pass
             else:
                 # Text to Text: Just edit
@@ -339,7 +339,8 @@ async def myfiles_text_handler(client: Client, message: Message):
             if count >= folder_limit:
                 await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Folders", callback_data="myfiles_cat_custom")]]))
                 await set_myfiles_state(user_id, {})
-                return
+                from pyrogram import StopPropagation
+                raise StopPropagation
 
         await db.folders.insert_one({
             "user_id": user_id,
@@ -447,6 +448,16 @@ async def myfiles_command(client: Client, message: Message):
     if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
         return
 
+    # Check if MyFiles system is enabled
+    myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+    if not myfiles_enabled:
+        await message.reply_text(
+            "⛔ **MyFiles™ is currently disabled.**\n\n"
+            "The administrator has deactivated the MyFiles system.\n"
+            "Contact the admin or check back later."
+        )
+        return
+
     text, markup = await get_myfiles_main_menu(user_id)
     await message.reply_text(text, reply_markup=markup)
 
@@ -454,6 +465,13 @@ async def myfiles_command(client: Client, message: Message):
 async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     data = callback_query.data
     user_id = callback_query.from_user.id
+
+    # Check if MyFiles system is enabled
+    if not data.startswith("stg_") and not data.startswith("settings_cat_"):
+        myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+        if not myfiles_enabled:
+            await callback_query.answer("⛔ MyFiles™ is currently disabled by the administrator.", show_alert=True)
+            return
 
     if _debounce_mf(user_id, data):
         try:
@@ -591,26 +609,30 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         import uuid
 
-        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-        privacy_feat = plan_features.get("privacy", {})
-        allow_anon = privacy_feat.get("link_anonymity", False)
-
         user_settings = await db.get_settings(user_id)
-        use_anon = False
-        if user_settings and "link_anonymity" in user_settings:
-            use_anon = user_settings["link_anonymity"]
+        use_anon = user_settings.get("link_anonymity", False) if user_settings else False
 
-        if allow_anon and use_anon:
+        if use_anon:
             group_id = f"{uuid.uuid4().hex[:16]}"
         else:
             group_id = f"{user_id}_{int(datetime.datetime.utcnow().timestamp())}"
 
-        await db.db.file_groups.insert_one({
+        group_doc = {
             "group_id": group_id,
             "user_id": user_id,
             "files": selected_files,
             "created_at": datetime.datetime.utcnow()
-        })
+        }
+
+        # Add expiry if auto-expire links is enabled
+        auto_expire = user_settings.get("privacy_auto_expire_links", False) if user_settings else False
+        if auto_expire:
+            dur = user_settings.get("privacy_link_expiry_duration", "24h") if user_settings else "24h"
+            dur_map = {"1h": 1, "6h": 6, "24h": 24, "7d": 168, "30d": 720}
+            hours = dur_map.get(dur, 24)
+            group_doc["expires_at"] = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
+
+        await db.db.file_groups.insert_one(group_doc)
 
         deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
 
@@ -717,9 +739,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-        is_global_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
 
-        if plan_features.get("privacy_settings", False) or plan == "global" or is_global_admin:
+        # Show Privacy Settings button only if enabled for this plan (or private mode)
+        if plan_features.get("privacy_settings", False) or not Config.PUBLIC_MODE:
             buttons.append([InlineKeyboardButton("🔒 Privacy Settings", callback_data="settings_cat_privacy")])
 
         buttons.append([InlineKeyboardButton("🗑️ Clear Permanent Storage", callback_data="myfiles_clear_perm")])
@@ -868,9 +890,10 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         plan_features = config.get(f"premium_{plan}", {}).get("features", {})
         privacy_feat = plan_features.get("privacy", {})
 
-        is_global_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
+        # In private mode (non-public), all privacy features are available
+        is_private_mode = not Config.PUBLIC_MODE
 
-        if not plan_features.get("privacy_settings", False) and plan != "global" and not is_global_admin:
+        if not plan_features.get("privacy_settings", False) and not is_private_mode:
             await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
             return
 
@@ -890,36 +913,35 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         text = "🔒 **Privacy Settings**\n━━━━━━━━━━━━━━━━━━━━\n\n"
         buttons = []
-        has_plan_features = False
 
-        if privacy_feat.get("hide_display_name", False) or plan == "global" or is_global_admin:
-            has_plan_features = True
+        # Each toggle is only shown if the admin has enabled it per-plan (or private mode)
+        if privacy_feat.get("hide_display_name", False) or is_private_mode:
             text += f"> 👤 **Display Name:** {'✅ ON' if share_name else '❌ OFF'}\n> __Show your name on shared files__\n"
             buttons.append([InlineKeyboardButton(f"👤 Display Name: {'✅ ON' if share_name else '❌ OFF'}", callback_data="myfiles_toggle_share_name")])
 
-        if privacy_feat.get("hide_forward_tags", False) or plan == "global" or is_global_admin:
-            has_plan_features = True
+        if privacy_feat.get("hide_forward_tags", False) or is_private_mode:
             text += f"> 🏷️ **Forward Tags:** {'✅ Hidden' if hide_forward else '❌ Visible'}\n> __Remove 'Forwarded from' on shares__\n"
             buttons.append([InlineKeyboardButton(f"🏷️ Forward Tags: {'✅ Hidden' if hide_forward else '❌ Visible'}", callback_data="myfiles_toggle_hide_fwd")])
 
-        if privacy_feat.get("link_anonymity", False) or plan == "global" or is_global_admin:
-            has_plan_features = True
+        if privacy_feat.get("link_anonymity", False) or is_private_mode:
             text += f"> 🔗 **Link Anonymity:** {'✅ ON' if link_anon else '❌ OFF'}\n> __Use anonymous hash in share links__\n"
             buttons.append([InlineKeyboardButton(f"🔗 Link Anonymity: {'✅ ON' if link_anon else '❌ OFF'}", callback_data="myfiles_toggle_link_anon")])
 
-        if has_plan_features:
-            text += "\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        if privacy_feat.get("hide_username", False) or is_private_mode:
+            text += f"> 🙈 **Hide Username:** {'✅ ON' if hide_user else '❌ OFF'}\n> __Hide username on shared content__\n"
+            buttons.append([InlineKeyboardButton(f"🙈 Hide Username: {'✅ ON' if hide_user else '❌ OFF'}", callback_data="stg_toggle_privacy_hide_username")])
 
-        text += f"> 🙈 **Hide Username:** {'✅ ON' if hide_user else '❌ OFF'}\n> __Hide username on shared content__\n"
-        buttons.append([InlineKeyboardButton(f"🙈 Hide Username: {'✅ ON' if hide_user else '❌ OFF'}", callback_data="stg_toggle_privacy_hide_username")])
+        if privacy_feat.get("auto_expire_links", False) or is_private_mode:
+            text += f"> ⏳ **Auto-Expire Links:** {'✅ ON' if auto_expire else '❌ OFF'}\n> __Share links expire automatically__\n"
+            buttons.append([InlineKeyboardButton(f"⏳ Auto-Expire: {'✅ ON' if auto_expire else '❌ OFF'}", callback_data="stg_toggle_privacy_auto_expire_links")])
 
-        text += f"> ⏳ **Auto-Expire Links:** {'✅ ON' if auto_expire else '❌ OFF'}\n> __Share links expire automatically__\n"
-        buttons.append([InlineKeyboardButton(f"⏳ Auto-Expire: {'✅ ON' if auto_expire else '❌ OFF'}", callback_data="stg_toggle_privacy_auto_expire_links")])
+            if auto_expire:
+                dur_labels = {"1h": "1 Hour", "6h": "6 Hours", "24h": "24 Hours", "7d": "7 Days", "30d": "30 Days"}
+                text += f"> ⏱️ **Expiry Duration:** `{dur_labels.get(expire_dur, expire_dur)}`\n"
+                buttons.append([InlineKeyboardButton(f"⏱️ Expiry: {dur_labels.get(expire_dur, expire_dur)}", callback_data="stg_sel_privacy_link_expiry_duration")])
 
-        if auto_expire:
-            dur_labels = {"1h": "1 Hour", "6h": "6 Hours", "24h": "24 Hours", "7d": "7 Days", "30d": "30 Days"}
-            text += f"> ⏱️ **Expiry Duration:** `{dur_labels.get(expire_dur, expire_dur)}`\n"
-            buttons.append([InlineKeyboardButton(f"⏱️ Expiry: {dur_labels.get(expire_dur, expire_dur)}", callback_data="stg_sel_privacy_link_expiry_duration")])
+        if not buttons:
+            text += "> No privacy features are available for your current plan.\n"
 
         buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")])
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
@@ -1041,9 +1063,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         plan_features = config.get(f"premium_{plan}", {}).get("features", {})
         privacy_feat = plan_features.get("privacy", {})
-        is_global_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
-        if not privacy_feat.get("link_anonymity", False) and plan != "global" and not is_global_admin:
-            await callback_query.answer("Your current plan does not have access to this setting.", show_alert=True)
+        if Config.PUBLIC_MODE and not privacy_feat.get("link_anonymity", False):
+            await callback_query.answer("This feature is not available for your plan.", show_alert=True)
             return
 
         user_settings = await db.get_settings(user_id)
@@ -1051,7 +1072,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "link_anonymity" in user_settings:
             link_anon = user_settings["link_anonymity"]
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"link_anonymity": not link_anon}}, upsert=True)
+        await db.update_setting("link_anonymity", not link_anon, user_id)
         await callback_query.answer("Privacy setting updated", show_alert=False)
         callback_query.data = "myfiles_privacy_settings"
         await myfiles_callback(client, callback_query)
@@ -1064,9 +1085,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-        is_global_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
-        if not plan_features.get("privacy_settings", False) and plan != "global" and not is_global_admin:
-            await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
+        privacy_feat = plan_features.get("privacy", {})
+        if Config.PUBLIC_MODE and not privacy_feat.get("hide_display_name", False):
+            await callback_query.answer("This feature is not available for your plan.", show_alert=True)
             return
 
         user_settings = await db.get_settings(user_id)
@@ -1076,7 +1097,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         elif is_premium:
             share_name = False
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"share_display_name": not share_name}}, upsert=True)
+        await db.update_setting("share_display_name", not share_name, user_id)
         await callback_query.answer("Privacy setting updated", show_alert=False)
         callback_query.data = "myfiles_privacy_settings"
         await myfiles_callback(client, callback_query)
@@ -1089,9 +1110,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-        is_global_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
-        if not plan_features.get("privacy_settings", False) and plan != "global" and not is_global_admin:
-            await callback_query.answer("Your current plan does not have access to Privacy Settings.", show_alert=True)
+        privacy_feat = plan_features.get("privacy", {})
+        if Config.PUBLIC_MODE and not privacy_feat.get("hide_forward_tags", False):
+            await callback_query.answer("This feature is not available for your plan.", show_alert=True)
             return
 
         user_settings = await db.get_settings(user_id)
@@ -1099,7 +1120,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "hide_forward_tags" in user_settings:
             hide_forward = user_settings["hide_forward_tags"]
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"hide_forward_tags": not hide_forward}}, upsert=True)
+        await db.update_setting("hide_forward_tags", not hide_forward, user_id)
         await callback_query.answer("Privacy setting updated", show_alert=False)
         callback_query.data = "myfiles_privacy_settings"
         await myfiles_callback(client, callback_query)
@@ -1111,7 +1132,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if user_settings and "myfiles_auto_permanent" in user_settings:
             auto_perm = user_settings["myfiles_auto_permanent"]
 
-        await db.settings.update_one({"_id": db._get_doc_id(user_id)}, {"$set": {"myfiles_auto_permanent": not auto_perm}}, upsert=True)
+        await db.update_setting("myfiles_auto_permanent", not auto_perm, user_id)
         await callback_query.answer("Setting updated", show_alert=False)
         callback_query.data = "settings_cat_myfiles"
         await myfiles_callback(client, callback_query)
