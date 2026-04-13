@@ -151,16 +151,30 @@ async def get_admin_access_limits_menu():
     buttons = []
 
     if Config.PUBLIC_MODE:
+        config = await db.get_public_config()
+        prem_enabled = config.get("premium_system_enabled", False)
+        deluxe_enabled = config.get("premium_deluxe_enabled", False)
+        trial_enabled = config.get("premium_trial_enabled", False)
+        myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+
+        def _status(s): return "✅ ON" if s else "❌ OFF"
+
+        buttons.append([InlineKeyboardButton("━━━ 🔧 System Toggles ━━━", callback_data="noop")])
+        buttons.append([
+            InlineKeyboardButton(f"💎 Premium: {_status(prem_enabled)}", callback_data="admin_quick_toggle_premium"),
+            InlineKeyboardButton(f"👑 Deluxe: {_status(deluxe_enabled)}", callback_data="admin_quick_toggle_deluxe")
+        ])
+        buttons.append([
+            InlineKeyboardButton(f"⏳ Trial: {_status(trial_enabled)}", callback_data="admin_quick_toggle_trial"),
+            InlineKeyboardButton(f"📁 MyFiles: {_status(myfiles_enabled)}", callback_data="admin_quick_toggle_myfiles")
+        ])
+        buttons.append([InlineKeyboardButton("━━━ ⚙️ Configuration ━━━", callback_data="noop")])
+        buttons.append([InlineKeyboardButton("🛠️ Feature Toggles", callback_data="admin_feature_toggles")])
         buttons.append([InlineKeyboardButton("📋 Per-Plan Settings", callback_data="admin_per_plan_limits")])
         buttons.append([InlineKeyboardButton("🌍 Global Daily Egress Limit", callback_data="admin_global_daily_egress")])
     else:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    "🌍 Set Global Daily Egress Limit", callback_data="admin_global_daily_egress"
-                )
-            ]
-        )
+        buttons.append([InlineKeyboardButton("🛠️ Feature Toggles", callback_data="admin_feature_toggles")])
+        buttons.append([InlineKeyboardButton("🌍 Set Global Daily Egress Limit", callback_data="admin_global_daily_egress")])
 
     buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
     return InlineKeyboardMarkup(buttons)
@@ -243,6 +257,42 @@ async def admin_callback(client, callback_query):
         raise ContinuePropagation
     data = callback_query.data
     debug(f"Admin callback: {data} from user {user_id}")
+
+    # --- Quick System Toggles (Settings menu) ---
+    if data == "admin_quick_toggle_premium":
+        config = await db.get_public_config()
+        enabled = config.get("premium_system_enabled", False)
+        await db.update_public_config("premium_system_enabled", not enabled)
+        await callback_query.answer(f"Premium System {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
+
+    if data == "admin_quick_toggle_deluxe":
+        config = await db.get_public_config()
+        enabled = config.get("premium_deluxe_enabled", False)
+        await db.update_public_config("premium_deluxe_enabled", not enabled)
+        await callback_query.answer(f"Deluxe Plan {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
+
+    if data == "admin_quick_toggle_trial":
+        config = await db.get_public_config()
+        enabled = config.get("premium_trial_enabled", False)
+        await db.update_public_config("premium_trial_enabled", not enabled)
+        await callback_query.answer(f"Trial Mode {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
+
+    if data == "admin_quick_toggle_myfiles":
+        enabled = await db.get_setting("myfiles_enabled", default=False)
+        await db.update_setting("myfiles_enabled", not enabled)
+        await callback_query.answer(f"MyFiles System {'Disabled' if enabled else 'Enabled'}", show_alert=True)
+        callback_query.data = "admin_access_limits"
+        await admin_callback(client, callback_query)
+        return
 
     if data == "admin_myfiles_settings":
         myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
@@ -2349,7 +2399,9 @@ async def admin_callback(client, callback_query):
         try:
             reply_markup = await get_admin_access_limits_menu()
             await callback_query.message.edit_text(
-                "🔒 **Settings Menu**\n\n" "Select a category:",
+                "🔒 **Settings & Controls**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "Toggle system features on/off and configure plans, limits, and tools.",
                 reply_markup=reply_markup,
             )
         except MessageNotModified:
