@@ -102,6 +102,17 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **Multipurpose File Utilities**: Built-in direct editing tools accessible via the **✨ Other Features** menu for general renaming (`/g`), audio metadata & cover art editing (`/a`), advanced media format conversion (including **x264/x265** and **Audio Normalization**) (`/c`), automated image watermarking (`/w`), and a standalone **Subtitle Extractor**!
 *   **Dynamic Filename Templates**: Fully customizable filename structures via the Admin Panel for Movies, Series, and Subtitles using variables like `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, and `{Channel}`.
 
+### 🔹 Torrent Downloader
+*   **Multi-Provider Search Engine**: Searches **1337x**, **TorrentGalaxy**, and **LimeTorrents** concurrently and deduplicates results by info hash.
+*   **Category-Based Filtering**: Narrow searches by Movies, TV Shows, Music, Games, Software, or Anime.
+*   **Paginated Results**: Browse results 5 at a time with detailed info views (seeders, leechers, size, provider, date).
+*   **aria2 Download Management**: Downloads via aria2 RPC with a real-time progress bar, speed, ETA, and cancel button.
+*   **Plan-Based Size Limits**: Free users are limited to 2GB, Standard to 5GB, Deluxe has unlimited downloads.
+*   **Smart File Selection**: After download, select which files to process with type icons, file sizes, and sort by size/name.
+*   **Search History & Favorites**: Last 5 searches are saved for quick re-runs. Favorite torrents for instant access later.
+*   **Download History**: Track all downloads with status (completed/failed/cancelled) and statistics.
+*   **Pipeline Integration**: Selected files are automatically fed into the bot's standard processing pipeline (rename, metadata, upload).
+
 ### 🔹 Professional Metadata Injection
 *   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
 *   **Branding**: Sets e.g. "Encoded by @YourChannel" and custom audio/subtitle track titles.
@@ -166,6 +177,8 @@ Create a `.env` file in the root directory. You will need a **MongoDB** instance
 | `PUBLIC_MODE` | Set to `True` to allow anyone to use the bot. | ❌ |
 | `DEBUG_MODE` | Enable verbose debug logging. Default: False. | ❌ |
 | `TMDB_API_KEY` | TMDb API Key for metadata | ✅ |
+
+> **Note:** The Torrent Downloader requires **aria2** to be installed and running as an RPC daemon on port 6800. See the Deployment Guide below for setup instructions.
 
 ---
 
@@ -350,6 +363,7 @@ admin - ⛔ Access Global Configurations (Admins Only)
 *   **/a** or **/audio**: Open Audio Metadata Editor (Edit MP3/FLAC title, artist, cover art).
 *   **/c** or **/convert**: Open File Converter (Extract audio, image to webp, video to gif, etc).
 *   **/w** or **/watermark**: Open Image Watermarker (Add text or overlay image).
+*   **/t** or **/torrent**: Open Torrent Downloader (Search, download, and process torrents).
 
 ---
 
