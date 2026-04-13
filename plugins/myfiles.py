@@ -447,6 +447,14 @@ async def myfiles_command(client: Client, message: Message):
     if not Config.PUBLIC_MODE and user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
         return
 
+    # Check if MyFiles system is enabled
+    is_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
+    if not is_admin:
+        myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+        if not myfiles_enabled:
+            await message.reply_text("📁 **MyFiles™** is currently disabled by the administrator.")
+            return
+
     text, markup = await get_myfiles_main_menu(user_id)
     await message.reply_text(text, reply_markup=markup)
 
@@ -454,6 +462,14 @@ async def myfiles_command(client: Client, message: Message):
 async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     data = callback_query.data
     user_id = callback_query.from_user.id
+
+    # Check if MyFiles system is enabled (allow admins through)
+    is_admin = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
+    if not is_admin and not data.startswith("stg_") and not data.startswith("settings_cat_"):
+        myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
+        if not myfiles_enabled:
+            await callback_query.answer("MyFiles™ is currently disabled.", show_alert=True)
+            return
 
     if _debounce_mf(user_id, data):
         try:
@@ -591,26 +607,30 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         import uuid
 
-        plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-        privacy_feat = plan_features.get("privacy", {})
-        allow_anon = privacy_feat.get("link_anonymity", False)
-
         user_settings = await db.get_settings(user_id)
-        use_anon = False
-        if user_settings and "link_anonymity" in user_settings:
-            use_anon = user_settings["link_anonymity"]
+        use_anon = user_settings.get("link_anonymity", False) if user_settings else False
 
-        if allow_anon and use_anon:
+        if use_anon:
             group_id = f"{uuid.uuid4().hex[:16]}"
         else:
             group_id = f"{user_id}_{int(datetime.datetime.utcnow().timestamp())}"
 
-        await db.db.file_groups.insert_one({
+        group_doc = {
             "group_id": group_id,
             "user_id": user_id,
             "files": selected_files,
             "created_at": datetime.datetime.utcnow()
-        })
+        }
+
+        # Add expiry if auto-expire links is enabled
+        auto_expire = user_settings.get("privacy_auto_expire_links", False) if user_settings else False
+        if auto_expire:
+            dur = user_settings.get("privacy_link_expiry_duration", "24h") if user_settings else "24h"
+            dur_map = {"1h": 1, "6h": 6, "24h": 24, "7d": 168, "30d": 720}
+            hours = dur_map.get(dur, 24)
+            group_doc["expires_at"] = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
+
+        await db.db.file_groups.insert_one(group_doc)
 
         deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
 
