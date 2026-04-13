@@ -21,6 +21,7 @@ logger = get_logger("plugins.flow")
 logger.info("Loading plugins.flow...")
 
 file_sessions = {}
+_file_session_timestamps = {}
 
 batch_sessions = {}
 
@@ -30,6 +31,43 @@ batch_status_msgs = {}
 
 _processing_callbacks = {}
 _expiry_warnings = {}
+
+import time as _time
+
+def _touch_file_session(msg_id):
+    """Track when a file_session entry was last accessed."""
+    _file_session_timestamps[msg_id] = _time.time()
+
+def cleanup_stale_file_sessions(max_age_seconds: int = 7200):
+    """Remove file_sessions entries older than max_age_seconds (default 2 hours)."""
+    now = _time.time()
+    stale = [mid for mid, ts in _file_session_timestamps.items() if now - ts > max_age_seconds]
+    for mid in stale:
+        file_sessions.pop(mid, None)
+        _file_session_timestamps.pop(mid, None)
+    return len(stale)
+
+def cleanup_stale_debounce_entries(max_age_seconds: int = 300):
+    """Remove debounce entries older than max_age_seconds."""
+    now = _time.time()
+    stale_keys = [k for k, v in _processing_callbacks.items() if now - v > max_age_seconds]
+    for k in stale_keys:
+        _processing_callbacks.pop(k, None)
+    return len(stale_keys)
+
+def _on_session_expired(user_id):
+    """Called by state.py when a session naturally expires."""
+    task = _expiry_warnings.pop(user_id, None)
+    if task:
+        task.cancel()
+    batch_sessions.pop(user_id, None)
+    task = batch_tasks.pop(user_id, None)
+    if task:
+        task.cancel()
+    batch_status_msgs.pop(user_id, None)
+
+from utils.state import register_expire_callback
+register_expire_callback(_on_session_expired)
 
 async def _persist_session_to_db(user_id: int):
     """Save critical session data to DB for crash recovery."""
@@ -73,19 +111,22 @@ async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 33
 
 def _start_expiry_timer(client, user_id: int):
     """Start or restart the expiry warning timer."""
-    if user_id in _expiry_warnings:
-        _expiry_warnings[user_id].cancel()
+    old_task = _expiry_warnings.pop(user_id, None)
+    if old_task:
+        old_task.cancel()
     _expiry_warnings[user_id] = asyncio.create_task(_schedule_expiry_warning(client, user_id))
 
 def _debounce_callback(user_id: int, callback_id: str) -> bool:
     """Returns True if this callback should be skipped (duplicate rapid-fire)."""
-    import time as _t
     key = f"{user_id}:{callback_id}"
-    now = _t.time()
+    now = _time.time()
     last = _processing_callbacks.get(key, 0)
     if now - last < 0.5:
         return True
     _processing_callbacks[key] = now
+    # Periodic inline cleanup: prune entries older than 60s when dict gets large
+    if len(_processing_callbacks) > 500:
+        cleanup_stale_debounce_entries(60)
     return False
 
 # === Helper Functions ===
@@ -1311,6 +1352,7 @@ async def process_batch(client, user_id):
 
         msg = await message.reply_text("Processing file...", quote=True)
         file_sessions[msg.id] = data
+        _touch_file_session(msg.id)
 
         if is_auto:
             await update_auto_detected_message(client, msg.id, user_id)
@@ -2653,6 +2695,7 @@ async def handle_confirm(client, callback_query):
         return
 
     fs = file_sessions.pop(msg_id)
+    _file_session_timestamps.pop(msg_id, None)
 
     # Cancel expiry timer
     task = _expiry_warnings.pop(user_id, None)
@@ -2799,6 +2842,7 @@ async def handle_file_cancel(client, callback_query):
 
     if msg_id in file_sessions:
         fs = file_sessions.pop(msg_id)
+        _file_session_timestamps.pop(msg_id, None)
         if "file_message" in fs:
             media = fs["file_message"].document or fs["file_message"].video or fs["file_message"].audio or fs["file_message"].photo
             file_size = getattr(media, "file_size", 0) if media else 0
