@@ -267,6 +267,13 @@ async def admin_panel(client, message):
     if not is_admin(message.from_user.id):
         return
 
+    # Redirect to setup wizard if initial setup is not complete
+    setup_complete = await db.get_setting("is_bot_setup_complete", default=False, user_id=Config.CEO_ID)
+    if not setup_complete:
+        from plugins.admin_setup import send_ceo_setup_menu
+        await send_ceo_setup_menu(client, message.chat.id)
+        return
+
     pro_session = await db.get_pro_session()
 
     if Config.PUBLIC_MODE:
