@@ -1480,12 +1480,16 @@ async def admin_callback(client, callback_query):
                 hdn = privacy.get('hide_display_name', False)
                 hft = privacy.get('hide_forward_tags', False)
                 la = privacy.get('link_anonymity', False)
+                hu = privacy.get('hide_username', False)
+                ael = privacy.get('auto_expire_links', False)
 
                 buttons.extend([
                     [InlineKeyboardButton("━━━ 🔒 Available Controls ━━━", callback_data="noop")],
                     [InlineKeyboardButton(f"{emoji(hdn)} 👤 Hide Display Name", callback_data=f"admin_privacy_toggle_{plan_name}_hide_display_name")],
                     [InlineKeyboardButton(f"{emoji(hft)} 🏷️ Hide Forward Tags", callback_data=f"admin_privacy_toggle_{plan_name}_hide_forward_tags")],
-                    [InlineKeyboardButton(f"{emoji(la)} 🔗 Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")]
+                    [InlineKeyboardButton(f"{emoji(la)} 🔗 Link Anonymity (UUID)", callback_data=f"admin_privacy_toggle_{plan_name}_link_anonymity")],
+                    [InlineKeyboardButton(f"{emoji(hu)} 🙈 Hide Username", callback_data=f"admin_privacy_toggle_{plan_name}_hide_username")],
+                    [InlineKeyboardButton(f"{emoji(ael)} ⏳ Auto-Expire Links", callback_data=f"admin_privacy_toggle_{plan_name}_auto_expire_links")],
                 ])
 
             buttons.append([InlineKeyboardButton("← Back to Feature Categories", callback_data=f"admin_premium_features_{plan_name}")])
@@ -1503,6 +1507,10 @@ async def admin_callback(client, callback_query):
                     f"> __Remove 'Forwarded from' on shares__\n"
                     f"> 🔗 **Link Anonymity:** {'Enabled' if privacy.get('link_anonymity', False) else 'Disabled'}\n"
                     f"> __Use anonymous hash in share links__\n"
+                    f"> 🙈 **Hide Username:** {'Enabled' if privacy.get('hide_username', False) else 'Disabled'}\n"
+                    f"> __Hide username on shared content__\n"
+                    f"> ⏳ **Auto-Expire Links:** {'Enabled' if privacy.get('auto_expire_links', False) else 'Disabled'}\n"
+                    f"> __Share links expire automatically__\n"
                 )
             else:
                 text += "> ⚠️ __Privacy settings are disabled for this plan.__\n"
