@@ -71,7 +71,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **Concurrency Control**: Global semaphore system prevents server overload by managing simultaneous downloads/uploads.
 
 ### 🔹 Intelligent Recognition
-*   **V2.0 Endgame Evolution**:
+*   **MyFiles V2.1 Endgame Evolution**:
     *   **Inline Query Search:** Use `@YourBotName [search query]` anywhere to instantly pull up your files and share them via Deep Links!
     *   **Netflix-Style Visual Dashboard:** When viewing your files in `/myfiles`, the bot dynamically updates the interface to display the beautiful TMDb media poster inline.
     *   **Smart System Filenames:** Use `{title} ({year})` and other customizable templates to completely automate how your internal media files are saved and displayed.
