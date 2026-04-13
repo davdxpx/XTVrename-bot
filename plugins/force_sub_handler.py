@@ -179,18 +179,16 @@ async def send_starter_setup_message(client, user_id, first_name=""):
         bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
 
     text = (
-        f"👋 **Welcome to {bot_name}, {first_name}!**\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "**Awesome! You're now ready to use the bot.**\n"
-        "To give you the best personalized experience, please choose how you plan to primarily use my features:\n"
-        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"**👋 Welcome to {bot_name}, {first_name}!**\n\n"
+        "> Choose your workflow mode\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
         "**🧠 Smart Media Mode**\n"
         "├ **Best for:** `TV Shows & Movies`\n"
-        "└ **Action:** `Auto-detects metadata and pulls beautiful TMDb posters automatically.`\n\n"
+        "└ **Action:** `Auto-detects metadata and pulls TMDb posters automatically.`\n\n"
         "**⚡ Quick Mode**\n"
         "├ **Best for:** `Personal Videos, Anime, General Files`\n"
-        "└ **Action:** `Skips auto-detection, bypasses TMDb, and goes straight to renaming.`\n\n"
-        "__(Don't worry, you can always change this later in /settings)__"
+        "└ **Action:** `Skips auto-detection and goes straight to renaming.`\n\n"
+        "__(You can always change this later in /settings)__"
     )
 
     markup = InlineKeyboardMarkup(
@@ -201,12 +199,16 @@ async def send_starter_setup_message(client, user_id, first_name=""):
     )
 
     try:
-        await client.send_message(chat_id=user_id, text=text, reply_markup=markup)
+        msg = await client.send_message(chat_id=user_id, text=text, reply_markup=markup)
+        # Store anchor message ID for the onboarding flow
+        update_data(user_id, "user_setup_msg_id", msg.id)
+        return msg
     except Exception as e:
-            if "PEER_ID_INVALID" in str(e):
-                logger.debug(f"User {user_id} joined channel, but bot has not met them in PM yet. Delaying welcome message until they /start.")
-            else:
-                logger.error(f"Failed to send starter setup message to {user_id}: {e}")
+        if "PEER_ID_INVALID" in str(e):
+            logger.debug(f"User {user_id} joined channel, but bot has not met them in PM yet.")
+        else:
+            logger.error(f"Failed to send starter setup message to {user_id}: {e}")
+        return None
 
 @Client.on_callback_query(filters.regex(r"^setup_mode_"))
 
@@ -215,25 +217,14 @@ async def handle_setup_mode_callback(client, callback_query):
     user_id = callback_query.from_user.id
     data = callback_query.data
 
-    if data == "setup_mode_smart":
-        mode = "smart_media_mode"
-        mode_str = "🧠 Smart Media Mode"
-    else:
-        mode = "quick_mode"
-        mode_str = "⚡ Quick Mode"
-
+    mode = "smart_media_mode" if data == "setup_mode_smart" else "quick_mode"
     await db.update_workflow_mode(mode, user_id)
     await db.mark_setup_completed(user_id, True)
+    await callback_query.answer("Mode saved!")
 
-    text = (
-        f"✅ **Setup Complete!**\n\n"
-        f"You have selected **{mode_str}**.\n"
-        "__(You can change this anytime via /settings)__\n\n"
-        "**💡 Tip:** Simply send or forward any file to me right now to begin!"
-    )
-
-    await callback_query.message.edit_text(text)
-    await callback_query.answer("Preferences saved!", show_alert=False)
+    # Chain directly into preferences setup — edit the SAME message
+    from plugins.user_setup import render_user_preferences_inline
+    await render_user_preferences_inline(client, user_id, callback_query.message)
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
