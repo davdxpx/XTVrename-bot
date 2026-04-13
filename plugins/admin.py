@@ -481,6 +481,7 @@ async def admin_callback(client, callback_query):
             plan_title = "Free Plan"
             egress_mb = config.get("daily_egress_mb", 0)
             file_count = config.get("daily_file_count", 0)
+            torrent_limit_mb = config.get("torrent_size_limit_mb_free", 2048)
             features_text = get_features_str('free_placeholder')
             price_text = ""
         else:
@@ -489,11 +490,14 @@ async def admin_callback(client, callback_query):
             plan_settings = config.get(f"premium_{plan_name}", {})
             egress_mb = plan_settings.get("daily_egress_mb", 0)
             file_count = plan_settings.get("daily_file_count", 0)
+            torrent_limit_mb = plan_settings.get("torrent_size_limit_mb", 0)
             features_text = get_features_str(f"premium_{plan_name}")
             price_text = (
                 f"\n💵 **Price (Fiat):** `{plan_settings.get('price_string', '0 USD')}`\n"
                 f"⭐ **Price (Stars):** `{plan_settings.get('stars_price', 0)}` Stars\n"
             )
+
+        torrent_limit_str = f"{torrent_limit_mb} MB" if torrent_limit_mb > 0 else "Unlimited"
 
         text = (
             f"⚙️ **Edit {plan_title} Settings**\n\n"
@@ -504,7 +508,8 @@ async def admin_callback(client, callback_query):
             f"📁 Custom Folders  : `{f(plan_lm.get('folder_limit', 0))}`\n"
             f"⏳ Temp Expiration : `{f(plan_lm.get('expiry_days', 0))} days`\n"
             f"📦 Daily Egress: `{f(egress_mb)}` MB\n"
-            f"📄 Daily Files: `{f(file_count)}` files\n\n"
+            f"📄 Daily Files: `{f(file_count)}` files\n"
+            f"🧲 Torrent Size Limit: `{torrent_limit_str}`\n\n"
             f"✨ **Features:**\n"
             f"{features_text}\n"
             f"{price_text}"
@@ -530,6 +535,7 @@ async def admin_callback(client, callback_query):
                 InlineKeyboardButton("⭐ Edit Stars Price", callback_data=f"prompt_premium_{plan_name}_stars")
             ])
 
+        buttons.append([InlineKeyboardButton("🧲 Edit Torrent Size Limit", callback_data=f"prompt_premium_{plan_name}_torrent")])
         buttons.append([InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")])
         buttons.append([InlineKeyboardButton("← Back to Plan Settings", callback_data="admin_per_plan_limits")])
 
@@ -1595,9 +1601,41 @@ async def admin_callback(client, callback_query):
 
         elif data.startswith("prompt_premium_"):
             parts = data.replace("prompt_premium_", "").split("_")
-            if len(parts) >= 2 and parts[0] in ["standard", "deluxe"]:
+            if len(parts) >= 2 and parts[0] in ["free", "standard", "deluxe"]:
                 plan_name = parts[0]
                 field = parts[1]
+
+                if field == "torrent":
+                    try:
+                        await callback_query.message.edit_text(
+                            f"🧲 **Edit Torrent Size Limit** ({plan_name.capitalize()} Plan)\n\n"
+                            f"Select a predefined limit or click **Custom** to enter manually.\n"
+                            f"Set to `0` for **Unlimited**.",
+                            reply_markup=InlineKeyboardMarkup(
+                                [
+                                    [
+                                        InlineKeyboardButton("1 GB", callback_data=f"set_prem_torrent_{plan_name}_1024"),
+                                        InlineKeyboardButton("2 GB", callback_data=f"set_prem_torrent_{plan_name}_2048")
+                                    ],
+                                    [
+                                        InlineKeyboardButton("5 GB", callback_data=f"set_prem_torrent_{plan_name}_5120"),
+                                        InlineKeyboardButton("10 GB", callback_data=f"set_prem_torrent_{plan_name}_10240")
+                                    ],
+                                    [
+                                        InlineKeyboardButton("♾ Unlimited", callback_data=f"set_prem_torrent_{plan_name}_0"),
+                                    ],
+                                    [
+                                        InlineKeyboardButton("✏️ Custom", callback_data=f"prompt_prem_torrent_custom_{plan_name}")
+                                    ],
+                                    [
+                                        InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")
+                                    ],
+                                ]
+                            ),
+                        )
+                    except MessageNotModified:
+                        pass
+                    return
 
                 if field == "egress":
                     try:
@@ -1709,6 +1747,40 @@ async def admin_callback(client, callback_query):
             await callback_query.answer(f"{plan_name.capitalize()} Egress limit updated to {val} MB.", show_alert=True)
             callback_query.data = f"admin_edit_plan_{plan_name}"
             await admin_callback(client, callback_query)
+        return
+
+    if data.startswith("set_prem_torrent_"):
+        parts = data.replace("set_prem_torrent_", "").split("_")
+        if len(parts) >= 2:
+            plan_name = parts[0]
+            val = int(parts[1])
+
+            config = await db.get_public_config()
+            if plan_name == "free":
+                await db.update_public_config("torrent_size_limit_mb_free", val)
+            else:
+                plan_key = f"premium_{plan_name}"
+                plan_settings = config.get(plan_key, {})
+                plan_settings["torrent_size_limit_mb"] = val
+                await db.update_public_config(plan_key, plan_settings)
+
+            limit_str = f"{val} MB" if val > 0 else "Unlimited"
+            await callback_query.answer(f"{plan_name.capitalize()} Torrent size limit updated to {limit_str}.", show_alert=True)
+            callback_query.data = f"admin_edit_plan_{plan_name}"
+            await admin_callback(client, callback_query)
+        return
+
+    if data.startswith("prompt_prem_torrent_custom_"):
+        plan_name = data.replace("prompt_prem_torrent_custom_", "")
+        admin_sessions[user_id] = {"state": f"awaiting_premium_{plan_name}_torrent", "msg_id": callback_query.message.id}
+        try:
+            await callback_query.message.edit_text(
+                "🧲 **Send the new torrent size limit.**\n\n"
+                "Examples: `5 GB`, `2048 MB`, or `0` for Unlimited.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
+            )
+        except MessageNotModified:
+            pass
         return
 
     if data.startswith("admin_prem_cur_"):
@@ -3602,7 +3674,7 @@ async def handle_admin_text(client, message):
 
     if isinstance(state, str) and state.startswith("awaiting_premium_"):
         parts = state.replace("awaiting_premium_", "").split("_")
-        if len(parts) >= 2 and parts[0] in ["standard", "deluxe"]:
+        if len(parts) >= 2 and parts[0] in ["free", "standard", "deluxe"]:
             plan_name = parts[0]
             field = parts[1]
             val = message.text.strip() if message.text else ""
@@ -3625,6 +3697,44 @@ async def handle_admin_text(client, message):
                 await db.update_public_config(plan_key, plan_settings)
                 await edit_or_reply(client, message, msg_id, f"✅ {plan_name.capitalize()} fiat price updated to `{formatted_price}`.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]])
+                )
+                admin_sessions.pop(user_id, None)
+                return
+
+            if field == "torrent":
+                val_lower = val.lower().strip()
+                if val_lower in ["0", "unlimited", "none"]:
+                    val_mb = 0
+                elif "gb" in val_lower:
+                    try:
+                        gb_val = float(val_lower.replace("gb", "").strip())
+                        val_mb = int(gb_val * 1024)
+                    except ValueError:
+                        await edit_or_reply(client, message, msg_id, "❌ Invalid GB format. Please use something like `5 GB`.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
+                        )
+                        return
+                else:
+                    try:
+                        val_mb = int(float(val_lower.replace("mb", "").strip()))
+                    except ValueError:
+                        await edit_or_reply(client, message, msg_id, "❌ Invalid format. Use `5 GB`, `2048 MB`, or `0` for unlimited.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
+                        )
+                        return
+
+                if plan_name == "free":
+                    await db.update_public_config("torrent_size_limit_mb_free", val_mb)
+                else:
+                    plan_settings["torrent_size_limit_mb"] = val_mb
+                    await db.update_public_config(plan_key, plan_settings)
+
+                display_val = f"{val_mb} MB" if val_mb > 0 else "Unlimited"
+                if val_mb >= 1024:
+                    display_val = f"{val_mb / 1024:.2f} GB"
+
+                await edit_or_reply(client, message, msg_id, f"✅ **Success!**\n\nThe Torrent Size Limit for the **{plan_name.capitalize()} Plan** has been updated to **{display_val}**.\n\nChanges have been saved and applied globally.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")]])
                 )
                 admin_sessions.pop(user_id, None)
                 return
@@ -3681,7 +3791,7 @@ async def handle_admin_text(client, message):
 
     if isinstance(state, dict) and state.get("state", "").startswith("awaiting_premium_"):
         parts = state["state"].replace("awaiting_premium_", "").split("_")
-        if len(parts) >= 2 and parts[0] in ["standard", "deluxe"]:
+        if len(parts) >= 2 and parts[0] in ["free", "standard", "deluxe"]:
             plan_name = parts[0]
             field = parts[1]
 

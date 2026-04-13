@@ -13,6 +13,7 @@ from utils.log import get_logger
 from database import db
 from plugins.user_setup import track_tool_usage
 from config import Config
+from utils.XTVengine import XTVEngine
 
 logger = get_logger("tools.TorrentDownloader")
 
@@ -21,10 +22,30 @@ RESULTS_PER_PAGE = 5
 MAX_RESULTS_PER_PROVIDER = 20
 SEARCH_TIMEOUT = 15  # seconds per provider
 SIZE_LIMITS = {
-    "free": 2 * 1024 * 1024 * 1024,       # 2 GB
+    "free": 2 * 1024 * 1024 * 1024,       # 2 GB (fallback defaults)
     "standard": 5 * 1024 * 1024 * 1024,    # 5 GB
     "deluxe": 0,                             # 0 = unlimited
 }
+
+
+async def _get_size_limit(user_id: int) -> tuple:
+    """Returns (size_limit_bytes, plan_name). In non-public mode, returns 0 (unlimited)."""
+    if not Config.PUBLIC_MODE:
+        return 0, "admin"
+
+    plan_name, _ = await _get_user_plan_info(user_id)
+    config = await db.get_public_config()
+
+    if plan_name == "free":
+        limit_mb = config.get("torrent_size_limit_mb_free", 2048)  # default 2 GB
+    else:
+        plan_settings = config.get(f"premium_{plan_name}", {})
+        limit_mb = plan_settings.get("torrent_size_limit_mb", 0)  # default unlimited for premium
+
+    if limit_mb <= 0:
+        return 0, plan_name
+
+    return limit_mb * 1024 * 1024, plan_name
 
 CATEGORY_MAP = {
     "all": {"1337x": "", "tgx": "", "lime": ""},
@@ -126,10 +147,10 @@ def _format_file_size(size_bytes: int) -> str:
 
 
 def _progress_bar(percent: float, length: int = 10) -> str:
-    """Generate a progress bar using block characters."""
+    """Generate a progress bar using ■□ style."""
     filled = int(length * percent / 100)
-    bar = "\u2588" * filled + "\u2591" * (length - filled)
-    return f"[{bar}] {percent:.1f}%"
+    bar = "■" * filled + "□" * (length - filled)
+    return f"[{bar}]"
 
 
 def _format_eta(seconds: float) -> str:
@@ -139,11 +160,22 @@ def _format_eta(seconds: float) -> str:
     if seconds < 60:
         return f"{int(seconds)}s"
     elif seconds < 3600:
-        return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+        m = int(seconds // 60)
+        s = int(seconds % 60)
+        return f"{m}m, {s}s"
     else:
         h = int(seconds // 3600)
         m = int((seconds % 3600) // 60)
-        return f"{h}h {m}m"
+        return f"{h}h, {m}m"
+
+
+def _format_elapsed(seconds: float) -> str:
+    """Format elapsed time as MM:SS or HH:MM:SS."""
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
 
 
 def _format_speed(bytes_per_sec: float) -> str:
@@ -153,9 +185,9 @@ def _format_speed(bytes_per_sec: float) -> str:
     if bytes_per_sec < 1024:
         return f"{bytes_per_sec:.0f} B/s"
     elif bytes_per_sec < 1024**2:
-        return f"{bytes_per_sec / 1024:.1f} KB/s"
+        return f"{bytes_per_sec / 1024:.2f} KB/s"
     else:
-        return f"{bytes_per_sec / 1024**2:.1f} MB/s"
+        return f"{bytes_per_sec / 1024**2:.2f} MB/s"
 
 
 def _get_type_icon(filename: str) -> str:
@@ -514,9 +546,13 @@ async def render_search_results(client, user_id: int, chat_id: int, bot_msg_id: 
         try:
             await client.edit_message_text(
                 chat_id, bot_msg_id,
-                "\U0001F50D **No results found.**\n\nTry a different search term or category.",
+                f"🔍 **No Results Found**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"Try a different search term or category.\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back to Menu", callback_data="torrent_downloader_menu")]
+                    [InlineKeyboardButton("🔙 Back to Menu", callback_data="torrent_downloader_menu")]
                 ])
             )
         except MessageNotModified:
@@ -529,17 +565,17 @@ async def render_search_results(client, user_id: int, chat_id: int, bot_msg_id: 
     total_pages = (total + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE
 
     text = (
-        f"\U0001F50D **Search:** `{query}`\n"
-        f"\U0001F3F7 **Category:** {category.title()}\n"
-        f"\U0001F4CA **Results:** {total} found (page {page + 1}/{total_pages})\n"
-        f"{'━' * 26}\n\n"
+        f"🔍 **Search:** `{query}`\n"
+        f"🏷 **Category:** {category.title()}\n"
+        f"📊 **Results:** {total} found (page {page + 1}/{total_pages})\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
     )
 
     buttons = []
     for i, r in enumerate(page_results):
         idx = start + i  # absolute index
         seeders = r.get("seeders", 0)
-        seed_emoji = "\U0001F7E2" if seeders > 10 else ("\U0001F7E1" if seeders > 0 else "\U0001F534")
+        seed_emoji = "🟢" if seeders > 10 else ("🟡" if seeders > 0 else "🔴")
         size = r.get("size", "?")
         provider = r.get("provider", "?")
 
@@ -549,12 +585,12 @@ async def render_search_results(client, user_id: int, chat_id: int, bot_msg_id: 
 
         text += (
             f"**{idx + 1}.** {name}\n"
-            f"   {seed_emoji} S:{seeders} | L:{r.get('leechers', 0)} | "
-            f"\U0001F4BE {size} | \U0001F310 {provider}\n\n"
+            f"   {seed_emoji} S:`{seeders}` | L:`{r.get('leechers', 0)}` | "
+            f"💾 `{size}` | 🌐 `{provider}`\n\n"
         )
         buttons.append([
-            InlineKeyboardButton(f"\U0001F4CB #{idx + 1} Info", callback_data=f"tdl_info_{idx}"),
-            InlineKeyboardButton(f"\u2B07 Download", callback_data=f"torrent_dl_mag_{idx}"),
+            InlineKeyboardButton(f"📋 #{idx + 1} Info", callback_data=f"tdl_info_{idx}"),
+            InlineKeyboardButton(f"⬇ Download", callback_data=f"torrent_dl_mag_{idx}"),
         ])
 
     # Navigation buttons
@@ -568,11 +604,11 @@ async def render_search_results(client, user_id: int, chat_id: int, bot_msg_id: 
 
     # Bottom row
     buttons.append([
-        InlineKeyboardButton("\U0001F4DC History", callback_data="tdl_history"),
-        InlineKeyboardButton("\u2B50 Favorites", callback_data="tdl_favorites"),
+        InlineKeyboardButton("📜 History", callback_data="tdl_history"),
+        InlineKeyboardButton("⭐ Favorites", callback_data="tdl_favorites"),
     ])
     buttons.append([
-        InlineKeyboardButton("\U0001F519 Back to Menu", callback_data="torrent_downloader_menu")
+        InlineKeyboardButton("🔙 Back to Menu", callback_data="torrent_downloader_menu")
     ])
 
     update_data(user_id, "search_page", page)
@@ -595,8 +631,8 @@ def _render_file_selection_text(files: list, selected: set, sort_by: str = "defa
         sorted_files.sort(key=lambda x: x[1].get("name", "").lower())
 
     total_selected_size = 0
-    text = "\U0001F4C2 **Select Files to Process**\n"
-    text += f"{'━' * 26}\n\n"
+    text = "📂 **Select Files to Process**\n"
+    text += f"━━━━━━━━━━━━━━━━━━━━\n\n"
 
     for orig_idx, f in sorted_files:
         name = f.get("name", "unknown")
@@ -611,11 +647,13 @@ def _render_file_selection_text(files: list, selected: set, sort_by: str = "defa
             short_name = short_name[:37] + "..."
 
         text += f"{check} {icon} `{short_name}`\n"
-        text += f"     \U0001F4BE {_format_file_size(size)}\n"
+        text += f"     💾 `{_format_file_size(size)}`\n"
 
-    text += f"\n{'━' * 26}\n"
-    text += f"\U0001F4CA **Selected:** {len(selected)}/{len(files)} files\n"
-    text += f"\U0001F4BE **Total Size:** {_format_file_size(total_selected_size)}\n"
+    text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"> **Selected:** `{len(selected)}/{len(files)} files`\n"
+    text += f"> **Total Size:** `{_format_file_size(total_selected_size)}`\n"
+    text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"{XTVEngine.get_signature()}"
 
     return text
 
@@ -636,11 +674,14 @@ async def handle_torrent_menu(client, callback_query: CallbackQuery):
     if not healthy:
         try:
             await callback_query.message.edit_text(
-                "\u274C **Torrent Downloader**\n\n"
-                "\u26A0\uFE0F aria2 service is not available.\n"
-                "Please contact the admin to restart the aria2 daemon.",
+                f"🧲 **Torrent Downloader**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"⚠️ aria2 service is not available.\n"
+                f"Please contact the admin to restart the aria2 daemon.\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back", callback_data="help_close")]
+                    [InlineKeyboardButton("🔙 Back", callback_data="help_close")]
                 ])
             )
         except MessageNotModified:
@@ -648,25 +689,28 @@ async def handle_torrent_menu(client, callback_query: CallbackQuery):
         return
 
     # Check plan for torrent feature
-    plan_name, plan_features = await _get_user_plan_info(user_id)
+    size_limit, plan_name = await _get_size_limit(user_id)
+    limit_display = f"`{_format_file_size(size_limit)}`" if size_limit > 0 else "`Unlimited`"
 
     text = (
-        "\U0001F9F2 **Torrent Downloader**\n"
-        f"{'━' * 26}\n\n"
-        f"\U0001F4B3 **Plan:** {plan_name.title()}\n"
-        f"\U0001F4BE **Size Limit:** {_format_file_size(SIZE_LIMITS.get(plan_name, SIZE_LIMITS['free'])) if SIZE_LIMITS.get(plan_name, SIZE_LIMITS['free']) > 0 else 'Unlimited'}\n\n"
-        "> Search and download torrents directly.\n"
-        "> Files are processed through the bot pipeline.\n"
+        f"🧲 **Torrent Downloader**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"> **Plan:** `{plan_name.title()}`\n"
+        f"> **Size Limit:** {limit_display}\n\n"
+        f"Search and download torrents directly.\n"
+        f"Files are processed through the bot pipeline.\n"
+        f"\n━━━━━━━━━━━━━━━━━━━━\n"
+        f"{XTVEngine.get_signature()}"
     )
 
     buttons = [
-        [InlineKeyboardButton("\U0001F50D Search Torrent", callback_data="torrent_search_prompt")],
+        [InlineKeyboardButton("🔍 Search Torrent", callback_data="torrent_search_prompt")],
         [
-            InlineKeyboardButton("\U0001F4DC Recent Searches", callback_data="tdl_history"),
-            InlineKeyboardButton("\u2B50 Favorites", callback_data="tdl_favorites"),
+            InlineKeyboardButton("📜 Recent Searches", callback_data="tdl_history"),
+            InlineKeyboardButton("⭐ Favorites", callback_data="tdl_favorites"),
         ],
-        [InlineKeyboardButton("\U0001F4CA Download History", callback_data="tdl_dl_history")],
-        [InlineKeyboardButton("\U0001F519 Back", callback_data="help_close")],
+        [InlineKeyboardButton("📊 Download History", callback_data="tdl_dl_history")],
+        [InlineKeyboardButton("🔙 Back", callback_data="help_close")],
     ]
 
     try:
@@ -692,25 +736,28 @@ async def handle_torrent_search_prompt(client, callback_query: CallbackQuery):
 
     buttons = [
         [
-            InlineKeyboardButton("\U0001F30D All", callback_data="tdl_cat_all"),
-            InlineKeyboardButton("\U0001F3AC Movies", callback_data="tdl_cat_movies"),
+            InlineKeyboardButton("🌍 All", callback_data="tdl_cat_all"),
+            InlineKeyboardButton("🎬 Movies", callback_data="tdl_cat_movies"),
         ],
         [
-            InlineKeyboardButton("\U0001F4FA TV Shows", callback_data="tdl_cat_tv"),
-            InlineKeyboardButton("\U0001F3B5 Music", callback_data="tdl_cat_music"),
+            InlineKeyboardButton("📺 TV Shows", callback_data="tdl_cat_tv"),
+            InlineKeyboardButton("🎵 Music", callback_data="tdl_cat_music"),
         ],
         [
-            InlineKeyboardButton("\U0001F3AE Games", callback_data="tdl_cat_games"),
-            InlineKeyboardButton("\U0001F4BB Software", callback_data="tdl_cat_software"),
+            InlineKeyboardButton("🎮 Games", callback_data="tdl_cat_games"),
+            InlineKeyboardButton("💻 Software", callback_data="tdl_cat_software"),
         ],
-        [InlineKeyboardButton("\U0001F338 Anime", callback_data="tdl_cat_anime")],
-        [InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")],
+        [InlineKeyboardButton("🌸 Anime", callback_data="tdl_cat_anime")],
+        [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")],
     ]
 
     try:
         await callback_query.message.edit_text(
-            "\U0001F3F7 **Select Category**\n\n"
-            "Choose a category to narrow your search:",
+            f"🏷 **Select Category**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"Choose a category to narrow your search.\n"
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
     except MessageNotModified:
@@ -730,11 +777,14 @@ async def handle_category_select(client, callback_query: CallbackQuery):
 
     try:
         await callback_query.message.edit_text(
-            f"\U0001F50D **Search Torrents** ({category.title()})\n\n"
-            "> Send me the torrent name or keywords to search.\n\n"
-            "_(Send /cancel to abort)_",
+            f"🔍 **Search Torrents** — {category.title()}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"Send me the torrent name or keywords to search.\n\n"
+            f"_(Send /cancel to abort)_\n"
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("\u274C Cancel", callback_data="torrent_downloader_menu")]
+                [InlineKeyboardButton("❌ Cancel", callback_data="torrent_downloader_menu")]
             ]),
         )
     except MessageNotModified:
@@ -753,7 +803,7 @@ async def torrent_message_handler(client, message):
     if state == "awaiting_torrent_search":
         query = message.text.strip()
         if not query or len(query) < 2:
-            await message.reply_text("\u26A0\uFE0F Please enter at least 2 characters.")
+            await message.reply_text("⚠️ Please enter at least 2 characters.")
             raise StopPropagation
 
         data = get_data(user_id)
@@ -769,8 +819,11 @@ async def torrent_message_handler(client, message):
 
         # Show searching message
         status_msg = await message.reply_text(
-            f"\U0001F50E **Searching** `{query}` in **{category.title()}**...\n\n"
-            "_Checking multiple providers..._"
+            f"🔎 **Searching** `{query}` in **{category.title()}**...\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"_Checking multiple providers..._\n"
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}"
         )
 
         results = await search_torrents(query, category)
@@ -790,11 +843,14 @@ async def torrent_message_handler(client, message):
             data = get_data(user_id)
             update_data(user_id, "direct_magnet", text)
             set_state(user_id, "torrent_downloading")
-            status_msg = await message.reply_text("\U0001F9F2 **Starting download...**")
+            status_msg = await message.reply_text(
+                f"🧲 **Starting download...**\n"
+                f"━━━━━━━━━━━━━━━━━━━━"
+            )
             await start_torrent_download(client, user_id, message.chat.id, status_msg.id, text)
             raise StopPropagation
         else:
-            await message.reply_text("\u26A0\uFE0F Please send a valid magnet link starting with `magnet:?`")
+            await message.reply_text("⚠️ Please send a valid magnet link starting with `magnet:?`")
             raise StopPropagation
 
     # Not our state - let it fall through
@@ -846,23 +902,28 @@ async def handle_info_view(client, callback_query: CallbackQuery):
         return
 
     r = results[idx]
+    seeders = r.get('seeders', 0)
+    seed_emoji = "🟢" if seeders > 10 else ("🟡" if seeders > 0 else "🔴")
+
     text = (
-        f"\U0001F4CB **Torrent Details**\n"
-        f"{'━' * 26}\n\n"
-        f"\U0001F4DD **Name:** {r['name']}\n\n"
-        f"\U0001F4BE **Size:** {r.get('size', 'Unknown')}\n"
-        f"\U0001F7E2 **Seeders:** {r.get('seeders', 0)}\n"
-        f"\U0001F534 **Leechers:** {r.get('leechers', 0)}\n"
-        f"\U0001F4C5 **Date:** {r.get('date', 'Unknown')}\n"
-        f"\U0001F310 **Provider:** {r.get('provider', 'Unknown')}\n"
+        f"📋 **Torrent Details**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📝 **Name:** {r['name']}\n\n"
+        f"> **Size:** `{r.get('size', 'Unknown')}`\n"
+        f"> {seed_emoji} **Seeders:** `{seeders}`\n"
+        f"> 🔴 **Leechers:** `{r.get('leechers', 0)}`\n"
+        f"> **Date:** `{r.get('date', 'Unknown')}`\n"
+        f"> **Provider:** `{r.get('provider', 'Unknown')}`\n"
+        f"\n━━━━━━━━━━━━━━━━━━━━\n"
+        f"{XTVEngine.get_signature()}"
     )
 
     buttons = [
         [
-            InlineKeyboardButton("\u2B07 Download", callback_data=f"torrent_dl_mag_{idx}"),
-            InlineKeyboardButton("\u2B50 Favorite", callback_data=f"tdl_fav_{idx}"),
+            InlineKeyboardButton("⬇ Download", callback_data=f"torrent_dl_mag_{idx}"),
+            InlineKeyboardButton("⭐ Favorite", callback_data=f"tdl_fav_{idx}"),
         ],
-        [InlineKeyboardButton("\U0001F519 Back to Results", callback_data="tdl_back_results")],
+        [InlineKeyboardButton("🔙 Back to Results", callback_data="tdl_back_results")],
     ]
 
     try:
@@ -908,7 +969,8 @@ async def handle_download_magnet(client, callback_query: CallbackQuery):
     if not magnet and r.get("detail_url"):
         try:
             await callback_query.message.edit_text(
-                "\U0001F517 **Fetching magnet link...**"
+                f"🔗 **Fetching magnet link...**\n"
+                f"━━━━━━━━━━━━━━━━━━━━"
             )
         except MessageNotModified:
             pass
@@ -920,10 +982,13 @@ async def handle_download_magnet(client, callback_query: CallbackQuery):
     if not magnet:
         try:
             await callback_query.message.edit_text(
-                "\u274C **Could not retrieve magnet link.**\n"
-                "This torrent may no longer be available.",
+                f"❌ **Could Not Retrieve Magnet**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"This torrent may no longer be available.\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back", callback_data="tdl_back_results")]
+                    [InlineKeyboardButton("🔙 Back", callback_data="tdl_back_results")]
                 ])
             )
         except MessageNotModified:
@@ -931,19 +996,22 @@ async def handle_download_magnet(client, callback_query: CallbackQuery):
         return
 
     # Check size limit
-    plan_name, _ = await _get_user_plan_info(user_id)
-    size_limit = SIZE_LIMITS.get(plan_name, SIZE_LIMITS["free"])
+    size_limit, plan_name = await _get_size_limit(user_id)
     size_bytes = r.get("size_bytes", 0)
 
     if size_limit > 0 and size_bytes > 0 and size_bytes > size_limit:
         try:
             await callback_query.message.edit_text(
-                f"\u274C **File too large for your plan.**\n\n"
-                f"\U0001F4BE Size: {_format_file_size(size_bytes)}\n"
-                f"\U0001F4B3 Plan: {plan_name.title()} (limit: {_format_file_size(size_limit)})\n\n"
-                "Upgrade your plan for larger downloads.",
+                f"❌ **File Too Large**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"This torrent exceeds your plan's size limit.\n\n"
+                f"> **Size:** `{_format_file_size(size_bytes)}`\n"
+                f"> **Plan ({plan_name.title()}):** `{_format_file_size(size_limit)}`\n\n"
+                f"Upgrade your plan for larger downloads.\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back", callback_data="tdl_back_results")]
+                    [InlineKeyboardButton("🔙 Back", callback_data="tdl_back_results")]
                 ])
             )
         except MessageNotModified:
@@ -994,14 +1062,19 @@ async def start_torrent_download(client, user_id: int, chat_id: int, msg_id: int
         update_data(user_id, "active_gid", gid)
 
         try:
+            name_display = torrent_name[:60] if torrent_name else "Torrent"
             await client.edit_message_text(
                 chat_id, msg_id,
-                f"\u2B07 **Downloading...**\n"
-                f"\U0001F4DD {torrent_name[:60] if torrent_name else 'Torrent'}\n\n"
-                f"{_progress_bar(0)}\n"
-                f"\U0001F4E5 Waiting for metadata...",
+                f"📥 **Downloading Torrent...**\n"
+                f"📝 `{name_display}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"**Progress:**  `0.0%`\n"
+                f"{_progress_bar(0)}\n\n"
+                f"> ⏳ Waiting for metadata...\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\u274C Cancel Download", callback_data="tdl_dl_cancel")]
+                    [InlineKeyboardButton("❌ Cancel Download", callback_data="tdl_dl_cancel")]
                 ])
             )
         except MessageNotModified:
@@ -1019,9 +1092,13 @@ async def start_torrent_download(client, user_id: int, chat_id: int, msg_id: int
         try:
             await client.edit_message_text(
                 chat_id, msg_id,
-                f"\u274C **Download failed.**\n\n`{e}`",
+                f"❌ **Download Failed**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"`{e}`\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")]
+                    [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
             )
         except MessageNotModified:
@@ -1032,6 +1109,7 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
     """Monitor aria2 download progress."""
     loop = asyncio.get_event_loop()
     last_update = 0
+    start_time = time.time()
     update_interval = 3  # seconds
 
     while True:
@@ -1062,8 +1140,7 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
 
         # Check plan size limit after metadata
         if total_length > 0:
-            plan_name, _ = await _get_user_plan_info(user_id)
-            size_limit = SIZE_LIMITS.get(plan_name, SIZE_LIMITS["free"])
+            size_limit, plan_name = await _get_size_limit(user_id)
             if size_limit > 0 and total_length > size_limit:
                 try:
                     await loop.run_in_executor(None, lambda: server.aria2.remove(gid))
@@ -1075,11 +1152,15 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
                 try:
                     await client.edit_message_text(
                         chat_id, msg_id,
-                        f"\u274C **Download cancelled - exceeds size limit.**\n\n"
-                        f"\U0001F4BE Torrent size: {_format_file_size(total_length)}\n"
-                        f"\U0001F4B3 Your limit ({plan_name}): {_format_file_size(size_limit)}",
+                        f"❌ **Download Cancelled**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                        f"Torrent exceeds your plan's size limit.\n\n"
+                        f"> **Torrent Size:** `{_format_file_size(total_length)}`\n"
+                        f"> **Your Limit ({plan_name.title()}):** `{_format_file_size(size_limit)}`\n"
+                        f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                        f"{XTVEngine.get_signature()}",
                         reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")]
+                            [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                         ])
                     )
                 except MessageNotModified:
@@ -1139,9 +1220,13 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
             try:
                 await client.edit_message_text(
                     chat_id, msg_id,
-                    f"\u274C **Download failed.**\n\n`{error_msg}`",
+                    f"❌ **Download Failed**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                    f"`{error_msg}`\n"
+                    f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{XTVEngine.get_signature()}",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")]
+                        [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                     ])
                 )
             except MessageNotModified:
@@ -1160,19 +1245,25 @@ async def monitor_download(client, user_id, chat_id, msg_id, server, gid, torren
                 eta_seconds = 0
 
             name_display = torrent_name[:50] if torrent_name else "Torrent"
+            elapsed = time.time() - start_time
             progress_text = (
-                f"\u2B07 **Downloading...**\n"
-                f"\U0001F4DD {name_display}\n\n"
-                f"{_progress_bar(percent)}\n"
-                f"\U0001F4E5 {_format_file_size(completed)} / {_format_file_size(total_length)}\n"
-                f"\U0001F680 {_format_speed(speed)} | \u23F1 ETA: {_format_eta(eta_seconds)}"
+                f"📥 **Downloading Torrent...**\n"
+                f"📝 `{name_display}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"**Progress:**  `{percent:.1f}%`\n"
+                f"{_progress_bar(percent)}\n\n"
+                f"> **Size:** `{_format_file_size(completed)}` / `{_format_file_size(total_length)}`\n"
+                f"> **Speed:** `{_format_speed(speed)}`\n"
+                f"> **Elapsed:** `{_format_elapsed(elapsed)}` · **ETA:** `{_format_eta(eta_seconds)}`\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}"
             )
 
             try:
                 await client.edit_message_text(
                     chat_id, msg_id, progress_text,
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("\u274C Cancel Download", callback_data="tdl_dl_cancel")]
+                        [InlineKeyboardButton("❌ Cancel Download", callback_data="tdl_dl_cancel")]
                     ])
                 )
             except MessageNotModified:
@@ -1195,7 +1286,8 @@ async def handle_download_cancel(client, callback_query: CallbackQuery):
 
     try:
         await callback_query.message.edit_text(
-            "\u23F3 **Cancelling download...**"
+            f"⏳ **Cancelling download...**\n"
+            f"━━━━━━━━━━━━━━━━━━━━"
         )
     except MessageNotModified:
         pass
@@ -1216,9 +1308,13 @@ async def render_file_selection(client, user_id: int, chat_id: int, msg_id: int)
         try:
             await client.edit_message_text(
                 chat_id, msg_id,
-                "\u26A0\uFE0F **No files found in download.**",
+                f"⚠️ **No Files Found**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"No downloadable files were found in this torrent.\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")]
+                    [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
             )
         except MessageNotModified:
@@ -1235,16 +1331,16 @@ async def render_file_selection(client, user_id: int, chat_id: int, msg_id: int)
         buttons.append([InlineKeyboardButton(f"{check} {short}", callback_data=f"tdl_sel_{i}")])
 
     buttons.append([
-        InlineKeyboardButton("\u2705 Select All", callback_data="tdl_sel_all"),
-        InlineKeyboardButton("\U0001F4CA Sort: Size", callback_data="tdl_sort_size"),
+        InlineKeyboardButton("✅ Select All", callback_data="tdl_sel_all"),
+        InlineKeyboardButton("📊 Sort: Size", callback_data="tdl_sort_size"),
     ])
     buttons.append([
-        InlineKeyboardButton("\U0001F521 Sort: Name", callback_data="tdl_sort_name"),
+        InlineKeyboardButton("🔡 Sort: Name", callback_data="tdl_sort_name"),
     ])
 
     if selected:
-        buttons.append([InlineKeyboardButton("\u2705 Process Selected", callback_data="tdl_process")])
-    buttons.append([InlineKeyboardButton("\u274C Cancel", callback_data="tdl_cancel")])
+        buttons.append([InlineKeyboardButton("✅ Process Selected", callback_data="tdl_process")])
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="tdl_cancel")])
 
     try:
         await client.edit_message_text(
@@ -1317,9 +1413,13 @@ async def tdl_cancel_cb(client, callback_query: CallbackQuery):
 
     try:
         await callback_query.message.edit_text(
-            "\u274C **Torrent operation cancelled.**",
+            f"❌ **Torrent Operation Cancelled**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"The operation has been cancelled.\n"
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("\U0001F519 Back to Menu", callback_data="torrent_downloader_menu")]
+                [InlineKeyboardButton("🔙 Back to Menu", callback_data="torrent_downloader_menu")]
             ])
         )
     except MessageNotModified:
@@ -1343,8 +1443,11 @@ async def tdl_process_cb(client, callback_query: CallbackQuery):
 
     try:
         await callback_query.message.edit_text(
-            f"\u2699\uFE0F **Processing {len(selected_files)} file(s)...**\n\n"
-            "_Files will be sent through the bot pipeline._"
+            f"⚙️ **Processing {len(selected_files)} file(s)...**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"Files will be sent through the bot pipeline.\n"
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}"
         )
     except MessageNotModified:
         pass
@@ -1358,7 +1461,7 @@ async def tdl_process_cb(client, callback_query: CallbackQuery):
             file_msg = await client.send_document(
                 callback_query.message.chat.id,
                 file_path,
-                caption=f"\U0001F4E4 Processing: {sf.get('name', 'file')}",
+                caption=f"📤 Processing: {sf.get('name', 'file')}",
             )
 
             process_data = {
@@ -1376,7 +1479,7 @@ async def tdl_process_cb(client, callback_query: CallbackQuery):
             logger.error(f"File processing error for {sf.get('name')}: {e}")
             await client.send_message(
                 callback_query.message.chat.id,
-                f"\u274C Failed to process `{sf.get('name', 'file')}`: {e}"
+                f"❌ Failed to process `{sf.get('name', 'file')}`: {e}"
             )
 
     # Update download record
@@ -1425,31 +1528,35 @@ async def handle_favorites_list(client, callback_query: CallbackQuery):
     if not favorites:
         try:
             await callback_query.message.edit_text(
-                "\u2B50 **Favorites**\n\nNo saved favorites yet.",
+                f"⭐ **Favorites**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"No saved favorites yet.\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")]
+                    [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
             )
         except MessageNotModified:
             pass
         return
 
-    text = "\u2B50 **Your Favorites**\n" + "━" * 26 + "\n\n"
+    text = f"⭐ **Your Favorites**\n━━━━━━━━━━━━━━━━━━━━\n\n"
     buttons = []
 
     for i, fav in enumerate(favorites):
         name = fav.get("name", "Unknown")
         if len(name) > 45:
             name = name[:42] + "..."
-        text += f"**{i + 1}.** {name}\n   \U0001F4BE {fav.get('size', '?')} | \U0001F310 {fav.get('provider', '?')}\n\n"
+        text += f"**{i + 1}.** {name}\n   💾 `{fav.get('size', '?')}` | 🌐 `{fav.get('provider', '?')}`\n\n"
 
         fav_id = str(fav.get("_id", ""))
         buttons.append([
-            InlineKeyboardButton(f"\u2B07 #{i + 1}", callback_data=f"tdl_fav_dl_{fav_id[:20]}"),
-            InlineKeyboardButton(f"\U0001F5D1 Remove", callback_data=f"tdl_fav_rm_{fav_id[:20]}"),
+            InlineKeyboardButton(f"⬇ #{i + 1}", callback_data=f"tdl_fav_dl_{fav_id[:20]}"),
+            InlineKeyboardButton(f"🗑 Remove", callback_data=f"tdl_fav_rm_{fav_id[:20]}"),
         ])
 
-    buttons.append([InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")])
 
     # Store favorites in session for ID lookup
     update_data(user_id, "fav_list", favorites)
@@ -1533,23 +1640,27 @@ async def handle_search_history(client, callback_query: CallbackQuery):
     if not history:
         try:
             await callback_query.message.edit_text(
-                "\U0001F4DC **Recent Searches**\n\nNo search history yet.",
+                f"📜 **Recent Searches**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"No search history yet.\n"
+                f"\n━━━━━━━━━━━━━━━━━━━━\n"
+                f"{XTVEngine.get_signature()}",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")]
+                    [InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")]
                 ])
             )
         except MessageNotModified:
             pass
         return
 
-    text = "\U0001F4DC **Recent Searches**\n" + "━" * 26 + "\n\n"
+    text = f"📜 **Recent Searches**\n━━━━━━━━━━━━━━━━━━━━\n\n"
     buttons = []
 
     for i, q in enumerate(history):
         text += f"**{i + 1}.** `{q}`\n"
-        buttons.append([InlineKeyboardButton(f"\U0001F50D {q[:30]}", callback_data=f"tdl_history_{i}")])
+        buttons.append([InlineKeyboardButton(f"🔍 {q[:30]}", callback_data=f"tdl_history_{i}")])
 
-    buttons.append([InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")])
 
     update_data(user_id, "search_history_list", history)
 
@@ -1581,8 +1692,11 @@ async def handle_history_rerun(client, callback_query: CallbackQuery):
 
     try:
         await callback_query.message.edit_text(
-            f"\U0001F50E **Searching** `{query}`...\n\n"
-            "_Checking multiple providers..._"
+            f"🔎 **Searching** `{query}`...\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"_Checking multiple providers..._\n"
+            f"\n━━━━━━━━━━━━━━━━━━━━\n"
+            f"{XTVEngine.get_signature()}"
         )
     except MessageNotModified:
         pass
@@ -1623,21 +1737,21 @@ async def render_download_history(client, user_id, chat_id, msg_id, page=0):
     stats = await db.get_torrent_stats(user_id)
 
     text = (
-        "\U0001F4CA **Download History**\n"
-        f"{'━' * 26}\n"
-        f"Total: {stats['total']} | \u2705 {stats['completed']} | \u274C {stats['failed']}\n\n"
+        f"📊 **Download History**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"> Total: `{stats['total']}` | ✅ `{stats['completed']}` | ❌ `{stats['failed']}`\n\n"
     )
 
     if not history:
-        text += "_No downloads yet._"
+        text += "_No downloads yet._\n"
 
     for i, dl in enumerate(history):
         status_icon = {
-            "completed": "\u2705",
-            "failed": "\u274C",
-            "cancelled": "\u23F9",
-            "starting": "\u23F3",
-        }.get(dl.get("status", ""), "\u2753")
+            "completed": "✅",
+            "failed": "❌",
+            "cancelled": "⏹",
+            "starting": "⏳",
+        }.get(dl.get("status", ""), "❓")
 
         name = dl.get("name", "Unknown")
         if len(name) > 40:
@@ -1645,20 +1759,23 @@ async def render_download_history(client, user_id, chat_id, msg_id, page=0):
 
         text += (
             f"{status_icon} **{name}**\n"
-            f"   \U0001F4BE {dl.get('size', '?')} | {dl.get('provider', '?')}\n\n"
+            f"   💾 `{dl.get('size', '?')}` | `{dl.get('provider', '?')}`\n\n"
         )
+
+    text += f"━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"{XTVEngine.get_signature()}"
 
     update_data(user_id, "dl_hist_page", page)
 
     buttons = []
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("\u25C0 Prev", callback_data=f"tdl_dl_hist_p_{page - 1}"))
+        nav.append(InlineKeyboardButton("◀ Prev", callback_data=f"tdl_dl_hist_p_{page - 1}"))
     if len(history) == per_page:
-        nav.append(InlineKeyboardButton("Next \u25B6", callback_data=f"tdl_dl_hist_p_{page + 1}"))
+        nav.append(InlineKeyboardButton("Next ▶", callback_data=f"tdl_dl_hist_p_{page + 1}"))
     if nav:
         buttons.append(nav)
-    buttons.append([InlineKeyboardButton("\U0001F519 Back", callback_data="torrent_downloader_menu")])
+    buttons.append([InlineKeyboardButton("🔙 Back", callback_data="torrent_downloader_menu")])
 
     try:
         await client.edit_message_text(
