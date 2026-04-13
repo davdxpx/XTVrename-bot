@@ -49,6 +49,7 @@ import tools.VideoTrimmer
 import tools.MediaInfo
 import tools.VoiceNoteConverter
 import tools.VideoNoteConverter
+import tools.TorrentDownloader
 
 def register_tool_handlers(client, module):
     for name in dir(module):
@@ -68,6 +69,7 @@ register_tool_handlers(app, tools.VideoTrimmer)
 register_tool_handlers(app, tools.MediaInfo)
 register_tool_handlers(app, tools.VoiceNoteConverter)
 register_tool_handlers(app, tools.VideoNoteConverter)
+register_tool_handlers(app, tools.TorrentDownloader)
 
 user_bot = None
 

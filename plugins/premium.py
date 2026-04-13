@@ -133,6 +133,8 @@ async def generate_premium_dashboard(user_id, client):
             display_lines.append("🔄 File Converter")
         if features.get("audio_editor") and not global_toggles.get("audio_editor", True):
             display_lines.append("🎵 Audio Editor")
+        if features.get("torrent_downloader") and not global_toggles.get("torrent_downloader", True):
+            display_lines.append("🧲 Torrent Downloader")
 
         return "\n".join(display_lines) if display_lines else "None"
 
