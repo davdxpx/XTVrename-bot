@@ -33,6 +33,13 @@ async def handle_start_command_unique(client, message):
             try:
                 group_doc = await db.db.file_groups.find_one({"group_id": group_id})
                 if group_doc:
+                    # Check if link has expired
+                    import datetime as _dt
+                    expires_at = group_doc.get("expires_at")
+                    if expires_at and _dt.datetime.utcnow() > expires_at:
+                        await message.reply_text("⏳ **Link Expired**\n\nThis share link has expired and is no longer available.")
+                        raise StopPropagation
+
                     if not Config.PUBLIC_MODE:
                         if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
                             await message.reply_text("❌ Access Denied.")
@@ -60,6 +67,10 @@ async def handle_start_command_unique(client, message):
                             share_display_name = owner_settings["share_display_name"]
                         elif is_owner_premium:
                             # For premium users, disabled by default for privacy reasons
+                            share_display_name = False
+
+                        # privacy_hide_username overrides display name
+                        if owner_settings and owner_settings.get("privacy_hide_username", False):
                             share_display_name = False
 
                         if share_display_name and owner_doc:
@@ -140,6 +151,7 @@ async def handle_start_command_unique(client, message):
                     owner_name = "A user"
                     is_owner_premium = False
                     share_display_name = True
+                    protect = False
 
                     if owner_id:
                         owner_doc = await db.get_user(owner_id)
@@ -150,6 +162,10 @@ async def handle_start_command_unique(client, message):
                         owner_settings = await db.get_settings(owner_id)
                         if owner_settings and "share_display_name" in owner_settings:
                             share_display_name = owner_settings["share_display_name"]
+                        if owner_settings and owner_settings.get("privacy_hide_username", False):
+                            share_display_name = False
+                        if owner_settings and "hide_forward_tags" in owner_settings:
+                            protect = owner_settings["hide_forward_tags"]
 
                     if share_display_name and owner_name != "A user":
                         share_text = f"> **{owner_name}** has shared this file with you."
@@ -163,7 +179,8 @@ async def handle_start_command_unique(client, message):
                         await client.copy_message(
                             chat_id=user_id,
                             from_chat_id=f["channel_id"],
-                            message_id=f["message_id"]
+                            message_id=f["message_id"],
+                            protect_content=protect
                         )
                     except PeerIdInvalid:
                         try:
@@ -171,7 +188,8 @@ async def handle_start_command_unique(client, message):
                             await client.copy_message(
                                 chat_id=user_id,
                                 from_chat_id=f["channel_id"],
-                                message_id=f["message_id"]
+                                message_id=f["message_id"],
+                                protect_content=protect
                             )
                         except Exception as inner_e:
                             logger.error(f"Error serving shared file (Peer fallback failed): {inner_e}")

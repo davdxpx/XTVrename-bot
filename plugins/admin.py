@@ -161,11 +161,14 @@ async def get_admin_access_limits_menu():
 
         buttons.append([InlineKeyboardButton("━━━ 🔧 System Toggles ━━━", callback_data="noop")])
         buttons.append([
-            InlineKeyboardButton(f"💎 Premium: {_status(prem_enabled)}", callback_data="admin_quick_toggle_premium"),
-            InlineKeyboardButton(f"👑 Deluxe: {_status(deluxe_enabled)}", callback_data="admin_quick_toggle_deluxe")
+            InlineKeyboardButton(f"💎 Premium: {_status(prem_enabled)}", callback_data="admin_quick_toggle_premium")
         ])
+        if prem_enabled:
+            row = []
+            row.append(InlineKeyboardButton(f"👑 Deluxe: {_status(deluxe_enabled)}", callback_data="admin_quick_toggle_deluxe"))
+            row.append(InlineKeyboardButton(f"⏳ Trial: {_status(trial_enabled)}", callback_data="admin_quick_toggle_trial"))
+            buttons.append(row)
         buttons.append([
-            InlineKeyboardButton(f"⏳ Trial: {_status(trial_enabled)}", callback_data="admin_quick_toggle_trial"),
             InlineKeyboardButton(f"📁 MyFiles: {_status(myfiles_enabled)}", callback_data="admin_quick_toggle_myfiles")
         ])
         buttons.append([InlineKeyboardButton("━━━ ⚙️ Configuration ━━━", callback_data="noop")])
@@ -3585,6 +3588,24 @@ async def handle_admin_text(client, message):
             config = await db.get_public_config()
             plan_key = f"premium_{plan_name}"
             plan_settings = config.get(plan_key, {})
+
+            if field == "price":
+                try:
+                    float_val = float(val.replace(",", "."))
+                except ValueError:
+                    await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
+                    )
+                    return
+                currency = state_obj.get("currency", "USD") if isinstance(state_obj, dict) else "USD"
+                formatted_price = f"{float_val:g} {currency}"
+                plan_settings["price_string"] = formatted_price
+                await db.update_public_config(plan_key, plan_settings)
+                await edit_or_reply(client, message, msg_id, f"✅ {plan_name.capitalize()} fiat price updated to `{formatted_price}`.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]])
+                )
+                admin_sessions.pop(user_id, None)
+                return
 
             if field in ["egress", "files", "stars"]:
                 val_num = 0

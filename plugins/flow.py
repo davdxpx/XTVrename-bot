@@ -2098,6 +2098,7 @@ async def handle_file_upload(client, message):
     )
 
     is_priority = False
+    has_batch_pro = False
     if Config.PUBLIC_MODE:
         user_doc = await db.get_user(user_id)
         if user_doc and user_doc.get("is_premium"):
@@ -2105,7 +2106,15 @@ async def handle_file_upload(client, message):
             config = await db.get_public_config()
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
-                is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+                plan_features = plan_settings.get("features", {})
+                is_priority = plan_features.get("priority_queue", False)
+                # Check batch_processing_pro: global toggle AND per-plan
+                global_toggles = await db.get_feature_toggles()
+                has_batch_pro = global_toggles.get("batch_processing_pro", True) and plan_features.get("batch_processing_pro", False)
+    else:
+        # Private mode: check global toggle only
+        global_toggles = await db.get_feature_toggles()
+        has_batch_pro = global_toggles.get("batch_processing_pro", True)
 
     if user_id not in batch_sessions:
         batch_id = queue_manager.create_batch()
@@ -2160,14 +2169,14 @@ async def handle_file_upload(client, message):
         "specials": metadata.get("specials", []),
         "codec": metadata.get("codec", ""),
         "audio": metadata.get("audio", ""),
+        "has_batch_pro": has_batch_pro,
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})
 
     async def wait_and_process():
         try:
-            # Give non-priority users a slightly longer collection window to allow Priority users
-            # to jump into the processing loop faster.
-            delay = 1.0 if is_priority else 3.0
+            # Batch Pro users get faster collection, priority users fastest
+            delay = 1.0 if is_priority else (3.0 if has_batch_pro else 5.0)
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
                 batch_tasks.pop(user_id, None)
@@ -2332,6 +2341,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             old_task.cancel()
 
         is_priority = False
+        has_batch_pro = False
         if Config.PUBLIC_MODE:
             user_doc = await db.get_user(user_id)
             if user_doc and user_doc.get("is_premium"):
@@ -2339,7 +2349,13 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
                 config = await db.get_public_config()
                 if config.get("premium_system_enabled", False):
                     plan_settings = config.get(f"premium_{plan_name}", {})
-                    is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+                    plan_features = plan_settings.get("features", {})
+                    is_priority = plan_features.get("priority_queue", False)
+                    global_toggles = await db.get_feature_toggles()
+                    has_batch_pro = global_toggles.get("batch_processing_pro", True) and plan_features.get("batch_processing_pro", False)
+        else:
+            global_toggles = await db.get_feature_toggles()
+            has_batch_pro = global_toggles.get("batch_processing_pro", True)
 
         batch_id = batch_sessions[user_id]["batch_id"]
         item_id = str(uuid.uuid4())
@@ -2396,6 +2412,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             "specials": metadata.get("specials", []),
             "codec": metadata.get("codec", ""),
             "audio": metadata.get("audio", ""),
+            "has_batch_pro": has_batch_pro,
         }
 
         batch_sessions[user_id]["items"].append({"message": dummy_msg, "data": data})
@@ -2405,7 +2422,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
 
     async def wait_and_process():
         try:
-            delay = 1.0 if is_priority else 3.0
+            delay = 1.0 if is_priority else (3.0 if has_batch_pro else 5.0)
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
                 batch_tasks.pop(user_id, None)
@@ -2468,6 +2485,7 @@ async def handle_auto_detection(client, message):
             default_dumb_channel = ser_ch
 
     is_priority = False
+    has_batch_pro = False
     if Config.PUBLIC_MODE:
         user_doc = await db.get_user(user_id)
         if user_doc and user_doc.get("is_premium"):
@@ -2475,7 +2493,13 @@ async def handle_auto_detection(client, message):
             config = await db.get_public_config()
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
-                is_priority = plan_settings.get("features", {}).get("priority_queue", False)
+                plan_features = plan_settings.get("features", {})
+                is_priority = plan_features.get("priority_queue", False)
+                global_toggles = await db.get_feature_toggles()
+                has_batch_pro = global_toggles.get("batch_processing_pro", True) and plan_features.get("batch_processing_pro", False)
+    else:
+        global_toggles = await db.get_feature_toggles()
+        has_batch_pro = global_toggles.get("batch_processing_pro", True)
 
     if user_id not in batch_sessions:
         batch_id = queue_manager.create_batch()
@@ -2533,12 +2557,13 @@ async def handle_auto_detection(client, message):
         "specials": metadata.get("specials", []),
         "codec": metadata.get("codec", ""),
         "audio": metadata.get("audio", ""),
+        "has_batch_pro": has_batch_pro,
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})
 
     async def wait_and_process():
         try:
-            delay = 1.0 if is_priority else 3.0
+            delay = 1.0 if is_priority else (3.0 if has_batch_pro else 5.0)
             await asyncio.sleep(delay)
             if batch_tasks.get(user_id) == asyncio.current_task():
                 batch_tasks.pop(user_id, None)
