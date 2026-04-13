@@ -91,23 +91,62 @@ async def _clear_persisted_session(user_id: int):
     await _db.clear_flow_session(user_id)
 
 async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 3300):
-    """Warn user 5 minutes before the 1-hour session expiry."""
+    """Warn user 5 minutes before session expiry, then confirm cancellation on actual expiry."""
     try:
         await asyncio.sleep(delay_seconds)
         state = get_state(user_id)
-        if state:
-            await client.send_message(
-                user_id,
-                "Your renaming session will expire in **5 minutes** due to inactivity.\n"
-                "Send a file or press Cancel to avoid losing your progress.",
+        if not state:
+            _expiry_warnings.pop(user_id, None)
+            return
+
+        warning_msg = await client.send_message(
+            user_id,
+            "⚠️ Your renaming session will expire in **5 minutes** due to inactivity.\n"
+            "Send a file or press Cancel to avoid losing your progress.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel Session", callback_data="cancel_rename")]
+            ])
+        )
+
+        # Wait the remaining 5 minutes
+        await asyncio.sleep(300)
+
+        # Check if session is still active (user may have interacted)
+        state = get_state(user_id)
+        if not state:
+            # Session was already ended by user action
+            try:
+                await warning_msg.edit_text(
+                    "✅ Your session was already ended.",
+                    reply_markup=None
+                )
+            except Exception:
+                pass
+            _expiry_warnings.pop(user_id, None)
+            return
+
+        # Session is still active — expire it now
+        clear_session(user_id)
+        await _clear_persisted_session(user_id)
+        _expiry_warnings.pop(user_id, None)
+
+        try:
+            await warning_msg.edit_text(
+                "❌ **Session Expired**\n\n"
+                "Your renaming session has been cancelled due to inactivity.\n"
+                "Send a file or use /start to begin a new session.",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("❌ Cancel Session", callback_data="cancel_rename")]
+                    [InlineKeyboardButton("🔄 Start New Session", callback_data="force_start_renaming")]
                 ])
             )
+        except Exception:
+            pass
+
     except asyncio.CancelledError:
-        pass
-    except Exception:
-        pass
+        _expiry_warnings.pop(user_id, None)
+    except Exception as e:
+        logger.debug(f"Expiry warning error for {user_id}: {e}")
+        _expiry_warnings.pop(user_id, None)
 
 def _start_expiry_timer(client, user_id: int):
     """Start or restart the expiry warning timer."""
