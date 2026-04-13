@@ -15,7 +15,7 @@ class Config:
     API_HASH = os.getenv("API_HASH")
 
     MAIN_URI = os.getenv("MAIN_URI")
-    DB_NAME = "MainDB"
+    DB_NAME = "MainDB2"
     SETTINGS_COLLECTION = "MediaStudio-Settings"
 
     CEO_ID = int(os.getenv("CEO_ID", 0))
