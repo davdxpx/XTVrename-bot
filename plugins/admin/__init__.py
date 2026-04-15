@@ -34,6 +34,7 @@ from plugins.admin.core import (
 # Guarantee all submodule handlers register on import, independent of
 # pyrofork's plugin discovery behaviour.
 from . import noop  # noqa: F401
+from . import dumb_channels  # noqa: F401
 from . import _legacy  # noqa: F401
 
 __all__ = [
