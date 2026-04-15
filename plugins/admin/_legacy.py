@@ -4146,12 +4146,7 @@ async def admin_handle_user_lookup_text(client: Client, message: Message):
         clear_session(message.from_user.id)
         raise ContinuePropagation
 
-@Client.on_callback_query(filters.regex("^noop$"))
-async def noop_cb(client, callback_query):
-    try:
-        await callback_query.answer()
-    except Exception:
-        pass
+# noop_cb moved to plugins/admin/noop.py
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
