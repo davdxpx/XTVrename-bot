@@ -7,6 +7,7 @@ from utils.tmdb import tmdb
 from utils.auth import auth_filter
 from utils.state import set_state, get_state, update_data, get_data, clear_session, mark_for_db_persist
 from plugins.process import process_file
+from tools.AudioMetadataEditor import render_audio_menu
 from utils.detect import analyze_filename, auto_match_tmdb
 from config import Config
 from utils.log import get_logger
