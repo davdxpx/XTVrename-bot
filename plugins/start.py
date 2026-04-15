@@ -1239,40 +1239,32 @@ async def handle_help_callbacks(client, callback_query):
                 "• **Shortcut:** `/a` or `/audio`."
             )
         elif tool == "convert":
-            text = (
-                "**🔀 File Converter — Mega Edition**\n\n"
-                "> Your all-in-one media swiss-army knife.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**How to use:**\n"
-                "1. Send any video, audio or image file (or use `/c` / `/convert`).\n"
-                "2. Pick a category from the menu that appears.\n"
-                "3. Pick an operation — the bot handles the rest.\n\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**🎬 Video Operations**\n"
-                "• **📦 Container** — Remux to MP4, MKV, MOV, AVI, WEBM, FLV, 3GP, or TS (no re-encode, lightning fast).\n"
-                "• **🎞 Codec** — Re-encode to x264 (H.264), x265 (H.265), VP9, or AV1.\n"
-                "• **🎵 Extract Audio** — Pull the audio track out as MP3, M4A (AAC), OGG, OPUS, FLAC, or WAV.\n"
-                "• **🖼 Extract Frame** — Grab the first frame as PNG, JPG, or WEBP.\n"
-                "• **🎞 GIF** — Convert clips into animated GIFs (Low / Med / High quality presets).\n"
-                "• **🔊 Audio FX** — Normalize, Boost +6dB, or Mono Downmix (keeps video untouched).\n"
-                "• **⚙️ Transform** — Scale to 480p / 720p / 1080p / 4K, mute audio, change speed (0.5× / 1.5× / 2×), or reverse the video.\n\n"
-                "**🎵 Audio Operations**\n"
-                "• **📊 Bitrate** — Re-encode at 128 / 192 / 256 / 320 kbps.\n"
-                "• **🔀 Format** — Convert between MP3, M4A, OGG, OPUS, FLAC, WAV, WMA.\n"
-                "• **🔊 Audio FX** — Normalize, Boost, Mono Downmix, and more.\n\n"
-                "**🖼 Image Operations**\n"
-                "• **🔀 Format** — JPG, PNG, WEBP, BMP, TIFF, GIF.\n"
-                "• **📐 Resize** — Common presets (HD, FHD, square, thumbnail).\n"
-                "• **🔄 Rotate / Flip** — 90° / 180° / 270°, horizontal & vertical flip.\n"
-                "• **🎨 Filter** — Grayscale, sepia, invert, blur, sharpen, and more.\n"
-                "• **🗜 Compress** — Shrink file size with quality presets.\n\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**💡 Tips**\n"
-                "• 🔙 Every submenu has a Back button — no dead ends.\n"
-                "• The original filename & metadata title are preserved where possible (a small suffix is added so you can tell versions apart).\n"
-                "• Stream-copy is used whenever possible — conversions are much faster than a full re-encode.\n\n"
-                "• **Shortcut:** `/c` or `/convert`."
-            )
+            # File Converter has its own submenu — render it via the dedicated
+            # router below so users don't drown in one massive wall of text.
+            try:
+                await callback_query.message.edit_text(
+                    "**🔀 File Converter — Mega Edition**\n\n"
+                    "> Your all-in-one media swiss-army knife.\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    "The converter handles video, audio, and image files with "
+                    "dozens of operations. Pick a topic below to learn more.\n\n"
+                    "**Shortcut:** `/c` or `/convert`",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [InlineKeyboardButton("🚀 How to Use", callback_data="help_fc_howto")],
+                            [InlineKeyboardButton("🎬 Video", callback_data="help_fc_video"),
+                             InlineKeyboardButton("🎵 Audio", callback_data="help_fc_audio")],
+                            [InlineKeyboardButton("🖼 Image", callback_data="help_fc_image"),
+                             InlineKeyboardButton("⚙️ Transform", callback_data="help_fc_transform")],
+                            [InlineKeyboardButton("💡 Tips & Tricks", callback_data="help_fc_tips")],
+                            [InlineKeyboardButton("← Back to Tools", callback_data="help_tools")],
+                        ]
+                    ),
+                    disable_web_page_preview=True,
+                )
+            except MessageNotModified:
+                pass
+            return
         elif tool == "watermark":
             text = (
                 "**© Image Watermarker**\n\n"
@@ -1332,20 +1324,33 @@ async def handle_help_callbacks(client, callback_query):
                 "• **Shortcut:** `/vn` or `/videonote`."
             )
         elif tool == "youtube":
-            text = (
-                "**▶️ YouTube Tool**\n\n"
-                "> Download and inspect YouTube content.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Open the YouTube menu and paste any YouTube URL. You can then choose:\n\n"
-                "• **🎬 Video** — Download in 360p / 480p / 720p / 1080p / Best.\n"
-                "• **🎵 Audio (MP3)** — Extract audio at 128 / 192 / 320 kbps.\n"
-                "• **🖼 Thumbnail** — Grab the HD cover image.\n"
-                "• **📝 Subtitles** — Download captions in many languages (auto-generated supported).\n"
-                "• **ℹ️ Video Info** — Title, uploader, stats, chapters, description.\n\n"
-                "**Auto-detect:** Pasting a YouTube link at any time opens this menu automatically.\n"
-                "• **Shortcut:** `/yt` or `/youtube`."
-            )
+            try:
+                await callback_query.message.edit_text(
+                    "**▶️ YouTube Tool**\n\n"
+                    "> Professional YouTube downloader with anti-bot hardening.\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    "Paste any `youtube.com` / `youtu.be` link or use `/yt`. "
+                    "Pick a topic below to explore what's possible.\n\n"
+                    "**Shortcut:** `/yt` or `/youtube`",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [InlineKeyboardButton("🚀 How to Use", callback_data="help_yt_howto")],
+                            [InlineKeyboardButton("🎬 Video", callback_data="help_yt_video"),
+                             InlineKeyboardButton("🎵 Audio", callback_data="help_yt_audio")],
+                            [InlineKeyboardButton("🖼 Thumbnails", callback_data="help_yt_thumb"),
+                             InlineKeyboardButton("📝 Subtitles", callback_data="help_yt_subs")],
+                            [InlineKeyboardButton("ℹ️ Video Info", callback_data="help_yt_info"),
+                             InlineKeyboardButton("🍪 Cookies (Admin)", callback_data="help_yt_cookies")],
+                            [InlineKeyboardButton("🛡 Anti-Bot & Errors", callback_data="help_yt_errors"),
+                             InlineKeyboardButton("💡 Tips", callback_data="help_yt_tips")],
+                            [InlineKeyboardButton("← Back to Tools", callback_data="help_tools")],
+                        ]
+                    ),
+                    disable_web_page_preview=True,
+                )
+            except MessageNotModified:
+                pass
+            return
         else:
             text = (
                 "**🛠 Tool Info**\n\n"
@@ -1364,14 +1369,26 @@ async def handle_help_callbacks(client, callback_query):
     elif data == "help_file_management":
         try:
             await callback_query.message.edit_text(
-                "**📁 File Management (/myfiles)**\n\n"
-                "> Your personal cloud storage.\n"
+                "**📁 File Management — /myfiles**\n\n"
+                "> Your personal cloud locker inside Telegram.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "Use the `/myfiles` command to access your digital storage locker.\n\n"
-                "• **Temporary Files:** Files you have recently processed are saved here temporarily (based on your plan's expiry limits).\n"
-                "• **Permanent Slots:** You can pin important files to keep them forever! (Limit depends on plan).\n"
-                "• **Custom Folders:** Organize your permanent files into categories.",
-                reply_markup=InlineKeyboardMarkup(back_button),
+                "Everything you process with the bot flows through **MyFiles**. "
+                "You get temporary history, permanent pinned slots, folders, "
+                "search, quotas, and more. Pick a topic below:",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [InlineKeyboardButton("🚀 Overview & Quick Start", callback_data="help_mf_overview")],
+                        [InlineKeyboardButton("🕒 Temporary Files", callback_data="help_mf_temp"),
+                         InlineKeyboardButton("📌 Permanent Slots", callback_data="help_mf_perm")],
+                        [InlineKeyboardButton("📂 Folders", callback_data="help_mf_folders"),
+                         InlineKeyboardButton("🔎 Search & Filters", callback_data="help_mf_search")],
+                        [InlineKeyboardButton("📈 Quotas & Storage", callback_data="help_mf_quotas"),
+                         InlineKeyboardButton("♻️ Actions & Sharing", callback_data="help_mf_actions")],
+                        [InlineKeyboardButton("💡 Tips & FAQ", callback_data="help_mf_tips")],
+                        [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")],
+                    ]
+                ),
+                disable_web_page_preview=True,
             )
         except MessageNotModified:
             pass
@@ -1891,15 +1908,31 @@ async def handle_help_callbacks(client, callback_query):
                 "• Perfect for personal files, documents, or non-media content."
             )
         elif setting == "dumb":
-            text = (
-                "**📺 Dumb Channels Setup**\n\n"
-                "> Route processed files to channels.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "Go to `/settings` > **Dumb Channels**.\n\n"
-                "• Add the bot as an admin to your channel first.\n"
-                "• Then forward a message from that channel to the bot.\n"
-                "• Set the channel type: Movies, Series, or Standard (everything)."
-            )
+            try:
+                await callback_query.message.edit_text(
+                    "**📺 Dumb Channels — Auto-Routing**\n\n"
+                    "> Automatically push processed files into the right channel.\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    "Dumb Channels are Telegram channels the bot posts into on "
+                    "your behalf — sorted by content type. Pick a topic below "
+                    "to learn more.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [InlineKeyboardButton("🚀 What is it?", callback_data="help_dumb_overview")],
+                            [InlineKeyboardButton("🔧 Setup Step-by-Step", callback_data="help_dumb_setup")],
+                            [InlineKeyboardButton("🏷 Channel Types", callback_data="help_dumb_types"),
+                             InlineKeyboardButton("🗂 Multiple Channels", callback_data="help_dumb_multi")],
+                            [InlineKeyboardButton("🧙 Channel Wizard", callback_data="help_dumb_wizard"),
+                             InlineKeyboardButton("🔐 Permissions", callback_data="help_dumb_perms")],
+                            [InlineKeyboardButton("💡 Tips & Troubleshooting", callback_data="help_dumb_tips")],
+                            [InlineKeyboardButton("← Back to Settings", callback_data="help_settings")],
+                        ]
+                    ),
+                    disable_web_page_preview=True,
+                )
+            except MessageNotModified:
+                pass
+            return
         elif setting == "info":
             try:
                 public_cfg = await db.get_public_config()
@@ -1944,6 +1977,534 @@ async def handle_help_callbacks(client, callback_query):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(back_to_set),
+                disable_web_page_preview=True,
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_fc_"):
+        section = data.replace("help_fc_", "")
+        back_to_fc = [[InlineKeyboardButton("← Back to File Converter", callback_data="help_tool_convert")]]
+
+        if section == "howto":
+            text = (
+                "**🚀 File Converter — How to Use**\n\n"
+                "> Three steps to any conversion.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**1️⃣ Send the file**\n"
+                "Drop any video, audio or image into the chat — or hit `/c` / `/convert` on an existing file.\n\n"
+                "**2️⃣ Pick a category**\n"
+                "A menu appears with the categories available for that file type (Video / Audio / Image + Transform).\n\n"
+                "**3️⃣ Pick an operation**\n"
+                "Choose the target format or effect. The bot downloads, processes, and re-uploads the result.\n\n"
+                "**⚡ Good to know**\n"
+                "• Stream-copy is used whenever possible — most conversions finish in seconds.\n"
+                "• The original filename and metadata title are preserved; a small suffix marks the new version.\n"
+                "• Every submenu has a 🔙 Back button — no dead ends."
+            )
+        elif section == "video":
+            text = (
+                "**🎬 File Converter — Video**\n\n"
+                "> Remux, re-encode, extract, and GIFify.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**📦 Container (remux, no quality loss)**\n"
+                "• MP4, MKV, MOV, AVI, WEBM, FLV, 3GP, TS\n"
+                "• Fast: streams are copied, not re-encoded.\n\n"
+                "**🎞 Codec (re-encode)**\n"
+                "• x264 (H.264) — universal compatibility\n"
+                "• x265 (H.265) — smaller files, modern players\n"
+                "• VP9 — ideal for WEBM / YouTube\n"
+                "• AV1 — the new streaming standard\n\n"
+                "**🎵 Extract Audio**\n"
+                "• MP3, M4A (AAC), OGG, OPUS, FLAC, WAV\n\n"
+                "**🖼 Extract Frame**\n"
+                "• PNG, JPG, WEBP — grabs the first frame.\n\n"
+                "**🎞 GIF**\n"
+                "• Low / Medium / High quality presets.\n"
+                "• Automatically caps dimensions for smooth playback."
+            )
+        elif section == "audio":
+            text = (
+                "**🎵 File Converter — Audio**\n\n"
+                "> Re-encode, re-format, polish.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**📊 Bitrate**\n"
+                "• 128 / 192 / 256 / 320 kbps\n\n"
+                "**🔀 Format**\n"
+                "• MP3 · M4A (AAC) · OGG · OPUS · FLAC · WAV · WMA\n\n"
+                "**🔊 Audio FX**\n"
+                "• Normalize — Evens out loud & quiet parts.\n"
+                "• Boost +6dB — Louder output.\n"
+                "• Mono Downmix — Fold stereo into mono.\n"
+                "• Plus additional effect presets in-menu.\n\n"
+                "**💡 Tip**\n"
+                "Audio FX is also available on video files without re-encoding the picture."
+            )
+        elif section == "image":
+            text = (
+                "**🖼 File Converter — Image**\n\n"
+                "> Format, size, orientation, filters, compression.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**🔀 Format**\n"
+                "• JPG · PNG · WEBP · BMP · TIFF · GIF\n\n"
+                "**📐 Resize**\n"
+                "• HD, FHD, square and thumbnail presets.\n"
+                "• Aspect ratio preserved.\n\n"
+                "**🔄 Rotate / Flip**\n"
+                "• 90° · 180° · 270°\n"
+                "• Horizontal & vertical flip.\n\n"
+                "**🎨 Filter**\n"
+                "• Grayscale, sepia, invert, blur, sharpen, and more.\n\n"
+                "**🗜 Compress**\n"
+                "• Quality presets — shrink without visible loss."
+            )
+        elif section == "transform":
+            text = (
+                "**⚙️ File Converter — Transform (Video)**\n\n"
+                "> Resize, speed, mute, reverse — without leaving the bot.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**📐 Resolution**\n"
+                "• 480p · 720p · 1080p · 4K presets.\n\n"
+                "**⚡ Speed**\n"
+                "• 0.5× · 1.5× · 2× · and more.\n"
+                "• Audio is automatically re-pitched to stay in sync.\n\n"
+                "**🔇 Mute**\n"
+                "• Strip the audio track completely.\n\n"
+                "**⏪ Reverse**\n"
+                "• Play the whole clip backwards (with reversed audio).\n\n"
+                "**💡 Tip**\n"
+                "Use Transform before Codec if you want maximum compression — lower resolution + new codec."
+            )
+        elif section == "tips":
+            text = (
+                "**💡 File Converter — Tips & Tricks**\n\n"
+                "> Get the best results with the least waiting.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• **Container before codec.** If you only need a different file extension, use Container — it's instant.\n"
+                "• **Codec for size.** H.265 / AV1 can shrink a file by 40–60 % at the same visual quality.\n"
+                "• **Extract Audio saves bandwidth.** Pulling the music out of a music-video is tiny vs. re-uploading the whole clip.\n"
+                "• **Send as Document.** Telegram compresses 'Video' uploads. Always send as **File/Document** for best quality input.\n"
+                "• **Preview frame.** Use Extract Frame to grab a poster image for thumbnails.\n"
+                "• **Chain it.** Converter output lands in your MyFiles — run it through another tool next.\n"
+                "• **Cancel anytime.** Type `/end` to abort a long conversion."
+            )
+        else:
+            text = "Unknown File Converter topic."
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(back_to_fc),
+                disable_web_page_preview=True,
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_yt_"):
+        section = data.replace("help_yt_", "")
+        back_to_yt = [[InlineKeyboardButton("← Back to YouTube Tool", callback_data="help_tool_youtube")]]
+
+        if section == "howto":
+            text = (
+                "**🚀 YouTube Tool — How to Use**\n\n"
+                "> Paste. Pick. Download.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**1️⃣ Open the tool**\n"
+                "• Send `/yt` or `/youtube`, or just paste a `youtube.com` / `youtu.be` link anywhere in chat.\n"
+                "• Auto-detect opens the menu instantly when a link is pasted.\n\n"
+                "**2️⃣ Pick a mode**\n"
+                "Video · Audio · Thumbnail · Subtitles · Video Info\n\n"
+                "**3️⃣ Pick quality / options**\n"
+                "The bot downloads via yt-dlp, rotates player clients if needed, and sends the file back.\n\n"
+                "**Shortcut:** `/yt` or `/youtube`"
+            )
+        elif section == "video":
+            text = (
+                "**🎬 YouTube — Video Download**\n\n"
+                "> Pick a resolution or let the bot grab the best.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Available qualities**\n"
+                "• 360p — small, fast, data-friendly.\n"
+                "• 480p — balanced for mobile.\n"
+                "• 720p — HD for most content.\n"
+                "• 1080p — full HD when offered.\n"
+                "• **Best** — auto-picks the highest available video+audio.\n\n"
+                "**Output**\n"
+                "• MP4 container with best video + best audio merged via ffmpeg.\n"
+                "• Progress updates while downloading & muxing.\n\n"
+                "**💡 Tip**\n"
+                "If a quality isn't listed on YouTube, the bot falls back to the closest available stream."
+            )
+        elif section == "audio":
+            text = (
+                "**🎵 YouTube — Audio Extraction**\n\n"
+                "> MP3 out of any video.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Bitrates**\n"
+                "• 128 kbps — podcasts, speech\n"
+                "• 192 kbps — default music quality\n"
+                "• 320 kbps — maximum MP3 fidelity\n\n"
+                "**What you get**\n"
+                "• `.mp3` file with the video title as filename.\n"
+                "• Embedded thumbnail & basic ID3 tags where possible.\n\n"
+                "**💡 Tip**\n"
+                "For albums or music videos, combine with the Audio Metadata Editor (`/a`) afterwards to fine-tune tags."
+            )
+        elif section == "thumb":
+            text = (
+                "**🖼 YouTube — Thumbnails**\n\n"
+                "> Grab the HD cover art in one click.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• Pulls the highest-resolution thumbnail YouTube offers (`maxresdefault` when available, then `sddefault`, then `hqdefault`).\n"
+                "• Returned as a real image — not a compressed preview.\n"
+                "• Perfect for making your own video posters, social posts, or channel banners.\n\n"
+                "**💡 Tip**\n"
+                "Run the thumbnail through the Image Watermarker (`/w`) if you want to brand it with your logo before sharing."
+            )
+        elif section == "subs":
+            text = (
+                "**📝 YouTube — Subtitles**\n\n"
+                "> Captions in dozens of languages.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What's supported**\n"
+                "• Manual subtitles (when the uploader provided them).\n"
+                "• Auto-generated captions (YouTube speech-to-text).\n"
+                "• All languages YouTube lists for that video.\n\n"
+                "**Output formats**\n"
+                "• `.srt` — universal subtitle format.\n"
+                "• `.vtt` — when requested / when SRT isn't available.\n\n"
+                "**💡 Tip**\n"
+                "If no language appears, the creator simply didn't enable captions on that video and auto-subs are disabled."
+            )
+        elif section == "info":
+            text = (
+                "**ℹ️ YouTube — Video Info**\n\n"
+                "> Everything about the video without downloading it.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Displays:\n"
+                "• 🎬 Title, uploader, channel link.\n"
+                "• ⏱ Duration · 👁 Views · 👍 Likes.\n"
+                "• 📅 Upload date · 🏷 Tags · 🌐 Language.\n"
+                "• 📖 Description (truncated if huge).\n"
+                "• 📑 Chapters — if the uploader set them.\n\n"
+                "**💡 Tip**\n"
+                "Use Video Info first to confirm you've got the right video before kicking off a download."
+            )
+        elif section == "cookies":
+            text = (
+                "**🍪 YouTube — Cookies (Admin)**\n\n"
+                "> Bypass YouTube's anti-bot gate.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Why cookies?**\n"
+                "YouTube increasingly blocks server IPs with \"Sign in to confirm you're not a bot\". A valid `cookies.txt` from a logged-in browser session solves this.\n\n"
+                "**Admin commands**\n"
+                "• `/ytcookies` — upload or refresh cookies.\n"
+                "• `/ytcookies_remove` — wipe cookies from disk **and** DB.\n\n"
+                "**How to export**\n"
+                "1. Log into `youtube.com` in your browser.\n"
+                "2. Use an extension like **Get cookies.txt LOCALLY**.\n"
+                "3. Save as `cookies.txt` → send it to the bot as a document.\n\n"
+                "**🛡 Persistence**\n"
+                "Cookies are mirrored into MongoDB automatically — they survive container redeploys (no volume mount needed)."
+            )
+        elif section == "errors":
+            text = (
+                "**🛡 YouTube — Anti-Bot & Errors**\n\n"
+                "> What the bot does when YouTube pushes back.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**🤖 Bot-check (Sign in to confirm...)**\n"
+                "• The bot automatically rotates through multiple **player_client** profiles (android, ios, web, tv_embedded, mweb).\n"
+                "• If all clients fail, you'll see a friendly screen with next-step guidance.\n"
+                "• Fix: admin uploads fresh cookies via `/ytcookies`.\n\n"
+                "**📉 \"Requested format is not available\"**\n"
+                "• After all player clients fail, the bot retries once with `format=best` (no strict merge rules).\n"
+                "• If it still fails, a dedicated help screen explains likely causes: live stream, DRM, region-locked, rate-limit.\n\n"
+                "**🔁 Built-in retry chain**\n"
+                "• Player-client rotation → cookie check → permissive format → typed error UI.\n"
+                "• No more generic \"Unexpected error\" for known YouTube cases."
+            )
+        elif section == "tips":
+            text = (
+                "**💡 YouTube — Tips**\n\n"
+                "> Get more out of the tool.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• **Paste anywhere.** Any YouTube URL opens the menu, even mid-conversation.\n"
+                "• **Playlist links** are auto-reduced to the current video — no accidental 500-file downloads.\n"
+                "• **Shorts work too.** `youtube.com/shorts/…` URLs behave like normal videos.\n"
+                "• **Restricted / age-gated.** Usually solved by uploading cookies (admin).\n"
+                "• **Very long videos.** Prefer 720p or Audio to stay under Telegram's 2 GB / 4 GB limit.\n"
+                "• **Quality not listed?** YouTube didn't publish that rendition — pick the next lower option or use Best.\n"
+                "• **Output lands in MyFiles.** Pin it to permanent storage to keep it."
+            )
+        else:
+            text = "Unknown YouTube topic."
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(back_to_yt),
+                disable_web_page_preview=True,
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_mf_"):
+        section = data.replace("help_mf_", "")
+        back_to_mf = [[InlineKeyboardButton("← Back to File Management", callback_data="help_file_management")]]
+
+        if section == "overview":
+            text = (
+                "**🚀 MyFiles — Overview & Quick Start**\n\n"
+                "> Your personal media locker inside Telegram.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What is MyFiles?**\n"
+                "Every file you process with the bot — renames, conversions, extracts, YouTube downloads — is saved to your private locker, so you can re-download, share, or re-process it without re-uploading.\n\n"
+                "**Quick start**\n"
+                "• Command: `/myfiles`\n"
+                "• Opens a paginated gallery with inline buttons.\n"
+                "• Two storage tiers: 🕒 **Temporary** (auto-expires) and 📌 **Permanent** (pinned forever).\n"
+                "• Organise with 📂 **Folders** and find things with 🔎 **Search**.\n\n"
+                "**Engine**\n"
+                f"• MyFiles v`{Config.MYFILES_VERSION}` — production-grade async storage backed by MongoDB."
+            )
+        elif section == "temp":
+            text = (
+                "**🕒 MyFiles — Temporary Files**\n\n"
+                "> Short-term history of everything you processed.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**How it works**\n"
+                "• Every processed file is added automatically — no action needed.\n"
+                "• Expires after a plan-based number of days (see /start profile).\n"
+                "• Survives bot restarts: stored in DB, referenced by Telegram file_id.\n\n"
+                "**What you can do**\n"
+                "• ⬇ Re-download instantly — no re-upload.\n"
+                "• 📌 Promote to **Permanent** with one tap.\n"
+                "• 🔁 Re-run through another tool (converter, watermarker…).\n"
+                "• 🗑 Delete manually if you want space back.\n\n"
+                "**💡 Tip**\n"
+                "If a file is important, pin it to Permanent before expiry — one click from the file view."
+            )
+        elif section == "perm":
+            text = (
+                "**📌 MyFiles — Permanent Slots**\n\n"
+                "> Files that never expire.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What are slots?**\n"
+                "Each user has a plan-based number of **permanent slots**. A file placed in a slot is kept forever (until you remove it).\n\n"
+                "**Slot limits**\n"
+                "• **Free** — small slot pool (see /start).\n"
+                "• **Premium** — significantly more slots.\n"
+                "• **CEO** — unlimited.\n\n"
+                "**Actions**\n"
+                "• 📌 Pin — moves a temporary file into a permanent slot.\n"
+                "• 🗑 Unpin — frees the slot; the file becomes temporary again.\n"
+                "• ✏️ Rename — change the display name without re-uploading.\n\n"
+                "**💡 Tip**\n"
+                "If you're slot-limited, delete old pins you no longer need before adding new ones."
+            )
+        elif section == "folders":
+            text = (
+                "**📂 MyFiles — Folders**\n\n"
+                "> Sort your locker your way.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Creating folders**\n"
+                "• Use the ➕ New Folder button inside `/myfiles`.\n"
+                "• Pick a name (emojis welcome).\n\n"
+                "**Moving files**\n"
+                "• Open any permanent file → **Move to folder**.\n"
+                "• Files can live in one folder at a time.\n\n"
+                "**Renaming & deleting folders**\n"
+                "• Long-press a folder or open its menu.\n"
+                "• Deleting a folder returns its files to the root.\n\n"
+                "**💡 Tip**\n"
+                "Great categories: `🎬 Movies`, `📺 Series`, `🎵 Music`, `📄 Docs`, `🖼 Images`, `✏️ Drafts`."
+            )
+        elif section == "search":
+            text = (
+                "**🔎 MyFiles — Search & Filters**\n\n"
+                "> Find a file in a sea of files.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Search**\n"
+                "• Hit the 🔎 button inside `/myfiles`.\n"
+                "• Type part of the filename, title, or extension.\n"
+                "• Matches across temporary **and** permanent files.\n\n"
+                "**Filter by type**\n"
+                "• 🎬 Video · 🎵 Audio · 🖼 Image · 📄 Document · 📝 Subtitle\n"
+                "• Instantly narrows the gallery.\n\n"
+                "**Sort options**\n"
+                "• Newest first (default) · Oldest · Name A→Z · Size.\n\n"
+                "**💡 Tip**\n"
+                "Search is case-insensitive and works on partial words — typing `ep5` will match `Show.S01E05.mkv`."
+            )
+        elif section == "quotas":
+            text = (
+                "**📈 MyFiles — Quotas & Storage**\n\n"
+                "> Fair usage, transparent limits.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Per-plan limits**\n"
+                "• **Daily files** — how many files you can process per 24 h.\n"
+                "• **Daily egress** — total MB/GB of upload+download per day.\n"
+                "• **Temp expiry** — how long temporary files live.\n"
+                "• **Permanent slots** — long-term storage cap.\n\n"
+                "**Where to see them**\n"
+                "• `/start` → your profile card shows today's usage.\n"
+                "• `/myfiles` → footer shows temp/perm counts.\n\n"
+                "**Resets**\n"
+                "• Daily counters reset on a rolling 24 h window (UTC).\n"
+                "• Expired temporary files are auto-cleaned every 6 hours.\n\n"
+                "**💡 Tip**\n"
+                "Hit a wall? Pin what matters, delete the rest, or upgrade via the Premium Dashboard."
+            )
+        elif section == "actions":
+            text = (
+                "**♻️ MyFiles — Actions & Sharing**\n\n"
+                "> Everything you can do with a stored file.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Open any file in `/myfiles` to reveal its action panel:\n\n"
+                "• **⬇ Re-send** — instantly re-delivers the file to your chat.\n"
+                "• **📌 Pin / 🗑 Unpin** — toggle permanent status.\n"
+                "• **📂 Move** — drop into a folder.\n"
+                "• **✏️ Rename** — change display name.\n"
+                "• **🔁 Re-process** — feed the file straight into another tool (converter, audio editor, watermarker, etc.).\n"
+                "• **🗑 Delete** — permanently remove from storage.\n\n"
+                "**🔗 Sharing**\n"
+                "Re-send puts the file back in your chat — forward it to anyone like a normal Telegram file."
+            )
+        elif section == "tips":
+            text = (
+                "**💡 MyFiles — Tips & FAQ**\n\n"
+                "> Shortcuts and common questions.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• **Shortcut:** `/mf` works as a fast alias for `/myfiles`.\n"
+                "• **Re-send is free.** Re-delivering a stored file doesn't count against daily egress.\n"
+                "• **File IDs expire?** No — the bot caches a canonical reference that's refreshed automatically.\n"
+                "• **Lost a file after restart?** Temporary files are in DB — hit `/myfiles` and they're still there.\n"
+                "• **Can I nest folders?** Not yet — keep folders flat.\n"
+                "• **Backup?** Pin important files as Permanent; admins can export DB if needed.\n"
+                "• **Privacy.** Only *you* see *your* files. Even admins don't browse user lockers in the UI.\n\n"
+                "**Need help?** Visit the Help menu → Troubleshooting → **Files & Storage**."
+            )
+        else:
+            text = "Unknown MyFiles topic."
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(back_to_mf),
+                disable_web_page_preview=True,
+            )
+        except MessageNotModified:
+            pass
+
+    elif data.startswith("help_dumb_"):
+        section = data.replace("help_dumb_", "")
+        back_to_dumb = [[InlineKeyboardButton("← Back to Dumb Channels", callback_data="help_set_dumb")]]
+
+        if section == "overview":
+            text = (
+                "**🚀 Dumb Channels — Overview**\n\n"
+                "> Auto-post your processed files into the right place.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**The idea**\n"
+                "Instead of re-forwarding every finished file into your library channels, just tell the bot where each **type** of content belongs once. From then on, processed files go there automatically.\n\n"
+                "**Why \"dumb\"?**\n"
+                "Because the bot doesn't need any setup *inside* the channel — it just posts. The channel is passive, the bot does the thinking.\n\n"
+                "**Typical flow**\n"
+                "1. You process a movie → it lands in the Movies channel.\n"
+                "2. You process an episode → it lands in the Series channel.\n"
+                "3. Random docs / audio → Standard channel."
+            )
+        elif section == "setup":
+            text = (
+                "**🔧 Dumb Channels — Setup**\n\n"
+                "> Four steps, one-time configuration.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**1️⃣ Create or pick a channel**\n"
+                "Private or public, both work. Give it a clear name (e.g. `🎬 My Movies`).\n\n"
+                "**2️⃣ Add the bot as admin**\n"
+                "Open the channel → Admins → Add admin → search for the bot → grant **Post Messages** (the only permission required).\n\n"
+                "**3️⃣ Open settings**\n"
+                "In the bot chat: `/settings` → **Dumb Channels** → **➕ Add channel**.\n\n"
+                "**4️⃣ Link the channel**\n"
+                "Forward any message from the target channel to the bot, or paste its `@username` / invite link. Then choose the **type** (Movies / Series / Standard)."
+            )
+        elif section == "types":
+            text = (
+                "**🏷 Dumb Channels — Channel Types**\n\n"
+                "> Three tiers decide what lands where.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**🎬 Movies**\n"
+                "Receives files the bot classifies as movies (TMDb match, no season/episode, movie-style filename).\n\n"
+                "**📺 Series**\n"
+                "Receives episodes (S01E05, 1x05, anime numbering, etc.). Respects auto-detected season/episode info in the caption.\n\n"
+                "**📦 Standard**\n"
+                "Catch-all for everything that isn't clearly a movie or a series: music, documents, images, personal files.\n\n"
+                "**💡 Rule of thumb**\n"
+                "Start with one Standard channel — you can always add a Movies / Series split later."
+            )
+        elif section == "multi":
+            text = (
+                "**🗂 Dumb Channels — Multiple Channels**\n\n"
+                "> One channel per type — or many.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**How it works**\n"
+                "• You can link more than one channel per type.\n"
+                "• When multiple channels share a type, the bot posts to **all** of them (mirroring).\n"
+                "• Great for: public + private library, main + backup, personal + shared.\n\n"
+                "**Unlinking**\n"
+                "`/settings` → **Dumb Channels** → pick a channel → **Remove**.\n\n"
+                "**💡 Tip**\n"
+                "Use mirroring to keep a private backup channel in sync with your public one — zero manual forwarding."
+            )
+        elif section == "wizard":
+            text = (
+                "**🧙 Dumb Channels — Channel Wizard**\n\n"
+                "> Let the bot guide you through setup.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "The Channel Wizard is an interactive setup flow that walks you through every required step:\n\n"
+                "• 🔍 Verifies the bot is an admin in your channel.\n"
+                "• 🧪 Sends a test post and confirms it landed.\n"
+                "• 🏷 Prompts you to pick a type (Movies / Series / Standard).\n"
+                "• 💾 Saves the configuration to the DB.\n\n"
+                "**Where to find it**\n"
+                "`/settings` → **Dumb Channels** → **🧙 Channel Wizard**.\n\n"
+                "**💡 Tip**\n"
+                "If a normal Add flow fails with a permissions error, run the wizard — it pinpoints exactly what's missing."
+            )
+        elif section == "perms":
+            text = (
+                "**🔐 Dumb Channels — Permissions**\n\n"
+                "> What the bot actually needs.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**Minimum required**\n"
+                "• **Post Messages** ✅\n\n"
+                "**Recommended**\n"
+                "• **Edit Messages** — lets the bot update a processing-status post instead of spamming new ones.\n"
+                "• **Delete Messages** — useful if a post needs to be pulled (e.g., wrong file).\n\n"
+                "**Not needed**\n"
+                "• Restrict/Promote users, invite members, change info — the bot never touches these.\n\n"
+                "**Security**\n"
+                "The bot stores only the channel ID / link — never its join link secrets. Revoking admin in Telegram instantly cuts off access."
+            )
+        elif section == "tips":
+            text = (
+                "**💡 Dumb Channels — Tips & Troubleshooting**\n\n"
+                "> Make it work perfectly, every time.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "• **Chat not found / PEER error?** The bot hasn't seen the channel yet. Send one message from the channel (forwarded to the bot) or restart the bot.\n"
+                "• **Post failed — bot is not admin.** Re-add the bot in the channel's admin list with **Post Messages** permission.\n"
+                "• **Files go to wrong type?** Auto-detection was ambiguous — rename with a cleaner filename *before* sending, or switch the detected type in the confirmation step.\n"
+                "• **Standard channel duplicates posts.** You probably have both a Standard and a typed channel — files match the typed one **and** fall through to Standard. Remove Standard if you want strict routing.\n"
+                "• **Want captions customized?** See **Settings → Caption Template**.\n"
+                "• **Revoking access.** Just remove the bot from the channel admins — no need to edit settings."
+            )
+        else:
+            text = "Unknown Dumb Channels topic."
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(back_to_dumb),
                 disable_web_page_preview=True,
             )
         except MessageNotModified:
