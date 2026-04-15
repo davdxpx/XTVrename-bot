@@ -62,21 +62,26 @@ async def render_user_preferences_inline(client, user_id, message):
         plan_on = pf.get(feat_key, True) if pf else True
         return global_on and plan_on
 
-    available_tools = [{"id": "rename", "name": "📁 Rename / Tag Media"}]
-    tool_defs = [
-        ("audio_editor", "🎵 Audio Editor"),
-        ("file_converter", "🔀 File Converter"),
-        ("watermarker", "©️ Watermarker"),
-        ("subtitle_extractor", "📝 Subtitle Extractor"),
-        ("video_trimmer", "✂️ Video Trimmer"),
-        ("media_info", "ℹ️ Media Info"),
-        ("voice_converter", "🎙️ Voice Converter"),
-        ("video_note_converter", "⭕ Video Note Converter"),
-        ("youtube_tool", "▶️ YouTube Tool"),
-    ]
-    for tid, tname in tool_defs:
-        if _is_available(tid):
-            available_tools.append({"id": tid, "name": tname})
+    if _is_available("audio_editor"):
+        available_tools.append({"id": "audio_editor", "name": "🎵 Audio Editor"})
+    if _is_available("file_converter"):
+        available_tools.append({"id": "file_converter", "name": "🔀 File Converter"})
+    if _is_available("watermarker"):
+        available_tools.append({"id": "watermarker", "name": "©️ Watermarker"})
+    if _is_available("subtitle_extractor"):
+        available_tools.append({"id": "subtitle_extractor", "name": "📝 Subtitle Extractor"})
+    if _is_available("video_trimmer"):
+        available_tools.append({"id": "video_trimmer", "name": "✂️ Video Trimmer"})
+    if _is_available("media_info"):
+        available_tools.append({"id": "media_info", "name": "ℹ️ Media Info"})
+    if _is_available("voice_converter"):
+        available_tools.append({"id": "voice_converter", "name": "🎙️ Voice Converter"})
+    if _is_available("video_note_converter"):
+        available_tools.append({"id": "video_note_converter", "name": "⭕ Video Note Converter"})
+    if _is_available("youtube_tool"):
+        avaiable_tools.append({"id": "youtube_tool", "name": "▶️ YouTube Tool"})
+    if _is_available("torrent_downloader"):
+        available_tools.append({"id": "torrent_downloader", "name": "🧲 Torrent Downloader"})
 
     user_settings = await db.get_settings(user_id)
     selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]
