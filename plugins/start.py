@@ -330,7 +330,7 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
+        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu"),
         "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
@@ -933,7 +933,7 @@ async def handle_other_features_menu(client, callback_query):
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
+        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu"),
         "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
