@@ -73,19 +73,26 @@ _PROGRESS_INTERVAL = 3.0  # seconds between status message edits
 # === yt-dlp hardening (anti-bot / cookies / client fallback) ==============
 #
 # YouTube increasingly blocks data-center IPs with "Sign in to confirm you're
-# not a bot". Three mitigations are layered here:
+# not a bot". Four mitigations are layered here:
 #
 #   1) Cookie support — admins can upload a Netscape cookies.txt via
 #      /ytcookies. We look for the file at the paths below and pass it to
-#      every yt-dlp call via `cookiefile`.
+#      every yt-dlp call via `cookiefile`. Cookies are ALSO mirrored to
+#      MongoDB so they survive container redeploys (no volume mount needed):
+#      see `restore_youtube_cookies_from_db()`.
 #
 #   2) Player-client rotation — yt-dlp's --extractor-args youtube:player_client
 #      lets us ask for specific players. Different clients have different
 #      anti-bot thresholds. We try a fallback chain if one fails with a
 #      bot-check error.
 #
-#   3) Friendly UI error — `BotCheckError` / `_is_bot_check_error()` let the
-#      UI layer show a dedicated retry/help screen instead of the generic
+#   3) Format-unavailable last-ditch fallback — if every player_client returns
+#      "requested format is not available", we make one final attempt with a
+#      maximally-permissive `format=best` selector (no height/size constraint).
+#      This rescues edge cases where YouTube only exposes single muxed streams.
+#
+#   4) Friendly UI errors — `BotCheckError` / `FormatUnavailableError` let the
+#      UI layer show dedicated retry/help screens instead of the generic
 #      "Could not fetch video info".
 
 _COOKIES_CANDIDATES = [
@@ -94,6 +101,9 @@ _COOKIES_CANDIDATES = [
     "./yt_cookies.txt",
     "./downloads/yt_cookies.txt",
 ]
+
+# Single canonical on-disk path used for writing (uploads + DB restore).
+_COOKIES_TARGET_PATH = "config/yt_cookies.txt"
 
 # Order matters: iOS and TV clients tend to be less rate-limited than the
 # default web client right now. yt-dlp picks a reasonable set automatically
@@ -138,6 +148,15 @@ class BotCheckError(RuntimeError):
         self.original = original
 
 
+class FormatUnavailableError(RuntimeError):
+    """Raised when every player_client + the lenient last-ditch retry all
+    failed with a `format-not-available` style error from yt-dlp."""
+
+    def __init__(self, original: str = ""):
+        super().__init__(original or "YouTube format unavailable")
+        self.original = original
+
+
 def _get_cookies_file() -> str | None:
     """Return the first existing cookies file candidate, or None."""
     for p in _COOKIES_CANDIDATES:
@@ -149,6 +168,70 @@ def _get_cookies_file() -> str | None:
         except OSError:
             continue
     return None
+
+
+async def restore_youtube_cookies_from_db() -> bool:
+    """Write the DB-stored cookies back to disk if no cookies file is present.
+
+    Called from main.py at startup so admins don't have to re-upload
+    cookies.txt after every container redeploy. Returns True when a fresh
+    file was written from the DB, False otherwise (no DB record, or a
+    file is already present on disk).
+    """
+    if _get_cookies_file():
+        # Disk file already exists — prefer it over DB to allow manual override.
+        return False
+    try:
+        from database import db
+        record = await db.get_youtube_cookies()
+    except Exception as e:
+        logger.warning(f"restore_youtube_cookies_from_db: DB lookup failed: {e}")
+        return False
+    if not record or not record.get("cookies"):
+        return False
+    try:
+        os.makedirs(os.path.dirname(_COOKIES_TARGET_PATH) or ".", exist_ok=True)
+        with open(_COOKIES_TARGET_PATH, "w", encoding="utf-8") as f:
+            f.write(record["cookies"])
+        ts = record.get("updated_at")
+        ts_str = ts.isoformat() if ts else "unknown date"
+        logger.info(
+            f"Restored YouTube cookies from DB → {_COOKIES_TARGET_PATH} "
+            f"(uploaded {ts_str})"
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"restore_youtube_cookies_from_db: write failed: {e}")
+        return False
+
+
+async def persist_youtube_cookies_to_db(cookies_text: str, uploaded_by: int | None = None) -> bool:
+    """Save the cookies text to MongoDB so it survives container redeploys."""
+    try:
+        from database import db
+        return await db.save_youtube_cookies(cookies_text, uploaded_by=uploaded_by)
+    except Exception as e:
+        logger.warning(f"persist_youtube_cookies_to_db failed: {e}")
+        return False
+
+
+async def delete_youtube_cookies() -> tuple[bool, bool]:
+    """Remove cookies from BOTH disk and DB. Returns (disk_removed, db_removed)."""
+    disk_removed = False
+    cookies_path = _get_cookies_file()
+    if cookies_path:
+        try:
+            os.remove(cookies_path)
+            disk_removed = True
+        except OSError as e:
+            logger.warning(f"delete_youtube_cookies: disk remove failed: {e}")
+    db_removed = False
+    try:
+        from database import db
+        db_removed = await db.delete_youtube_cookies()
+    except Exception as e:
+        logger.warning(f"delete_youtube_cookies: DB delete failed: {e}")
+    return disk_removed, db_removed
 
 
 def _is_bot_check_error(err_text: str) -> bool:
@@ -254,6 +337,8 @@ def _run_ytdlp_with_fallback(
     err_text = str(last_exc) if last_exc else "unknown"
     if _is_bot_check_error(err_text):
         raise BotCheckError(err_text)
+    if _is_format_unavailable_error(err_text):
+        raise FormatUnavailableError(err_text)
     # Shouldn't really happen (we re-raise non-retryable errors above) but be safe.
     if last_exc:
         raise last_exc
@@ -272,6 +357,7 @@ def _run_ydl_session(build_extra_fn, action_fn):
     the anti-bot guard; re-raises the last exception otherwise.
     """
     last_exc: Exception | None = None
+    saw_format_unavailable = False
     for client_name in _PLAYER_CLIENT_FALLBACKS:
         opts = _ytdlp_base_opts(extra=build_extra_fn(), player_client=client_name)
         try:
@@ -286,15 +372,42 @@ def _run_ydl_session(build_extra_fn, action_fn):
                 )
                 continue
             if _is_format_unavailable_error(msg):
+                saw_format_unavailable = True
                 logger.warning(
                     f"yt-dlp format-unavailable with player_client={client_name!r}: {msg[:200]}"
                 )
                 continue
             raise
 
+    # Last-ditch attempt for format-unavailable: drop the user's strict format
+    # selector and fall back to plain `best`. Different YouTube videos expose
+    # wildly different format trees (e.g. only a single muxed stream), so a
+    # permissive selector often succeeds where the constrained one didn't.
+    if saw_format_unavailable:
+        for client_name in _PLAYER_CLIENT_FALLBACKS:
+            extra = build_extra_fn()
+            extra["format"] = "best"
+            # Drop the merge_output_format too — single-stream "best" is already muxed.
+            extra.pop("merge_output_format", None)
+            opts = _ytdlp_base_opts(extra=extra, player_client=client_name)
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    logger.info(
+                        f"yt-dlp lenient retry (format=best) with player_client={client_name!r}"
+                    )
+                    return action_fn(ydl)
+            except Exception as e:
+                last_exc = e
+                msg = str(e)
+                if _is_retryable_ytdlp_error(msg):
+                    continue
+                raise
+
     err_text = str(last_exc) if last_exc else "unknown"
     if _is_bot_check_error(err_text):
         raise BotCheckError(err_text)
+    if _is_format_unavailable_error(err_text):
+        raise FormatUnavailableError(err_text)
     if last_exc:
         raise last_exc
     raise BotCheckError("yt-dlp exhausted all player clients")
@@ -380,6 +493,8 @@ def _sync_extract_info(url: str) -> dict | None:
             download=False,
         )
     except BotCheckError:
+        raise
+    except FormatUnavailableError:
         raise
     except Exception as e:
         logger.warning(f"yt-dlp extract_info failed for {url}: {e}")
@@ -539,6 +654,8 @@ def _sync_download_video(url: str, quality: str, output_dir: str, max_size: int,
         return _run_ydl_session(_build_extra, _action)
     except BotCheckError:
         raise
+    except FormatUnavailableError:
+        raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Download failed: {e}", None
     except Exception as e:
@@ -592,6 +709,8 @@ def _sync_download_audio(url: str, bitrate: str, output_dir: str, max_size: int,
         return _run_ydl_session(_build_extra, _action)
     except BotCheckError:
         raise
+    except FormatUnavailableError:
+        raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Download failed: {e}", None
     except Exception as e:
@@ -614,6 +733,10 @@ def _sync_download_thumbnail(url: str, output_dir: str) -> tuple[bool, str, dict
         info = _sync_extract_info(url)
         if not info:
             return False, "Could not fetch video metadata.", None
+    except (BotCheckError, FormatUnavailableError):
+        # Let typed errors bubble up so the UI can show a dedicated screen.
+        raise
+    try:
 
         # Prefer maxresdefault construction over arbitrary thumbnails list
         thumb_url = None
@@ -711,6 +834,8 @@ def _sync_download_subtitles(url: str, lang: str, output_dir: str
     try:
         return _run_ydl_session(_build_extra, _action)
     except BotCheckError:
+        raise
+    except FormatUnavailableError:
         raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Subtitle download failed: {e}", None
@@ -818,6 +943,57 @@ async def _render_bot_check_error(status_msg, user_id: int, bce: BotCheckError,
         logger.warning(f"_render_bot_check_error edit failed: {e}")
 
     logger.warning(f"yt bot-check surfaced to user {user_id}: {str(bce)[:200]}")
+
+
+async def _render_format_unavailable_error(status_msg, user_id: int,
+                                            fue: FormatUnavailableError,
+                                            back_state: str = "awaiting_youtube_url") -> None:
+    """Dedicated UI for 'Requested format is not available' errors.
+
+    These usually mean YouTube only exposed a single muxed stream for this
+    video (often the case for live streams, premieres, or rights-restricted
+    content). The internal pipeline already falls back to `format=best`
+    automatically — by the time we render this, every option was exhausted.
+    """
+    lines = [
+        "❌ **No usable format found for this video**",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "YouTube didn't expose a downloadable stream that matches the "
+        "requested quality, even after trying every player client and "
+        "the lenient `best` fallback.",
+        "",
+        "**Common causes**",
+        "• It's a **live stream / premiere** that hasn't ended yet.",
+        "• The video is **DRM-protected** or members-only.",
+        "• It's **age- or region-restricted** and your cookies don't grant access.",
+        "• YouTube is currently rate-limiting this server.",
+        "",
+        "**What to try**",
+        "• Pick a **different quality** (e.g. switch from 1080p to Best).",
+        "• Try the **🎵 Audio (MP3)** mode if you only need the sound.",
+        "• Refresh `cookies.txt` via `/ytcookies` — a fresh session sometimes "
+        "unlocks more formats.",
+        "• Wait a minute and retry — the rate-limit window is short.",
+    ]
+    rows = [
+        [InlineKeyboardButton("🔄 Try Another URL", callback_data="yt_retry_url")],
+        [InlineKeyboardButton("⬅️ Back to Menu", callback_data="yt_back_mode"),
+         InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel")],
+    ]
+    if back_state:
+        set_state(user_id, back_state)
+    try:
+        await status_msg.edit_text(
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(rows),
+            disable_web_page_preview=True,
+        )
+    except MessageNotModified:
+        pass
+    except Exception as e:
+        logger.warning(f"_render_format_unavailable_error edit failed: {e}")
+    logger.warning(f"yt format-unavailable surfaced to user {user_id}: {str(fue)[:200]}")
 
 
 def _mode_menu_markup() -> InlineKeyboardMarkup:
@@ -1010,6 +1186,9 @@ async def handle_youtube_url_input(client, message):
         info = await extract_video_info(url)
     except BotCheckError as bce:
         await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_youtube_url")
+        return
+    except FormatUnavailableError as fue:
+        await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_youtube_url")
         return
 
     if not info:
@@ -1212,6 +1391,16 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
             )
         except MessageNotModified:
             pass
+    except BotCheckError as bce:
+        progress.closed = True
+        if not pump_task.done():
+            pump_task.cancel()
+        await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
+    except FormatUnavailableError as fue:
+        progress.closed = True
+        if not pump_task.done():
+            pump_task.cancel()
+        await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Video download pipeline crashed")
         try:
@@ -1315,6 +1504,16 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
             )
         except MessageNotModified:
             pass
+    except BotCheckError as bce:
+        progress.closed = True
+        if not pump_task.done():
+            pump_task.cancel()
+        await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
+    except FormatUnavailableError as fue:
+        progress.closed = True
+        if not pump_task.done():
+            pump_task.cancel()
+        await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Audio download pipeline crashed")
         try:
@@ -1401,6 +1600,10 @@ async def _run_subtitle_download(client, status_msg, user_id: int, url: str, lan
             )
         except MessageNotModified:
             pass
+    except BotCheckError as bce:
+        await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
+    except FormatUnavailableError as fue:
+        await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Subtitle pipeline crashed")
         try:
@@ -1464,6 +1667,10 @@ async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
             )
         except MessageNotModified:
             pass
+    except BotCheckError as bce:
+        await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
+    except FormatUnavailableError as fue:
+        await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Thumbnail pipeline crashed")
         try:
@@ -1493,6 +1700,9 @@ async def _run_info_display(client, status_msg, user_id: int, url: str):
         info = await extract_video_info(url)
     except BotCheckError as bce:
         await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
+        return
+    except FormatUnavailableError as fue:
+        await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
         return
     if not info:
         try:
@@ -1667,6 +1877,9 @@ async def handle_yt_auto_detect(client, message):
     except BotCheckError as bce:
         await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_youtube_url")
         return
+    except FormatUnavailableError as fue:
+        await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_youtube_url")
+        return
     if not info:
         try:
             await status_msg.edit_text(
@@ -1702,7 +1915,8 @@ async def handle_yt_auto_detect(client, message):
 
 
 # === Retry + admin cookies management ====================================
-_COOKIES_TARGET_PATH = "config/yt_cookies.txt"
+# Note: _COOKIES_TARGET_PATH is defined at the top of this file together with
+# _COOKIES_CANDIDATES so the DB-restore helpers can use it too.
 
 
 def _is_yt_admin(user_id: int) -> bool:
@@ -1763,20 +1977,54 @@ async def handle_ytcookies_cmd(client, message):
         return await message.reply_text("❌ Admins only.")
 
     set_state(user_id, "awaiting_yt_cookies_upload")
-    has_cookies = _get_cookies_file() is not None
-    status = "✅ **currently configured**" if has_cookies else "❌ **not configured**"
+
+    # Collect current state from both disk and DB.
+    has_disk = _get_cookies_file() is not None
+    db_record = None
+    try:
+        from database import db
+        db_record = await db.get_youtube_cookies()
+    except Exception as e:
+        logger.warning(f"handle_ytcookies_cmd: DB lookup failed: {e}")
+
+    disk_line = "✅ on disk" if has_disk else "❌ missing on disk"
+    if db_record:
+        ts = db_record.get("updated_at")
+        ts_str = ts.strftime("%Y-%m-%d %H:%M UTC") if ts else "unknown"
+        uploader = db_record.get("uploaded_by") or "unknown"
+        db_line = (
+            f"✅ persisted in MongoDB\n"
+            f"   · last updated: `{ts_str}`\n"
+            f"   · uploader id:  `{uploader}`"
+        )
+    else:
+        db_line = "❌ not persisted in MongoDB (will be lost on redeploy)"
+
+    overall_ok = has_disk or bool(db_record)
+    header = (
+        "✅ **currently configured**" if overall_ok else "❌ **not configured**"
+    )
+
+    buttons = [[InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel")]]
+    if overall_ok:
+        buttons.insert(0, [InlineKeyboardButton(
+            "🗑 Remove cookies", callback_data="yt_cookies_remove"
+        )])
+
     await message.reply_text(
-        f"🍪 **YouTube Cookies — {status}**\n"
+        f"🍪 **YouTube Cookies — {header}**\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"• Disk: {disk_line}\n"
+        f"• DB:   {db_line}\n\n"
         "Send a Netscape-format `cookies.txt` as a **document** to "
-        "install/refresh it.\n\n"
+        "install/refresh it. Cookies are mirrored to MongoDB so they "
+        "survive container redeploys automatically.\n\n"
         "Export tip: in your browser, log into `youtube.com` and use an "
         "extension such as __Get cookies.txt LOCALLY__ → save as "
         "`cookies.txt` → send that file here.\n\n"
-        "Send `cancel` to abort.",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel"),
-        ]]),
+        "Send `cancel` to abort — or use /ytcookies_remove to wipe "
+        "everything.",
+        reply_markup=InlineKeyboardMarkup(buttons),
         disable_web_page_preview=True,
     )
 
@@ -1817,15 +2065,32 @@ async def handle_ytcookies_upload(client, message):
 
     # Quick sanity check: file must contain at least one YouTube cookie line.
     ok = False
+    full_text = ""
     try:
         with open(_COOKIES_TARGET_PATH, "r", encoding="utf-8", errors="ignore") as f:
-            head = f.read(8192)
-        if "youtube.com" in head.lower():
+            full_text = f.read()
+        if "youtube.com" in full_text.lower():
             ok = True
     except Exception:
         ok = False
 
+    # Mirror into MongoDB so redeploys don't wipe the cookies.
+    db_saved = False
+    if full_text:
+        try:
+            db_saved = await persist_youtube_cookies_to_db(
+                full_text, uploaded_by=user_id
+            )
+        except Exception as e:
+            logger.warning(f"handle_ytcookies_upload: DB persist failed: {e}")
+
     set_state(user_id, None)
+
+    db_line = (
+        "✅ Mirrored to MongoDB — will survive redeploys."
+        if db_saved else
+        "⚠️ Could NOT persist to MongoDB — cookies may be lost on redeploy."
+    )
 
     if not ok:
         await message.reply_text(
@@ -1833,18 +2098,67 @@ async def handle_ytcookies_upload(client, message):
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "The file was saved, but it doesn't look like a YouTube "
             "cookies export. If YouTube still blocks you, export a fresh "
-            "cookies.txt **while logged into youtube.com** and try again."
+            "cookies.txt **while logged into youtube.com** and try again.\n\n"
+            f"{db_line}"
         )
-        return
+        raise StopPropagation
 
     await message.reply_text(
         "✅ **YouTube cookies installed**\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"Saved to `{_COOKIES_TARGET_PATH}`. New yt-dlp requests will use "
-        "this cookie jar automatically.\n\n"
+        f"• Disk: `{_COOKIES_TARGET_PATH}`\n"
+        f"• DB:   {db_line}\n\n"
+        "New yt-dlp requests will use this cookie jar automatically.\n\n"
         "Try your YouTube link again now."
     )
     raise StopPropagation
+
+
+@Client.on_message(filters.command(["ytcookies_remove"]) & filters.private)
+async def handle_ytcookies_remove_cmd(client, message):
+    """Admin-only: wipe cookies from both disk and DB."""
+    user_id = message.from_user.id
+    if not _is_yt_admin(user_id):
+        return await message.reply_text("❌ Admins only.")
+
+    disk_removed, db_removed = await delete_youtube_cookies()
+    disk_line = "✅ removed" if disk_removed else "ℹ️ nothing to remove"
+    db_line = "✅ removed" if db_removed else "ℹ️ nothing to remove"
+
+    await message.reply_text(
+        "🗑 **YouTube cookies removed**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"• Disk: {disk_line}\n"
+        f"• DB:   {db_line}\n\n"
+        "Use /ytcookies to upload a fresh cookies.txt."
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^yt_cookies_remove$"))
+async def handle_yt_cookies_remove_cb(client, callback_query):
+    """Inline Remove button from the /ytcookies panel."""
+    user_id = callback_query.from_user.id
+    if not _is_yt_admin(user_id):
+        return await callback_query.answer("Admins only.", show_alert=True)
+
+    await callback_query.answer("Removing cookies…")
+    disk_removed, db_removed = await delete_youtube_cookies()
+    set_state(user_id, None)
+
+    disk_line = "✅ removed" if disk_removed else "ℹ️ nothing to remove"
+    db_line = "✅ removed" if db_removed else "ℹ️ nothing to remove"
+
+    try:
+        await callback_query.message.edit_text(
+            "🗑 **YouTube cookies removed**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"• Disk: {disk_line}\n"
+            f"• DB:   {db_line}\n\n"
+            "Use /ytcookies to upload a fresh cookies.txt.",
+            disable_web_page_preview=True,
+        )
+    except MessageNotModified:
+        pass
 
 
 # --------------------------------------------------------------------------

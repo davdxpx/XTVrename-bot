@@ -128,6 +128,16 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"Error creating indexes: {e}")
 
+    # --- Restore YouTube cookies from DB (survives container redeploys) ---
+    try:
+        from tools.YouTubeTool import restore_youtube_cookies_from_db
+        logger.info("Restoring YouTube cookies from DB if needed...")
+        restored = app.loop.run_until_complete(restore_youtube_cookies_from_db())
+        if restored:
+            logger.info("YouTube cookies restored from MongoDB.")
+    except Exception as e:
+        logger.warning(f"Error restoring YouTube cookies from DB: {e}")
+
     # --- Channel peer caching ---
     try:
         from database import db
