@@ -72,6 +72,7 @@ async def render_user_preferences_inline(client, user_id, message):
         ("media_info", "ℹ️ Media Info"),
         ("voice_converter", "🎙️ Voice Converter"),
         ("video_note_converter", "⭕ Video Note Converter"),
+        ("youtube_tool", "▶️ YouTube Tool"),
     ]
     for tid, tname in tool_defs:
         if _is_available(tid):

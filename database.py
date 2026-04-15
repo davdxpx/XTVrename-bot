@@ -649,6 +649,7 @@ class Database:
                             "media_info": True,
                             "voice_converter": True,
                             "video_note_converter": True,
+                            "youtube_tool": True,
                             "4k_enhancement": True,
                             "batch_processing_pro": True
                         }
@@ -669,6 +670,7 @@ class Database:
                             "media_info": True,
                             "voice_converter": True,
                             "video_note_converter": True,
+                            "youtube_tool": True,
                             "4k_enhancement": True,
                             "batch_processing_pro": True
                         }
