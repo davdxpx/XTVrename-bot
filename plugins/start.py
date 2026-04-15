@@ -296,7 +296,7 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
             community_name = "official XTV"
 
     toggles = await db.get_feature_toggles()
-    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
+    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True) or toggles.get("youtube_tool", True)
 
     is_premium_user = False
     plan_display = "Standard"
@@ -317,7 +317,7 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
                 pf = plan_settings.get("features", {})
 
                 if not show_other:
-                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
+                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True) or pf.get("youtube_tool", True):
                         show_other = True
 
     tool_map = {
@@ -330,6 +330,7 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
+        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
         "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
@@ -469,6 +470,45 @@ async def handle_audio_command(client, message):
     msg = await message.reply_text("Loading audio editor...")
     mock_cb.message = msg
     await handle_audio_editor_menu(client, mock_cb)
+
+
+@Client.on_message(filters.command(["yt", "youtube"]) & filters.private, group=0)
+async def handle_youtube_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("youtube_tool", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("youtube_tool", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from tools.YouTubeTool import handle_youtube_tool_menu
+    await track_tool_usage(user_id, "youtube_tool")
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "youtube_tool_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading YouTube tool...")
+    mock_cb.message = msg
+    await handle_youtube_tool_menu(client, mock_cb)
 
 @Client.on_message(filters.command(["p", "personal"]) & filters.private, group=0)
 async def handle_personal_command(client, message):
@@ -831,7 +871,7 @@ async def handle_end_command_unique(client, message):
     logger.debug(f"CMD received: {message.text} from {user_id}")
     clear_session(user_id)
     toggles = await db.get_feature_toggles()
-    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True)
+    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True) or toggles.get("youtube_tool", True)
 
     pf = {}
     if Config.PUBLIC_MODE:
@@ -843,7 +883,7 @@ async def handle_end_command_unique(client, message):
                 plan_settings = config.get(f"premium_{plan_name}", {})
                 pf = plan_settings.get("features", {})
                 if not show_other:
-                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True):
+                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True) or pf.get("youtube_tool", True):
                         show_other = True
 
     buttons = [
@@ -893,6 +933,7 @@ async def handle_other_features_menu(client, callback_query):
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
+        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
         "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
@@ -1115,6 +1156,7 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/mediainfo` or `/mi` — Show detailed media file info\n"
                 "• `/voice` or `/v` — Convert audio to voice note\n"
                 "• `/videonote` or `/vn` — Convert video to round note\n"
+                "• `/youtube` or `/yt` — Download from YouTube (video / audio / thumb / subs)"
                 "• `/torrent` or `/t` — Search & download torrents"
             )
         elif cmd == "files":
@@ -1163,6 +1205,7 @@ async def handle_help_callbacks(client, callback_query):
                          InlineKeyboardButton("ℹ️ Media Info", callback_data="help_tool_mediainfo")],
                         [InlineKeyboardButton("🎙️ Voice Converter", callback_data="help_tool_voice"),
                          InlineKeyboardButton("⭕ Video Note", callback_data="help_tool_videonote")],
+                        [InlineKeyboardButton("▶️ YouTube Tool", callback_data="help_tool_youtube")],
                         [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
                     ]
                 )
@@ -1263,11 +1306,21 @@ async def handle_help_callbacks(client, callback_query):
                 "Converts a video into a Telegram round video note. The video is cropped to square, scaled to 384px, and limited to 60 seconds.\n\n"
                 "• **Shortcut:** `/vn` or `/videonote`."
             )
-
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_tools))
-        except MessageNotModified:
-            pass
+        elif tool == "youtube":
+            text = (
+                "**▶️ YouTube Tool**\n\n"
+                "> Download and inspect YouTube content.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**What it does:**\n"
+                "Open the YouTube menu and paste any YouTube URL. You can then choose:\n\n"
+                "• **🎬 Video** — Download in 360p / 480p / 720p / 1080p / Best.\n"
+                "• **🎵 Audio (MP3)** — Extract audio at 128 / 192 / 320 kbps.\n"
+                "• **🖼 Thumbnail** — Grab the HD cover image.\n"
+                "• **📝 Subtitles** — Download captions in many languages (auto-generated supported).\n"
+                "• **ℹ️ Video Info** — Title, uploader, stats, chapters, description.\n\n"
+                "**Auto-detect:** Pasting a YouTube link at any time opens this menu automatically.\n"
+                "• **Shortcut:** `/yt` or `/youtube`."
+            )
 
     elif data == "help_file_management":
         try:

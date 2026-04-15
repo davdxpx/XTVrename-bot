@@ -9,4 +9,5 @@ aiohttp~=3.10.5
 guessit
 certifi>=2024.7.4
 psutil
+yt-dlp>=2025.1.15
 beautifulsoup4

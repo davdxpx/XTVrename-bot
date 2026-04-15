@@ -78,6 +78,8 @@ async def render_user_preferences_inline(client, user_id, message):
         available_tools.append({"id": "voice_converter", "name": "🎙️ Voice Converter"})
     if _is_available("video_note_converter"):
         available_tools.append({"id": "video_note_converter", "name": "⭕ Video Note Converter"})
+    if _is_available("youtube_tool"):
+        avaiable_tools.append({"id": "youtube_tool", "name": "▶️ YouTube Tool"})
     if _is_available("torrent_downloader"):
         available_tools.append({"id": "torrent_downloader", "name": "🧲 Torrent Downloader"})
 

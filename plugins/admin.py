@@ -463,6 +463,7 @@ async def admin_callback(client, callback_query):
                 ("media_info", "ℹ️ Media Info"),
                 ("voice_converter", "🎙️ Voice Converter"),
                 ("video_note_converter", "⭕ Video Note"),
+                ("youtube_tool", "▶️ YouTube Tool"),
                 ("torrent_downloader", "🧲 Torrent Downloader"),
                 ("4k_enhancement", "📺 4K Enhancement"),
                 ("batch_processing_pro", "📦 Batch Pro"),
@@ -1173,6 +1174,7 @@ async def admin_callback(client, callback_query):
         info_en = toggles.get("media_info", True)
         voice_en = toggles.get("voice_converter", True)
         vnote_en = toggles.get("video_note_converter", True)
+        yt_en = toggles.get("youtube_tool", True)
         torrent_en = toggles.get("torrent_downloader", True)
         four_k_en = toggles.get("4k_enhancement", True)
         batch_pro_en = toggles.get("batch_processing_pro", True)
@@ -1202,6 +1204,7 @@ async def admin_callback(client, callback_query):
              InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_gtoggle_media_info")],
             [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_gtoggle_voice_converter"),
              InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_gtoggle_video_note_converter")],
+            [InlineKeyboardButton(f"{emoji(yt_en)} ▶️ YouTube Tool", callback_data="admin_gtoggle_youtube_tool")],
             [InlineKeyboardButton(f"{emoji(torrent_en)} 🧲 Torrent Downloader", callback_data="admin_gtoggle_torrent_downloader")],
             [InlineKeyboardButton(f"{emoji(four_k_en)} 📺 4K Enhancement", callback_data="admin_gtoggle_4k_enhancement"),
              InlineKeyboardButton(f"{emoji(batch_pro_en)} 📦 Batch Pro", callback_data="admin_gtoggle_batch_processing_pro")],
@@ -1427,6 +1430,7 @@ async def admin_callback(client, callback_query):
                 ("media_info", "ℹ️ Media Info"),
                 ("voice_converter", "🎙️ Voice Converter"),
                 ("video_note_converter", "⭕ Video Note"),
+                ("youtube_tool", "▶️ YouTube Tool"),
                 ("torrent_downloader", "🧲 Torrent Downloader"),
                 ("4k_enhancement", "📺 4K Enhancement"),
                 ("batch_processing_pro", "📦 Batch Pro"),
