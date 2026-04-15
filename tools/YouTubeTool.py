@@ -709,7 +709,7 @@ def _sync_download_audio(url: str, bitrate: str, output_dir: str, max_size: int,
         return _run_ydl_session(_build_extra, _action)
     except BotCheckError:
         raise
-w    except FormatUnavailableError:
+    except FormatUnavailableError:
         raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Download failed: {e}", None
