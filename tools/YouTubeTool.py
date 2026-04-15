@@ -117,6 +117,18 @@ _BOT_CHECK_MARKERS = (
     "login required",
 )
 
+# Markers indicating the current player_client returned no usable formats.
+# Rotating to a different client almost always resolves these — different
+# clients expose different stream sets (e.g. iOS exposes HLS that web doesn't).
+_FORMAT_UNAVAILABLE_MARKERS = (
+    "requested format is not available",
+    "no video formats found",
+    "no formats found",
+    "format not available",
+    "requested formats are incompatible",
+    "unable to extract",  # e.g. "unable to extract player response"
+)
+
 
 class BotCheckError(RuntimeError):
     """Raised when yt-dlp is blocked by YouTube's bot-check flow."""
@@ -145,6 +157,19 @@ def _is_bot_check_error(err_text: str) -> bool:
         return False
     low = err_text.lower()
     return any(m in low for m in _BOT_CHECK_MARKERS)
+
+
+def _is_format_unavailable_error(err_text: str) -> bool:
+    """Best-effort detection of 'no usable formats' from the current client."""
+    if not err_text:
+        return False
+    low = err_text.lower()
+    return any(m in low for m in _FORMAT_UNAVAILABLE_MARKERS)
+
+
+def _is_retryable_ytdlp_error(err_text: str) -> bool:
+    """Errors where rotating to a different player_client is likely to help."""
+    return _is_bot_check_error(err_text) or _is_format_unavailable_error(err_text)
 
 
 def _ytdlp_base_opts(
@@ -190,11 +215,18 @@ def _run_ytdlp_with_fallback(
     base_extra: dict | None = None,
     download: bool = False,
 ):
-    """Call yt-dlp extract_info, rotating through player clients on bot-check.
+    """Call yt-dlp extract_info, rotating through player clients on recoverable failures.
 
     Returns the info dict on success. Raises `BotCheckError` when every
     configured client failed with a bot-check marker. Re-raises other errors
     as-is from the last attempt.
+
+    Rotation is triggered by either:
+      * YouTube's anti-bot guard (see `_is_bot_check_error`), or
+      * The current client returning no usable formats / failing extraction
+        (see `_is_format_unavailable_error`). Different clients expose
+        different stream sets, so a different client often succeeds where
+        the default one doesn't.
     """
     last_exc: Exception | None = None
     for client_name in _PLAYER_CLIENT_FALLBACKS:
@@ -209,16 +241,60 @@ def _run_ytdlp_with_fallback(
                 logger.warning(
                     f"yt-dlp bot-check with player_client={client_name!r}: {msg[:200]}"
                 )
-                # Try the next client.
                 continue
-            # Non-bot-check failure — don't bother trying more clients.
+            if _is_format_unavailable_error(msg):
+                logger.warning(
+                    f"yt-dlp format-unavailable with player_client={client_name!r}: {msg[:200]}"
+                )
+                continue
+            # Non-recoverable failure — don't bother trying more clients.
             raise
 
     # All clients exhausted.
     err_text = str(last_exc) if last_exc else "unknown"
     if _is_bot_check_error(err_text):
         raise BotCheckError(err_text)
-    # Shouldn't really happen (we re-raise non-bot errors above) but be safe.
+    # Shouldn't really happen (we re-raise non-retryable errors above) but be safe.
+    if last_exc:
+        raise last_exc
+    raise BotCheckError("yt-dlp exhausted all player clients")
+
+
+def _run_ydl_session(build_extra_fn, action_fn):
+    """Run a yt-dlp session, rotating player clients on retryable errors.
+
+    `build_extra_fn` is a zero-argument callable that returns the `extra` dict
+    to merge into the base opts (format selector, outtmpl, progress hooks, etc).
+    `action_fn(ydl) -> result` performs the actual work on the YoutubeDL instance.
+
+    Retries across `_PLAYER_CLIENT_FALLBACKS` when the error matches
+    `_is_retryable_ytdlp_error`. Raises `BotCheckError` when every client hit
+    the anti-bot guard; re-raises the last exception otherwise.
+    """
+    last_exc: Exception | None = None
+    for client_name in _PLAYER_CLIENT_FALLBACKS:
+        opts = _ytdlp_base_opts(extra=build_extra_fn(), player_client=client_name)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return action_fn(ydl)
+        except Exception as e:
+            last_exc = e
+            msg = str(e)
+            if _is_bot_check_error(msg):
+                logger.warning(
+                    f"yt-dlp bot-check with player_client={client_name!r}: {msg[:200]}"
+                )
+                continue
+            if _is_format_unavailable_error(msg):
+                logger.warning(
+                    f"yt-dlp format-unavailable with player_client={client_name!r}: {msg[:200]}"
+                )
+                continue
+            raise
+
+    err_text = str(last_exc) if last_exc else "unknown"
+    if _is_bot_check_error(err_text):
+        raise BotCheckError(err_text)
     if last_exc:
         raise last_exc
     raise BotCheckError("yt-dlp exhausted all player clients")
@@ -428,34 +504,41 @@ def _sync_download_video(url: str, quality: str, output_dir: str, max_size: int,
         )
 
     out_tmpl = os.path.join(output_dir, "%(title).80s [%(id)s].%(ext)s")
-    opts = _ytdlp_base_opts(extra={
-        "format": fmt,
-        "outtmpl": out_tmpl,
-        "merge_output_format": "mp4",
-        "restrictfilenames": False,
-        "max_filesize": max_size,
-        "progress_hooks": [hook] if hook else [],
-        "writethumbnail": True,
-        "postprocessors": [
-            {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
-            {"key": "EmbedThumbnail"},
-            {"key": "FFmpegMetadata"},
-        ],
-    })
+
+    def _build_extra():
+        return {
+            "format": fmt,
+            "outtmpl": out_tmpl,
+            "merge_output_format": "mp4",
+            "restrictfilenames": False,
+            "max_filesize": max_size,
+            "progress_hooks": [hook] if hook else [],
+            "writethumbnail": True,
+            "postprocessors": [
+                {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
+                {"key": "EmbedThumbnail"},
+                {"key": "FFmpegMetadata"},
+            ],
+        }
+
+    def _action(ydl):
+        info = ydl.extract_info(url, download=True)
+        if not info:
+            return False, "No info returned from yt-dlp.", None
+        filepath = ydl.prepare_filename(info)
+        # yt-dlp may have converted the container — swap extension to .mp4
+        base, _ = os.path.splitext(filepath)
+        mp4_path = base + ".mp4"
+        if os.path.exists(mp4_path):
+            filepath = mp4_path
+        if not os.path.exists(filepath):
+            return False, f"Output file not found: {filepath}", info
+        return True, filepath, info
+
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                return False, "No info returned from yt-dlp.", None
-            filepath = ydl.prepare_filename(info)
-            # yt-dlp may have converted the container — swap extension to .mp4
-            base, _ = os.path.splitext(filepath)
-            mp4_path = base + ".mp4"
-            if os.path.exists(mp4_path):
-                filepath = mp4_path
-            if not os.path.exists(filepath):
-                return False, f"Output file not found: {filepath}", info
-            return True, filepath, info
+        return _run_ydl_session(_build_extra, _action)
+    except BotCheckError:
+        raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Download failed: {e}", None
     except Exception as e:
@@ -477,31 +560,38 @@ def _sync_download_audio(url: str, bitrate: str, output_dir: str, max_size: int,
         return False, _YTDLP_IMPORT_ERROR or "yt-dlp not installed", None
 
     out_tmpl = os.path.join(output_dir, "%(title).80s [%(id)s].%(ext)s")
-    opts = _ytdlp_base_opts(extra={
-        "format": "bestaudio/best",
-        "outtmpl": out_tmpl,
-        "max_filesize": max_size,
-        "progress_hooks": [hook] if hook else [],
-        "writethumbnail": True,
-        "postprocessors": [
-            {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(bitrate)},
-            {"key": "EmbedThumbnail"},
-            {"key": "FFmpegMetadata"},
-        ],
-    })
+
+    def _build_extra():
+        return {
+            "format": "bestaudio/best",
+            "outtmpl": out_tmpl,
+            "max_filesize": max_size,
+            "progress_hooks": [hook] if hook else [],
+            "writethumbnail": True,
+            "postprocessors": [
+                {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(bitrate)},
+                {"key": "EmbedThumbnail"},
+                {"key": "FFmpegMetadata"},
+            ],
+        }
+
+    def _action(ydl):
+        info = ydl.extract_info(url, download=True)
+        if not info:
+            return False, "No info returned from yt-dlp.", None
+        filepath = ydl.prepare_filename(info)
+        base, _ = os.path.splitext(filepath)
+        mp3_path = base + ".mp3"
+        if os.path.exists(mp3_path):
+            filepath = mp3_path
+        if not os.path.exists(filepath):
+            return False, f"Output file not found: {filepath}", info
+        return True, filepath, info
+
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                return False, "No info returned from yt-dlp.", None
-            filepath = ydl.prepare_filename(info)
-            base, _ = os.path.splitext(filepath)
-            mp3_path = base + ".mp3"
-            if os.path.exists(mp3_path):
-                filepath = mp3_path
-            if not os.path.exists(filepath):
-                return False, f"Output file not found: {filepath}", info
-            return True, filepath, info
+        return _run_ydl_session(_build_extra, _action)
+    except BotCheckError:
+        raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Download failed: {e}", None
     except Exception as e:
@@ -578,43 +668,50 @@ def _sync_download_subtitles(url: str, lang: str, output_dir: str
         return False, _YTDLP_IMPORT_ERROR or "yt-dlp not installed", None
 
     out_tmpl = os.path.join(output_dir, "%(title).80s [%(id)s].%(ext)s")
-    opts = _ytdlp_base_opts(extra={
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": [lang],
-        "subtitlesformat": "srt/best",
-        "convertsubtitles": "srt",
-        "outtmpl": out_tmpl,
-        "postprocessors": [
-            {"key": "FFmpegSubtitlesConvertor", "format": "srt"},
-        ],
-    })
+
+    def _build_extra():
+        return {
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": [lang],
+            "subtitlesformat": "srt/best",
+            "convertsubtitles": "srt",
+            "outtmpl": out_tmpl,
+            "postprocessors": [
+                {"key": "FFmpegSubtitlesConvertor", "format": "srt"},
+            ],
+        }
+
+    def _action(ydl):
+        info = ydl.extract_info(url, download=True)
+        if not info:
+            return False, "No info returned from yt-dlp.", None
+
+        base = ydl.prepare_filename(info)
+        base_noext, _ = os.path.splitext(base)
+
+        # yt-dlp writes `<base>.<lang>.srt`. Try exact match first, then
+        # any srt starting with our base (covers `en-US`, `en-orig`, …).
+        candidate = f"{base_noext}.{lang}.srt"
+        if os.path.exists(candidate):
+            return True, candidate, info
+
+        try:
+            dir_ = os.path.dirname(base_noext) or "."
+            prefix = os.path.basename(base_noext) + "."
+            for fn in os.listdir(dir_):
+                if fn.startswith(prefix) and fn.endswith(".srt"):
+                    return True, os.path.join(dir_, fn), info
+        except Exception:
+            pass
+
+        return False, f"No subtitles found for language '{lang}'.", info
+
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                return False, "No info returned from yt-dlp.", None
-
-            base = ydl.prepare_filename(info)
-            base_noext, _ = os.path.splitext(base)
-
-            # yt-dlp writes `<base>.<lang>.srt`. Try exact match first, then
-            # any srt starting with our base (covers `en-US`, `en-orig`, …).
-            candidate = f"{base_noext}.{lang}.srt"
-            if os.path.exists(candidate):
-                return True, candidate, info
-
-            try:
-                dir_ = os.path.dirname(base_noext) or "."
-                prefix = os.path.basename(base_noext) + "."
-                for fn in os.listdir(dir_):
-                    if fn.startswith(prefix) and fn.endswith(".srt"):
-                        return True, os.path.join(dir_, fn), info
-            except Exception:
-                pass
-
-            return False, f"No subtitles found for language '{lang}'.", info
+        return _run_ydl_session(_build_extra, _action)
+    except BotCheckError:
+        raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Subtitle download failed: {e}", None
     except Exception as e:
