@@ -125,6 +125,7 @@ async def _render_step1(client, base_message, user_id: int, mode: str, back_cb: 
 async def handle_dumbv2_start(client, callback_query):
     user_id = callback_query.from_user.id
     mode = callback_query.data.split(":", 1)[1]
+    logger.info(f"[dcv2] start (mode={mode}, user={user_id})")
 
     # Gate: 'global' is only intended for the admin panel. If a non-admin
     # somehow triggers it in PUBLIC_MODE, fall back to 'user'.
@@ -146,9 +147,12 @@ async def handle_dumbv2_start(client, callback_query):
 
 
 # === Step 2: user sends input =============================================
+# NOTE: group=0 (ahead of admin_setup's group=1 handlers, which unconditionally
+# swallow forwards for CEO and therefore block our wizard). We do our own state
+# check and raise ContinuePropagation when not ours.
 @Client.on_message(
     (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
-    group=1,
+    group=0,
 )
 async def handle_dcv2_input(client, message):
     # Early bail-out when we're not actively collecting input.
@@ -158,7 +162,11 @@ async def handle_dcv2_input(client, message):
         return
 
     if get_state(user_id) != S_INPUT:
-        return  # not ours — let other groups handle
+        # Not our turn — let other groups/handlers run.
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
+
+    logger.info(f"[dcv2] handling input from {user_id}: text={message.text!r} fwd={bool(getattr(message, 'forward_from_chat', None) or getattr(message, 'forward_origin', None))}")
 
     sess = get_data(user_id) or {}
     mode = sess.get(SK_MODE, "user")
