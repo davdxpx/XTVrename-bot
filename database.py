@@ -610,6 +610,60 @@ class Database:
             return
         await self.settings.delete_one({"_id": "xtv_pro_settings"})
 
+    # === YouTube cookies persistence ======================================
+    # Stored as a single doc so cookies survive container redeploys without
+    # needing a volume mount. The on-disk file at config/yt_cookies.txt is
+    # recreated from this doc at bot startup.
+    async def get_youtube_cookies(self):
+        """Return {'cookies': str, 'updated_at': datetime, 'uploaded_by': int}
+        or None if no cookies have been saved yet."""
+        if self.settings is None:
+            return None
+        try:
+            doc = await self.settings.find_one({"_id": "youtube_cookies"})
+        except Exception as e:
+            logger.warning(f"get_youtube_cookies failed: {e}")
+            return None
+        if not doc or not doc.get("cookies"):
+            return None
+        return {
+            "cookies": doc.get("cookies", ""),
+            "updated_at": doc.get("updated_at"),
+            "uploaded_by": doc.get("uploaded_by"),
+        }
+
+    async def save_youtube_cookies(self, cookies_text: str, uploaded_by: int | None = None):
+        """Persist a Netscape-format cookies.txt blob to MongoDB."""
+        if self.settings is None:
+            return False
+        if not cookies_text:
+            return False
+        try:
+            await self.settings.update_one(
+                {"_id": "youtube_cookies"},
+                {"$set": {
+                    "cookies": cookies_text,
+                    "updated_at": datetime.datetime.utcnow(),
+                    "uploaded_by": uploaded_by,
+                }},
+                upsert=True,
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"save_youtube_cookies failed: {e}")
+            return False
+
+    async def delete_youtube_cookies(self):
+        """Remove the persisted YouTube cookies document, if any."""
+        if self.settings is None:
+            return False
+        try:
+            res = await self.settings.delete_one({"_id": "youtube_cookies"})
+            return bool(res.deleted_count)
+        except Exception as e:
+            logger.warning(f"delete_youtube_cookies failed: {e}")
+            return False
+
     async def get_public_config(self):
         if self.settings is None:
             return {}

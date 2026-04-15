@@ -1240,12 +1240,37 @@ async def handle_help_callbacks(client, callback_query):
             )
         elif tool == "convert":
             text = (
-                "**🔀 File Converter**\n\n"
-                "> Change formats instantly.\n"
+                "**🔀 File Converter — Mega Edition**\n\n"
+                "> Your all-in-one media swiss-army knife.\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Converts media files from one format to another (e.g., MKV to MP4, WEBM to MP4).\n\n"
-                "• Just send the file and select the format.\n"
+                "**How to use:**\n"
+                "1. Send any video, audio or image file (or use `/c` / `/convert`).\n"
+                "2. Pick a category from the menu that appears.\n"
+                "3. Pick an operation — the bot handles the rest.\n\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**🎬 Video Operations**\n"
+                "• **📦 Container** — Remux to MP4, MKV, MOV, AVI, WEBM, FLV, 3GP, or TS (no re-encode, lightning fast).\n"
+                "• **🎞 Codec** — Re-encode to x264 (H.264), x265 (H.265), VP9, or AV1.\n"
+                "• **🎵 Extract Audio** — Pull the audio track out as MP3, M4A (AAC), OGG, OPUS, FLAC, or WAV.\n"
+                "• **🖼 Extract Frame** — Grab the first frame as PNG, JPG, or WEBP.\n"
+                "• **🎞 GIF** — Convert clips into animated GIFs (Low / Med / High quality presets).\n"
+                "• **🔊 Audio FX** — Normalize, Boost +6dB, or Mono Downmix (keeps video untouched).\n"
+                "• **⚙️ Transform** — Scale to 480p / 720p / 1080p / 4K, mute audio, change speed (0.5× / 1.5× / 2×), or reverse the video.\n\n"
+                "**🎵 Audio Operations**\n"
+                "• **📊 Bitrate** — Re-encode at 128 / 192 / 256 / 320 kbps.\n"
+                "• **🔀 Format** — Convert between MP3, M4A, OGG, OPUS, FLAC, WAV, WMA.\n"
+                "• **🔊 Audio FX** — Normalize, Boost, Mono Downmix, and more.\n\n"
+                "**🖼 Image Operations**\n"
+                "• **🔀 Format** — JPG, PNG, WEBP, BMP, TIFF, GIF.\n"
+                "• **📐 Resize** — Common presets (HD, FHD, square, thumbnail).\n"
+                "• **🔄 Rotate / Flip** — 90° / 180° / 270°, horizontal & vertical flip.\n"
+                "• **🎨 Filter** — Grayscale, sepia, invert, blur, sharpen, and more.\n"
+                "• **🗜 Compress** — Shrink file size with quality presets.\n\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "**💡 Tips**\n"
+                "• 🔙 Every submenu has a Back button — no dead ends.\n"
+                "• The original filename & metadata title are preserved where possible (a small suffix is added so you can tell versions apart).\n"
+                "• Stream-copy is used whenever possible — conversions are much faster than a full re-encode.\n\n"
                 "• **Shortcut:** `/c` or `/convert`."
             )
         elif tool == "watermark":
@@ -1321,6 +1346,20 @@ async def handle_help_callbacks(client, callback_query):
                 "**Auto-detect:** Pasting a YouTube link at any time opens this menu automatically.\n"
                 "• **Shortcut:** `/yt` or `/youtube`."
             )
+        else:
+            text = (
+                "**🛠 Tool Info**\n\n"
+                "Sorry, no detailed guide is available for this tool yet."
+            )
+
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(back_to_tools),
+                disable_web_page_preview=True,
+            )
+        except MessageNotModified:
+            pass
 
     elif data == "help_file_management":
         try:
@@ -1862,20 +1901,51 @@ async def handle_help_callbacks(client, callback_query):
                 "• Set the channel type: Movies, Series, or Standard (everything)."
             )
         elif setting == "info":
+            try:
+                public_cfg = await db.get_public_config()
+            except Exception:
+                public_cfg = {}
+            bot_name = public_cfg.get("bot_name", "𝕏TV MediaStudio™")
+            community_name = public_cfg.get("community_name", "𝕏TV Network")
+            support_contact = public_cfg.get("support_contact", "@davdxpx")
+
             text = (
-                "**ℹ️ Bot Info & Contact**\n\n"
-                "> Learn about the bot.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "Use the `/info` command to view:\n\n"
-                "• Bot version and uptime status.\n"
-                "• The admin's contact details for support.\n"
-                "• Links to the official channel or community group."
+                f"**ℹ️ {bot_name} — Info & Contact**\n\n"
+                f"> Everything about the bot, its makers, and where to find us.\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"**💡 About This Bot**\n"
+                f"Your ultimate media processing tool. Easily rename, format, convert, and organize your files with professional metadata injection, custom thumbnails, and much more.\n\n"
+                f"**📊 Quick Facts**\n"
+                f"• **Bot Version:** `{Config.VERSION} (Public Edition)`\n"
+                f"• **MyFiles Engine:** `{Config.MYFILES_VERSION}`\n"
+                f"• **Community:** `{community_name}`\n\n"
+                f"**🔍 See Live Stats**\n"
+                f"Use the `/info` command to view the full live status:\n"
+                f"• Bot version & uptime\n"
+                f"• Live CPU / RAM load\n"
+                f"• Python & Pyrofork versions\n"
+                f"• Support contact & community link\n\n"
+                f"**📞 Help & Support**\n"
+                f"• **Support Contact:** {support_contact}\n"
+                f"• **Bot Updates Channel:** [@XTVbots](https://t.me/XTVbots)\n"
+                f"• **Backup Channel:** [@XTVhome](https://t.me/XTVhome)\n\n"
+                f"**🧩 Source Code**\n"
+                f"This bot is open source — explore, learn, or contribute:\n"
+                f"• [github.com/davdxpx/XTV-MediaStudio](https://github.com/davdxpx/XTV-MediaStudio)\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"**⚡ Powered by:** [𝕏TV](https://t.me/XTVglobal)\n"
+                f"**👨‍💻 Developed by:** [𝕏0L0™](https://t.me/davdxpx)\n"
+                f"© 2026 𝕏TV Network Global"
             )
         else:
             text = "Unknown setting."
 
         try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_set))
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(back_to_set),
+                disable_web_page_preview=True,
+            )
         except MessageNotModified:
             pass
 
