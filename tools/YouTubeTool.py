@@ -516,6 +516,27 @@ def _mode_menu_markup() -> InlineKeyboardMarkup:
     ])
 
 
+def _result_menu_markup() -> InlineKeyboardMarkup:
+    """Markup shown below a delivered YouTube result (thumbnail/audio/video/
+    subs/info). Lets the user go back to the per-URL mode menu, start over
+    with a new link, or finish."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Back to Menu", callback_data="yt_back_mode"),
+         InlineKeyboardButton("🔗 New YouTube Link", callback_data="yt_new_link")],
+        [InlineKeyboardButton("❌ Close", callback_data="yt_cancel")],
+    ])
+
+
+def _mode_menu_text(title: str, uploader: str, duration: str) -> str:
+    return (
+        f"▶️ **YouTube Tool**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"**🎬 {title}**\n"
+        f"__by {uploader} · ⏱ {duration}__\n\n"
+        f"Choose what you want to do:"
+    )
+
+
 def _quality_menu_markup() -> InlineKeyboardMarkup:
     rows = []
     row = []
@@ -581,7 +602,7 @@ async def handle_youtube_tool_menu(client, callback_query):
             "🖼 Grab the HD thumbnail\n"
             "📝 Download subtitles (multiple languages)\n"
             "ℹ️ Show video info & metadata\n\n"
-            "_Tip: You can also paste a YouTube URL any time to get this menu automatically._",
+            "__Tip: You can also paste a YouTube URL any time to get this menu automatically.__",
             reply_markup=InlineKeyboardMarkup(_cancel_row()),
             disable_web_page_preview=True,
         )
@@ -687,6 +708,7 @@ async def handle_youtube_url_input(client, message):
     update_data(user_id, "video_title", info.get("title") or "Untitled")
     update_data(user_id, "video_id", info.get("id"))
     update_data(user_id, "video_duration", info.get("duration") or 0)
+    update_data(user_id, "video_uploader", info.get("uploader") or info.get("channel") or "Unknown")
     set_state(user_id, "awaiting_yt_mode")
 
     title = info.get("title") or "Untitled"
@@ -698,7 +720,7 @@ async def handle_youtube_url_input(client, message):
             f"▶️ **YouTube Tool**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"**🎬 {title}**\n"
-            f"_by {uploader} · ⏱ {duration}_\n\n"
+            f"__by {uploader} · ⏱ {duration}__\n\n"
             f"Choose what you want to do:",
             reply_markup=_mode_menu_markup(),
             disable_web_page_preview=True,
@@ -807,7 +829,7 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"**{title_hint}**\n"
             f"> Quality: `{quality}`\n\n"
-            f"_Starting download..._",
+            f"__Starting download...__",
         )
     except MessageNotModified:
         pass
@@ -826,12 +848,15 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
         progress.closed = True
         pump_task.cancel()
         if not ok:
-            await status_msg.edit_text(
-                f"❌ **Video download failed.**\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"`{result}`"
-            )
-            clear_session(user_id)
+            try:
+                await status_msg.edit_text(
+                    f"❌ **Video download failed.**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"`{result}`",
+                    reply_markup=_result_menu_markup(),
+                )
+            except MessageNotModified:
+                pass
             return
         filepath = result
 
@@ -843,7 +868,7 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
 
         caption = (
             f"🎬 **{info.get('title') or 'YouTube Video'}**\n"
-            f"_{info.get('uploader') or ''}_\n"
+            f"__{info.get('uploader') or ''}__\n"
             f"Quality: `{quality}`"
         )
         try:
@@ -854,15 +879,26 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
                 duration=int(info.get("duration") or 0),
                 supports_streaming=True,
             )
-            await status_msg.delete()
         except Exception as e:
             logger.warning(f"send_video failed, falling back to send_document: {e}")
             await client.send_document(chat_id=user_id, document=filepath, caption=caption)
-            await status_msg.delete()
+
+        try:
+            await status_msg.edit_text(
+                "✅ **Video delivered above.**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Choose next action:",
+                reply_markup=_result_menu_markup(),
+            )
+        except MessageNotModified:
+            pass
     except Exception as e:
         logger.exception("Video download pipeline crashed")
         try:
-            await status_msg.edit_text(f"❌ Unexpected error: `{e}`")
+            await status_msg.edit_text(
+                f"❌ Unexpected error: `{e}`",
+                reply_markup=_result_menu_markup(),
+            )
         except Exception:
             pass
     finally:
@@ -870,7 +906,7 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
         if not pump_task.done():
             pump_task.cancel()
         _safe_remove(filepath)
-        clear_session(user_id)
+        set_state(user_id, "awaiting_yt_result")
 
 
 @Client.on_callback_query(filters.regex(r"^yt_audio_bitrate_(128|192|320)$"))
@@ -895,7 +931,7 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"**{title_hint}**\n"
             f"> Bitrate: `{bitrate} kbps`\n\n"
-            f"_Starting download..._"
+            f"__Starting download...__"
         )
     except MessageNotModified:
         pass
@@ -914,12 +950,15 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
         progress.closed = True
         pump_task.cancel()
         if not ok:
-            await status_msg.edit_text(
-                f"❌ **Audio download failed.**\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"`{result}`"
-            )
-            clear_session(user_id)
+            try:
+                await status_msg.edit_text(
+                    f"❌ **Audio download failed.**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"`{result}`",
+                    reply_markup=_result_menu_markup(),
+                )
+            except MessageNotModified:
+                pass
             return
         filepath = result
 
@@ -931,7 +970,7 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
 
         caption = (
             f"🎵 **{info.get('title') or 'YouTube Audio'}**\n"
-            f"_{info.get('uploader') or ''}_\n"
+            f"__{info.get('uploader') or ''}__\n"
             f"Bitrate: `{bitrate} kbps`"
         )
         try:
@@ -943,15 +982,26 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
                 performer=info.get("uploader") or None,
                 title=info.get("title") or None,
             )
-            await status_msg.delete()
         except Exception as e:
             logger.warning(f"send_audio failed, falling back to send_document: {e}")
             await client.send_document(chat_id=user_id, document=filepath, caption=caption)
-            await status_msg.delete()
+
+        try:
+            await status_msg.edit_text(
+                "✅ **Audio delivered above.**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Choose next action:",
+                reply_markup=_result_menu_markup(),
+            )
+        except MessageNotModified:
+            pass
     except Exception as e:
         logger.exception("Audio download pipeline crashed")
         try:
-            await status_msg.edit_text(f"❌ Unexpected error: `{e}`")
+            await status_msg.edit_text(
+                f"❌ Unexpected error: `{e}`",
+                reply_markup=_result_menu_markup(),
+            )
         except Exception:
             pass
     finally:
@@ -959,7 +1009,7 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
         if not pump_task.done():
             pump_task.cancel()
         _safe_remove(filepath)
-        clear_session(user_id)
+        set_state(user_id, "awaiting_yt_result")
 
 
 @Client.on_callback_query(filters.regex(r"^yt_sub_lang_([a-zA-Z\-]+)$"))
@@ -993,12 +1043,15 @@ async def _run_subtitle_download(client, status_msg, user_id: int, url: str, lan
     try:
         ok, result, info = await download_subtitles(url, lang, output_dir)
         if not ok:
-            await status_msg.edit_text(
-                f"❌ **Subtitle download failed.**\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"`{result}`"
-            )
-            clear_session(user_id)
+            try:
+                await status_msg.edit_text(
+                    f"❌ **Subtitle download failed.**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"`{result}`",
+                    reply_markup=_result_menu_markup(),
+                )
+            except MessageNotModified:
+                pass
             return
         filepath = result
 
@@ -1008,19 +1061,38 @@ async def _run_subtitle_download(client, status_msg, user_id: int, url: str, lan
         )
         try:
             await client.send_document(chat_id=user_id, document=filepath, caption=caption)
-            await status_msg.delete()
         except Exception as e:
             logger.exception("Subtitle send_document failed")
-            await status_msg.edit_text(f"❌ Upload failed: `{e}`")
+            try:
+                await status_msg.edit_text(
+                    f"❌ Upload failed: `{e}`",
+                    reply_markup=_result_menu_markup(),
+                )
+            except Exception:
+                pass
+            return
+
+        try:
+            await status_msg.edit_text(
+                "✅ **Subtitles delivered above.**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Choose next action:",
+                reply_markup=_result_menu_markup(),
+            )
+        except MessageNotModified:
+            pass
     except Exception as e:
         logger.exception("Subtitle pipeline crashed")
         try:
-            await status_msg.edit_text(f"❌ Unexpected error: `{e}`")
+            await status_msg.edit_text(
+                f"❌ Unexpected error: `{e}`",
+                reply_markup=_result_menu_markup(),
+            )
         except Exception:
             pass
     finally:
         _safe_remove(filepath)
-        clear_session(user_id)
+        set_state(user_id, "awaiting_yt_result")
 
 
 async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
@@ -1039,35 +1111,53 @@ async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
     try:
         ok, result, info = await download_thumbnail(url, output_dir)
         if not ok:
-            await status_msg.edit_text(
-                f"❌ **Thumbnail download failed.**\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"`{result}`"
-            )
-            clear_session(user_id)
+            try:
+                await status_msg.edit_text(
+                    f"❌ **Thumbnail download failed.**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━\n"
+                    f"`{result}`",
+                    reply_markup=_result_menu_markup(),
+                )
+            except MessageNotModified:
+                pass
             return
         filepath = result
 
         caption = (
             f"🖼 **{info.get('title') or 'YouTube Thumbnail'}**\n"
-            f"_{info.get('uploader') or ''}_"
+            f"__{info.get('uploader') or ''}__"
         )
         try:
             await client.send_photo(chat_id=user_id, photo=filepath, caption=caption)
-            await status_msg.delete()
         except Exception as e:
             logger.warning(f"send_photo failed, falling back to send_document: {e}")
             await client.send_document(chat_id=user_id, document=filepath, caption=caption)
-            await status_msg.delete()
+
+        # Keep the thumbnail image in chat; replace the status message with
+        # a small result menu (Back to Menu / New Link).
+        try:
+            await status_msg.edit_text(
+                "✅ **Thumbnail delivered above.**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "Choose next action:",
+                reply_markup=_result_menu_markup(),
+            )
+        except MessageNotModified:
+            pass
     except Exception as e:
         logger.exception("Thumbnail pipeline crashed")
         try:
-            await status_msg.edit_text(f"❌ Unexpected error: `{e}`")
+            await status_msg.edit_text(
+                f"❌ Unexpected error: `{e}`",
+                reply_markup=_result_menu_markup(),
+            )
         except Exception:
             pass
     finally:
         _safe_remove(filepath)
-        clear_session(user_id)
+        # Session is kept alive so Back-to-Menu works. State is set to
+        # awaiting_yt_result so stray text messages don't trigger other flows.
+        set_state(user_id, "awaiting_yt_result")
 
 
 async def _run_info_display(client, status_msg, user_id: int, url: str):
@@ -1084,18 +1174,25 @@ async def _run_info_display(client, status_msg, user_id: int, url: str):
         try:
             await status_msg.edit_text(
                 "❌ Could not fetch video info. The link may be invalid, "
-                "private or region-blocked."
+                "private or region-blocked.",
+                reply_markup=_result_menu_markup(),
             )
         except Exception:
             pass
-        clear_session(user_id)
+        set_state(user_id, "awaiting_yt_result")
         return
 
     text = format_video_info(info)
+    delivered = False
     try:
-        await status_msg.edit_text(text, disable_web_page_preview=True)
+        await status_msg.edit_text(
+            text,
+            disable_web_page_preview=True,
+            reply_markup=_result_menu_markup(),
+        )
+        delivered = True
     except MessageNotModified:
-        pass
+        delivered = True
     except Exception as e:
         # Telegram may reject ultra-long messages — fall back to a document upload
         logger.warning(f"Info edit failed, sending as document: {e}")
@@ -1106,14 +1203,76 @@ async def _run_info_display(client, status_msg, user_id: int, url: str):
             await client.send_document(chat_id=user_id, document=tmp_path,
                                        caption="ℹ️ YouTube Video Info")
             _safe_remove(tmp_path)
-            await status_msg.delete()
+            try:
+                await status_msg.edit_text(
+                    "✅ **Info delivered above.**\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    "Choose next action:",
+                    reply_markup=_result_menu_markup(),
+                )
+            except MessageNotModified:
+                pass
+            delivered = True
         except Exception as e2:
             logger.exception("Info fallback failed")
             try:
-                await status_msg.edit_text(f"❌ Could not render info: `{e2}`")
+                await status_msg.edit_text(
+                    f"❌ Could not render info: `{e2}`",
+                    reply_markup=_result_menu_markup(),
+                )
             except Exception:
                 pass
-    clear_session(user_id)
+    set_state(user_id, "awaiting_yt_result")
+    _ = delivered  # placeholder for future telemetry
+
+
+# === Post-result navigation: Back to Menu / New YouTube Link ===
+@Client.on_callback_query(filters.regex(r"^yt_back_mode$"))
+async def handle_yt_back_mode(client, callback_query):
+    """Return the user to the per-URL mode menu, keeping the session alive."""
+    user_id = callback_query.from_user.id
+    session = get_data(user_id) or {}
+    url = session.get("youtube_url")
+    if not url:
+        return await callback_query.answer(
+            "⚠️ Session expired. Please send a new YouTube link.", show_alert=True
+        )
+    await callback_query.answer()
+    set_state(user_id, "awaiting_yt_mode")
+
+    title = session.get("video_title") or "Untitled"
+    uploader = session.get("video_uploader") or "Unknown"
+    duration = _format_duration(session.get("video_duration"))
+    try:
+        await callback_query.message.edit_text(
+            _mode_menu_text(title, uploader, duration),
+            reply_markup=_mode_menu_markup(),
+            disable_web_page_preview=True,
+        )
+    except MessageNotModified:
+        pass
+
+
+@Client.on_callback_query(filters.regex(r"^yt_new_link$"))
+async def handle_yt_new_link(client, callback_query):
+    """Clear the current video context and ask for a new URL."""
+    user_id = callback_query.from_user.id
+    await callback_query.answer()
+    # Keep the user in the YouTube flow but drop video-specific data.
+    for key in ("youtube_url", "video_title", "video_id",
+                "video_duration", "video_uploader", "youtube_mode"):
+        update_data(user_id, key, None)
+    set_state(user_id, "awaiting_youtube_url")
+    try:
+        await callback_query.message.edit_text(
+            "▶️ **YouTube Tool**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "> Paste the next **YouTube URL** to continue.",
+            reply_markup=InlineKeyboardMarkup(_cancel_row()),
+            disable_web_page_preview=True,
+        )
+    except MessageNotModified:
+        pass
 
 
 # === Cancel ===
@@ -1194,6 +1353,7 @@ async def handle_yt_auto_detect(client, message):
     update_data(user_id, "video_title", info.get("title") or "Untitled")
     update_data(user_id, "video_id", info.get("id"))
     update_data(user_id, "video_duration", info.get("duration") or 0)
+    update_data(user_id, "video_uploader", info.get("uploader") or info.get("channel") or "Unknown")
     set_state(user_id, "awaiting_yt_mode")
 
     title = info.get("title") or "Untitled"
@@ -1204,7 +1364,7 @@ async def handle_yt_auto_detect(client, message):
             f"▶️ **YouTube Tool**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"**🎬 {title}**\n"
-            f"_by {uploader} · ⏱ {duration}_\n\n"
+            f"__by {uploader} · ⏱ {duration}__\n\n"
             f"Choose what you want to do:",
             reply_markup=_mode_menu_markup(),
             disable_web_page_preview=True,
