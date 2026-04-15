@@ -133,6 +133,8 @@ async def generate_premium_dashboard(user_id, client):
             display_lines.append("🔄 File Converter")
         if features.get("audio_editor") and not global_toggles.get("audio_editor", True):
             display_lines.append("🎵 Audio Editor")
+        if features.get("youtube_tool") and not global_toggles.get("youtube_tool", True):
+            display_lines.append("▶️ YouTube Tool")
 
         return "\n".join(display_lines) if display_lines else "None"
 
