@@ -907,7 +907,9 @@ class TaskProcessor:
             target_format = self.data.get("target_format", "mkv")
 
             success, stderr, self.output_path, meta_title = await convert(
-                self.input_path, self.download_dir, safe_title, target_format, progress_callback=ffmpeg_progress
+                self.input_path, self.download_dir, safe_title, target_format,
+                progress_callback=ffmpeg_progress,
+                session_data=self.data,
             )
             self.metadata["title"] = meta_title
 

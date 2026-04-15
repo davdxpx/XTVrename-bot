@@ -1486,87 +1486,64 @@ async def handle_file_upload(client, message):
         if (
             not getattr(message, "photo", None)
             and not getattr(message, "video", None)
+            and not getattr(message, "audio", None)
+            and not getattr(message, "voice", None)
             and not getattr(message, "document", None)
         ):
-            await message.reply_text("Please send an image or video file.")
+            await message.reply_text("Please send an image, video, or audio file.")
             return
 
         file_name = "unknown_file.bin"
-        is_video = False
-        is_image = False
+        file_kind = None  # "video" / "audio" / "image"
 
         if getattr(message, "video", None):
             file_name = message.video.file_name or "video.mp4"
-            is_video = True
+            file_kind = "video"
+        elif getattr(message, "audio", None):
+            file_name = message.audio.file_name or "audio.mp3"
+            file_kind = "audio"
+        elif getattr(message, "voice", None):
+            file_name = f"voice_{message.id}.ogg"
+            file_kind = "audio"
         elif getattr(message, "photo", None):
             file_name = f"image_{message.id}.jpg"
-            is_image = True
+            file_kind = "image"
         elif getattr(message, "document", None):
             file_name = message.document.file_name or "file.bin"
-            mime = message.document.mime_type or ""
+            mime = (message.document.mime_type or "").lower()
             if "video" in mime:
-                is_video = True
-            if "image" in mime:
-                is_image = True
+                file_kind = "video"
+            elif "audio" in mime:
+                file_kind = "audio"
+            elif "image" in mime:
+                file_kind = "image"
+            else:
+                # Fallback: sniff by extension.
+                ext = os.path.splitext(file_name)[1].lower().lstrip(".")
+                if ext in ("mp4", "mkv", "mov", "avi", "webm", "flv", "3gp", "ts", "m4v"):
+                    file_kind = "video"
+                elif ext in ("mp3", "m4a", "ogg", "opus", "flac", "wav", "wma", "aac"):
+                    file_kind = "audio"
+                elif ext in ("png", "jpg", "jpeg", "webp", "bmp", "tiff", "gif", "ico", "avif"):
+                    file_kind = "image"
+
+        if not file_kind:
+            await message.reply_text(
+                "❌ Could not determine file type.\n\n"
+                "> Please send a clear **image**, **video**, or **audio** file."
+            )
+            return
 
         update_data(user_id, "original_name", file_name)
         update_data(user_id, "file_message_id", message.id)
         update_data(user_id, "file_chat_id", message.chat.id)
+        update_data(user_id, "file_kind", file_kind)
+        # Default audio bitrate — changeable via the Audio Bitrate submenu.
+        update_data(user_id, "audio_bitrate", "192")
 
-        buttons = []
-        if is_video:
-            buttons.append([
-                InlineKeyboardButton("🎵 MP3", callback_data="convert_to_mp3"),
-                InlineKeyboardButton("🎞️ GIF", callback_data="convert_to_gif"),
-            ])
-            buttons.append([
-                InlineKeyboardButton("📦 MKV", callback_data="convert_to_mkv"),
-                InlineKeyboardButton("🎬 MP4", callback_data="convert_to_mp4"),
-            ])
-            buttons.append([
-                InlineKeyboardButton("🔷 x264", callback_data="convert_to_x264"),
-                InlineKeyboardButton("🔶 x265", callback_data="convert_to_x265"),
-            ])
-            buttons.append([
-                InlineKeyboardButton("🔊 Normalize Audio", callback_data="convert_to_audionorm"),
-            ])
-        elif is_image:
-            ext = os.path.splitext(file_name)[1].lower() if file_name else ""
-            img_buttons = []
-            if ext != ".png":
-                img_buttons.append(
-                    InlineKeyboardButton("🖼️ PNG", callback_data="convert_to_png")
-                )
-            if ext not in [".jpg", ".jpeg"]:
-                img_buttons.append(
-                    InlineKeyboardButton("📸 JPG", callback_data="convert_to_jpg")
-                )
-            if ext != ".webp":
-                img_buttons.append(
-                    InlineKeyboardButton("🌐 WEBP", callback_data="convert_to_webp")
-                )
-
-            if img_buttons:
-                buttons.append(img_buttons)
-        else:
-            await message.reply_text(
-                "❌ Could not determine file type.\n\n"
-                "> Please send a clear **image** or **video** file."
-            )
-            return
-
-        buttons.append(
-            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]
-        )
-
-        set_state(user_id, "awaiting_convert_format")
-        await message.reply_text(
-            f"🔀 **File Converter**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"> 📄 **File:** `{file_name}`\n\n"
-            "Select the target format:",
-            reply_markup=InlineKeyboardMarkup(buttons),
-        )
+        # Render the new mega-edition category menu (Video/Audio/Image root).
+        from tools.FileConverter import render_category_menu
+        await render_category_menu(message, user_id, edit=False)
         return
 
     if state == "awaiting_audio_thumb":

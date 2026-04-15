@@ -815,7 +815,7 @@ async def admin_callback(client, callback_query):
             if not channels:
                 text += "❌ __No Dumb Channels configured yet.__\n\n"
 
-            buttons = [[InlineKeyboardButton("➕ Add New Dumb Channel", callback_data="dumb_add")]]
+            buttons = [[InlineKeyboardButton("➕ Add New Dumb Channel", callback_data="dumbv2_start:global")]]
 
             if channels:
                 import math
