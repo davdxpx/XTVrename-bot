@@ -70,6 +70,160 @@ MAX_SIZE_DELUXE = 4 * 1024 * 1024 * 1024
 _PROGRESS_INTERVAL = 3.0  # seconds between status message edits
 
 
+# === yt-dlp hardening (anti-bot / cookies / client fallback) ==============
+#
+# YouTube increasingly blocks data-center IPs with "Sign in to confirm you're
+# not a bot". Three mitigations are layered here:
+#
+#   1) Cookie support — admins can upload a Netscape cookies.txt via
+#      /ytcookies. We look for the file at the paths below and pass it to
+#      every yt-dlp call via `cookiefile`.
+#
+#   2) Player-client rotation — yt-dlp's --extractor-args youtube:player_client
+#      lets us ask for specific players. Different clients have different
+#      anti-bot thresholds. We try a fallback chain if one fails with a
+#      bot-check error.
+#
+#   3) Friendly UI error — `BotCheckError` / `_is_bot_check_error()` let the
+#      UI layer show a dedicated retry/help screen instead of the generic
+#      "Could not fetch video info".
+
+_COOKIES_CANDIDATES = [
+    os.getenv("YT_COOKIES_FILE"),
+    "config/yt_cookies.txt",
+    "./yt_cookies.txt",
+    "./downloads/yt_cookies.txt",
+]
+
+# Order matters: iOS and TV clients tend to be less rate-limited than the
+# default web client right now. yt-dlp picks a reasonable set automatically
+# if we pass nothing, but when the default fails we try these explicitly.
+_PLAYER_CLIENT_FALLBACKS = [
+    None,              # yt-dlp default (usually includes web + android)
+    "ios",
+    "android",
+    "tv_embedded",
+    "web_embedded",
+    "mweb",
+]
+
+_BOT_CHECK_MARKERS = (
+    "sign in to confirm",
+    "confirm you're not a bot",
+    "confirm you\u2019re not a bot",
+    "age-restricted",
+    "please sign in",
+    "cookies",
+    "login required",
+)
+
+
+class BotCheckError(RuntimeError):
+    """Raised when yt-dlp is blocked by YouTube's bot-check flow."""
+
+    def __init__(self, original: str = ""):
+        super().__init__(original or "YouTube bot-check triggered")
+        self.original = original
+
+
+def _get_cookies_file() -> str | None:
+    """Return the first existing cookies file candidate, or None."""
+    for p in _COOKIES_CANDIDATES:
+        if not p:
+            continue
+        try:
+            if os.path.isfile(p) and os.path.getsize(p) > 0:
+                return p
+        except OSError:
+            continue
+    return None
+
+
+def _is_bot_check_error(err_text: str) -> bool:
+    """Best-effort detection of YouTube's anti-bot guard from an error string."""
+    if not err_text:
+        return False
+    low = err_text.lower()
+    return any(m in low for m in _BOT_CHECK_MARKERS)
+
+
+def _ytdlp_base_opts(
+    extra: dict | None = None,
+    player_client: str | None = None,
+) -> dict:
+    """Build a yt-dlp opts dict with cookies + extractor args layered in.
+
+    Any keys in `extra` override the defaults. This is the single place where
+    we opt into hardening so every call site benefits.
+    """
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        # Retry transient network hiccups a few times before giving up.
+        "retries": 3,
+        "fragment_retries": 3,
+        # Pretend to be a modern desktop browser to match cookies.
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+        },
+    }
+
+    cookies = _get_cookies_file()
+    if cookies:
+        opts["cookiefile"] = cookies
+
+    if player_client:
+        opts["extractor_args"] = {"youtube": {"player_client": [player_client]}}
+
+    if extra:
+        opts.update(extra)
+    return opts
+
+
+def _run_ytdlp_with_fallback(
+    url: str,
+    base_extra: dict | None = None,
+    download: bool = False,
+):
+    """Call yt-dlp extract_info, rotating through player clients on bot-check.
+
+    Returns the info dict on success. Raises `BotCheckError` when every
+    configured client failed with a bot-check marker. Re-raises other errors
+    as-is from the last attempt.
+    """
+    last_exc: Exception | None = None
+    for client_name in _PLAYER_CLIENT_FALLBACKS:
+        opts = _ytdlp_base_opts(extra=base_extra, player_client=client_name)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(url, download=download)
+        except Exception as e:  # yt_dlp.utils.DownloadError or similar
+            last_exc = e
+            msg = str(e)
+            if _is_bot_check_error(msg):
+                logger.warning(
+                    f"yt-dlp bot-check with player_client={client_name!r}: {msg[:200]}"
+                )
+                # Try the next client.
+                continue
+            # Non-bot-check failure — don't bother trying more clients.
+            raise
+
+    # All clients exhausted.
+    err_text = str(last_exc) if last_exc else "unknown"
+    if _is_bot_check_error(err_text):
+        raise BotCheckError(err_text)
+    # Shouldn't really happen (we re-raise non-bot errors above) but be safe.
+    if last_exc:
+        raise last_exc
+    raise BotCheckError("yt-dlp exhausted all player clients")
+
+
 # === Helper Functions ===
 def extract_first_url(text: str) -> str | None:
     """Return the first YouTube URL found in a text, or None."""
@@ -136,25 +290,32 @@ def _ytdlp_missing_text() -> str:
 
 
 def _sync_extract_info(url: str) -> dict | None:
-    """Blocking yt-dlp info extraction. Runs in a thread."""
+    """Blocking yt-dlp info extraction. Runs in a thread.
+
+    Raises BotCheckError when YouTube's anti-bot guard blocks us so callers
+    can surface a dedicated UI. Returns None on any other failure, logged.
+    """
     if not _YTDLP_AVAILABLE:
         return None
-    opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "noplaylist": True,
-    }
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            return ydl.extract_info(url, download=False)
+        return _run_ytdlp_with_fallback(
+            url,
+            base_extra={"skip_download": True},
+            download=False,
+        )
+    except BotCheckError:
+        raise
     except Exception as e:
         logger.warning(f"yt-dlp extract_info failed for {url}: {e}")
         return None
 
 
 async def extract_video_info(url: str) -> dict | None:
-    """Fetch video metadata without downloading. Returns the yt-dlp info dict."""
+    """Fetch video metadata without downloading. Returns the yt-dlp info dict.
+
+    Raises BotCheckError on YouTube anti-bot failures so the caller can show
+    a dedicated help screen. Returns None for other failures.
+    """
     if not _YTDLP_AVAILABLE:
         return None
     return await asyncio.to_thread(_sync_extract_info, url)
@@ -267,13 +428,10 @@ def _sync_download_video(url: str, quality: str, output_dir: str, max_size: int,
         )
 
     out_tmpl = os.path.join(output_dir, "%(title).80s [%(id)s].%(ext)s")
-    opts = {
+    opts = _ytdlp_base_opts(extra={
         "format": fmt,
         "outtmpl": out_tmpl,
         "merge_output_format": "mp4",
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
         "restrictfilenames": False,
         "max_filesize": max_size,
         "progress_hooks": [hook] if hook else [],
@@ -283,7 +441,7 @@ def _sync_download_video(url: str, quality: str, output_dir: str, max_size: int,
             {"key": "EmbedThumbnail"},
             {"key": "FFmpegMetadata"},
         ],
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -319,12 +477,9 @@ def _sync_download_audio(url: str, bitrate: str, output_dir: str, max_size: int,
         return False, _YTDLP_IMPORT_ERROR or "yt-dlp not installed", None
 
     out_tmpl = os.path.join(output_dir, "%(title).80s [%(id)s].%(ext)s")
-    opts = {
+    opts = _ytdlp_base_opts(extra={
         "format": "bestaudio/best",
         "outtmpl": out_tmpl,
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
         "max_filesize": max_size,
         "progress_hooks": [hook] if hook else [],
         "writethumbnail": True,
@@ -333,7 +488,7 @@ def _sync_download_audio(url: str, bitrate: str, output_dir: str, max_size: int,
             {"key": "EmbedThumbnail"},
             {"key": "FFmpegMetadata"},
         ],
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -423,7 +578,7 @@ def _sync_download_subtitles(url: str, lang: str, output_dir: str
         return False, _YTDLP_IMPORT_ERROR or "yt-dlp not installed", None
 
     out_tmpl = os.path.join(output_dir, "%(title).80s [%(id)s].%(ext)s")
-    opts = {
+    opts = _ytdlp_base_opts(extra={
         "skip_download": True,
         "writesubtitles": True,
         "writeautomaticsub": True,
@@ -431,13 +586,10 @@ def _sync_download_subtitles(url: str, lang: str, output_dir: str
         "subtitlesformat": "srt/best",
         "convertsubtitles": "srt",
         "outtmpl": out_tmpl,
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
         "postprocessors": [
             {"key": "FFmpegSubtitlesConvertor", "format": "srt"},
         ],
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -503,6 +655,72 @@ def _format_number(n) -> str:
 
 def _cancel_row() -> list[list[InlineKeyboardButton]]:
     return [[InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel")]]
+
+
+async def _render_bot_check_error(status_msg, user_id: int, bce: BotCheckError,
+                                   back_state: str = "awaiting_youtube_url") -> None:
+    """Replace the status message with a dedicated bot-check help screen.
+
+    Shows different hints depending on whether cookies are already configured
+    and whether the caller has admin rights (to expose /ytcookies).
+    """
+    has_cookies = _get_cookies_file() is not None
+    admin_ids_set = set(getattr(Config, "ADMIN_IDS", []) or [])
+    ceo_id = getattr(Config, "CEO_ID", None)
+    is_admin = (user_id == ceo_id) or (user_id in admin_ids_set)
+
+    lines = [
+        "❌ **YouTube blocked this request**",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "YouTube asked to **sign in to confirm you're not a bot** — "
+        "this usually happens on data-center IPs after heavy use.",
+        "",
+    ]
+    if has_cookies:
+        lines += [
+            "🍪 Cookies **are** configured but were still rejected.",
+            "The cookie file may be stale or tied to a flagged account.",
+        ]
+        if is_admin:
+            lines.append("Upload a fresh `cookies.txt` via `/ytcookies`.")
+        else:
+            lines.append("Ask an admin to refresh cookies via `/ytcookies`.")
+    else:
+        lines += [
+            "🍪 No cookies configured on this server.",
+            (
+                "An admin can upload a Netscape-format `cookies.txt` "
+                "via `/ytcookies` to bypass this check."
+            )
+            if is_admin
+            else "Ask an admin to upload a `cookies.txt` via `/ytcookies`.",
+        ]
+    lines += [
+        "",
+        "You can also try a different link or retry in a minute.",
+    ]
+
+    rows = [[InlineKeyboardButton("🔄 Retry", callback_data="yt_retry_url")]]
+    if is_admin:
+        rows.append([InlineKeyboardButton("🍪 Upload cookies", callback_data="yt_upload_cookies")])
+    rows.append([InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel")])
+
+    if back_state:
+        set_state(user_id, back_state)
+
+    try:
+        await status_msg.edit_text(
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(rows),
+            disable_web_page_preview=True,
+        )
+    except MessageNotModified:
+        pass
+    except Exception as e:
+        logger.warning(f"_render_bot_check_error edit failed: {e}")
+
+    logger.warning(f"yt bot-check surfaced to user {user_id}: {str(bce)[:200]}")
 
 
 def _mode_menu_markup() -> InlineKeyboardMarkup:
@@ -691,7 +909,12 @@ async def handle_youtube_url_input(client, message):
         reply_markup=InlineKeyboardMarkup(_cancel_row()),
     )
 
-    info = await extract_video_info(url)
+    try:
+        info = await extract_video_info(url)
+    except BotCheckError as bce:
+        await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_youtube_url")
+        return
+
     if not info:
         set_state(user_id, "awaiting_youtube_url")
         try:
@@ -1169,7 +1392,11 @@ async def _run_info_display(client, status_msg, user_id: int, url: str):
     except MessageNotModified:
         pass
 
-    info = await extract_video_info(url)
+    try:
+        info = await extract_video_info(url)
+    except BotCheckError as bce:
+        await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
+        return
     if not info:
         try:
             await status_msg.edit_text(
@@ -1338,7 +1565,11 @@ async def handle_yt_auto_detect(client, message):
         reply_markup=InlineKeyboardMarkup(_cancel_row()),
     )
 
-    info = await extract_video_info(url)
+    try:
+        info = await extract_video_info(url)
+    except BotCheckError as bce:
+        await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_youtube_url")
+        return
     if not info:
         try:
             await status_msg.edit_text(
@@ -1371,6 +1602,152 @@ async def handle_yt_auto_detect(client, message):
         )
     except MessageNotModified:
         pass
+
+
+# === Retry + admin cookies management ====================================
+_COOKIES_TARGET_PATH = "config/yt_cookies.txt"
+
+
+def _is_yt_admin(user_id: int) -> bool:
+    admin_ids_set = set(getattr(Config, "ADMIN_IDS", []) or [])
+    ceo_id = getattr(Config, "CEO_ID", None)
+    return (user_id == ceo_id) or (user_id in admin_ids_set)
+
+
+@Client.on_callback_query(filters.regex(r"^yt_retry_url$"))
+async def handle_yt_retry_url(client, callback_query):
+    """Re-enter URL state and ask for the link again (preserving session)."""
+    user_id = callback_query.from_user.id
+    await callback_query.answer()
+    set_state(user_id, "awaiting_youtube_url")
+    try:
+        await callback_query.message.edit_text(
+            "🔗 **Send a YouTube URL**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Paste any `youtube.com` / `youtu.be` link.",
+            reply_markup=InlineKeyboardMarkup(_cancel_row()),
+        )
+    except MessageNotModified:
+        pass
+
+
+@Client.on_callback_query(filters.regex(r"^yt_upload_cookies$"))
+async def handle_yt_upload_cookies_cb(client, callback_query):
+    """Admin-only prompt to upload a cookies.txt document."""
+    user_id = callback_query.from_user.id
+    if not _is_yt_admin(user_id):
+        return await callback_query.answer("Admins only.", show_alert=True)
+
+    await callback_query.answer()
+    set_state(user_id, "awaiting_yt_cookies_upload")
+    try:
+        await callback_query.message.edit_text(
+            "🍪 **Upload YouTube cookies**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Send a Netscape-format `cookies.txt` as a **document**.\n\n"
+            "Tip: use a browser extension like "
+            "__Get cookies.txt LOCALLY__ and export cookies while "
+            "logged into `youtube.com`.\n\n"
+            "Send `cancel` to abort.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel"),
+            ]]),
+            disable_web_page_preview=True,
+        )
+    except MessageNotModified:
+        pass
+
+
+@Client.on_message(filters.command(["ytcookies"]) & filters.private)
+async def handle_ytcookies_cmd(client, message):
+    """Entry point: admins run /ytcookies to upload a fresh cookies file."""
+    user_id = message.from_user.id
+    if not _is_yt_admin(user_id):
+        return await message.reply_text("❌ Admins only.")
+
+    set_state(user_id, "awaiting_yt_cookies_upload")
+    has_cookies = _get_cookies_file() is not None
+    status = "✅ **currently configured**" if has_cookies else "❌ **not configured**"
+    await message.reply_text(
+        f"🍪 **YouTube Cookies — {status}**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Send a Netscape-format `cookies.txt` as a **document** to "
+        "install/refresh it.\n\n"
+        "Export tip: in your browser, log into `youtube.com` and use an "
+        "extension such as __Get cookies.txt LOCALLY__ → save as "
+        "`cookies.txt` → send that file here.\n\n"
+        "Send `cancel` to abort.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel"),
+        ]]),
+        disable_web_page_preview=True,
+    )
+
+
+@Client.on_message(filters.document & filters.private, group=0)
+async def handle_ytcookies_upload(client, message):
+    """Accept the uploaded cookies document when the user is in our state."""
+    user_id = message.from_user.id
+    if get_state(user_id) != "awaiting_yt_cookies_upload":
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
+    if not _is_yt_admin(user_id):
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
+
+    doc = message.document
+    # Best-effort file-type gate: cookies files are tiny text files.
+    fname = (doc.file_name or "").lower() if doc else ""
+    if doc and doc.file_size and doc.file_size > 2 * 1024 * 1024:
+        await message.reply_text(
+            "❌ Cookie file is suspiciously large (>2 MB). "
+            "Please send the Netscape-format `cookies.txt` only."
+        )
+        raise StopPropagation
+
+    # Ensure target dir exists.
+    try:
+        os.makedirs(os.path.dirname(_COOKIES_TARGET_PATH) or ".", exist_ok=True)
+    except Exception as e:
+        await message.reply_text(f"❌ Could not prepare cookies dir: {e}")
+        raise StopPropagation
+
+    try:
+        await message.download(file_name=_COOKIES_TARGET_PATH)
+    except Exception as e:
+        await message.reply_text(f"❌ Download failed: {e}")
+        raise StopPropagation
+
+    # Quick sanity check: file must contain at least one YouTube cookie line.
+    ok = False
+    try:
+        with open(_COOKIES_TARGET_PATH, "r", encoding="utf-8", errors="ignore") as f:
+            head = f.read(8192)
+        if "youtube.com" in head.lower():
+            ok = True
+    except Exception:
+        ok = False
+
+    set_state(user_id, None)
+
+    if not ok:
+        await message.reply_text(
+            "⚠️ **Cookies installed, but no `youtube.com` entry found**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "The file was saved, but it doesn't look like a YouTube "
+            "cookies export. If YouTube still blocks you, export a fresh "
+            "cookies.txt **while logged into youtube.com** and try again."
+        )
+        return
+
+    await message.reply_text(
+        "✅ **YouTube cookies installed**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"Saved to `{_COOKIES_TARGET_PATH}`. New yt-dlp requests will use "
+        "this cookie jar automatically.\n\n"
+        "Try your YouTube link again now."
+    )
+    raise StopPropagation
 
 
 # --------------------------------------------------------------------------
