@@ -1,0 +1,44 @@
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------
+"""
+`plugins.admin` — the admin panel package.
+
+This package replaces the former monolithic plugins/admin.py. Shared state
+and helpers live in `core`; callback / message handlers are split across
+domain-specific submodules; the legacy monolith still lives in `_legacy`
+while its contents are being carved out domain by domain.
+
+For backward compatibility with callers that used to do
+`from plugins.admin import admin_sessions` (e.g. force_sub_handler.py),
+we re-export the core names at the package level.
+
+The explicit `from . import _legacy` ensures every Pyrogram handler
+decorator in the legacy module still runs at package import time,
+regardless of how the plugin loader discovers submodules.
+"""
+
+from plugins.admin.core import (
+    admin_sessions,
+    is_admin,
+    edit_or_reply,
+    get_admin_main_menu,
+    get_admin_access_limits_menu,
+)
+
+# Guarantee all submodule handlers register on import, independent of
+# pyrofork's plugin discovery behaviour.
+from . import _legacy  # noqa: F401
+
+__all__ = [
+    "admin_sessions",
+    "is_admin",
+    "edit_or_reply",
+    "get_admin_main_menu",
+    "get_admin_access_limits_menu",
+]
