@@ -331,6 +331,7 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
         "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
+        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
     user_settings = await db.get_settings(user_id)
@@ -642,7 +643,7 @@ async def handle_subtitle_command(client, message):
     mock_cb.message = msg
     await handle_subtitle_extractor_menu(client, mock_cb)
 
-@Client.on_message(filters.command(["t", "trim"]) & filters.private, group=0)
+@Client.on_message(filters.command(["trim"]) & filters.private, group=0)
 async def handle_trim_command(client, message):
     user_id = message.from_user.id
 
@@ -794,6 +795,44 @@ async def handle_videonote_command(client, message):
     mock_cb.message = msg
     await handle_video_note_menu(client, mock_cb)
 
+@Client.on_message(filters.command(["t", "torrent"]) & filters.private, group=0)
+async def handle_torrent_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("torrent_downloader", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("torrent_downloader", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from tools.TorrentDownloader import handle_torrent_menu
+    await track_tool_usage(user_id, "torrent_downloader")
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "torrent_downloader_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading Torrent Downloader...")
+    mock_cb.message = msg
+    await handle_torrent_menu(client, mock_cb)
+
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
     user_id = message.from_user.id
@@ -895,6 +934,7 @@ async def handle_other_features_menu(client, callback_query):
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
         "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
+        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
     buttons = []
@@ -1112,11 +1152,12 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/convert` or `/c` — Convert file formats\n"
                 "• `/watermark` or `/w` — Add image watermark\n"
                 "• `/subtitle` or `/s` — Extract subtitles\n"
-                "• `/trim` or `/t` — Trim/cut video by timestamp\n"
+                "• `/trim` — Trim/cut video by timestamp\n"
                 "• `/mediainfo` or `/mi` — Show detailed media file info\n"
                 "• `/voice` or `/v` — Convert audio to voice note\n"
                 "• `/videonote` or `/vn` — Convert video to round note\n"
                 "• `/youtube` or `/yt` — Download from YouTube (video / audio / thumb / subs)"
+                "• `/torrent` or `/t` — Search & download torrents"
             )
         elif cmd == "files":
             text = (
@@ -1235,7 +1276,7 @@ async def handle_help_callbacks(client, callback_query):
                 "Trims a video between a start and end timestamp using stream copy (no re-encoding).\n\n"
                 "• Send a video, then provide start and end times.\n"
                 "• **Format:** `HH:MM:SS` or `MM:SS`\n"
-                "• **Shortcut:** `/t` or `/trim`."
+                "• **Shortcut:** `/trim`."
             )
         elif tool == "mediainfo":
             text = (
