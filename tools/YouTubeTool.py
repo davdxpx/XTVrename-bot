@@ -698,7 +698,7 @@ async def handle_youtube_url_input(client, message):
             f"▶️ **YouTube Tool**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"**🎬 {title}**\n"
-            f"_by {uploader} · ⏱ {duration}_\n\n"
+            f"__by {uploader} · ⏱ {duration}__\n\n"
             f"Choose what you want to do:",
             reply_markup=_mode_menu_markup(),
             disable_web_page_preview=True,
@@ -807,7 +807,7 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"**{title_hint}**\n"
             f"> Quality: `{quality}`\n\n"
-            f"_Starting download..._",
+            f"__Starting download...__",
         )
     except MessageNotModified:
         pass
@@ -843,7 +843,7 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
 
         caption = (
             f"🎬 **{info.get('title') or 'YouTube Video'}**\n"
-            f"_{info.get('uploader') or ''}_\n"
+            f"__{info.get('uploader') or ''}__\n"
             f"Quality: `{quality}`"
         )
         try:
@@ -895,7 +895,7 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"**{title_hint}**\n"
             f"> Bitrate: `{bitrate} kbps`\n\n"
-            f"_Starting download..._"
+            f"__Starting download...__"
         )
     except MessageNotModified:
         pass
@@ -931,7 +931,7 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
 
         caption = (
             f"🎵 **{info.get('title') or 'YouTube Audio'}**\n"
-            f"_{info.get('uploader') or ''}_\n"
+            f"__{info.get('uploader') or ''}__\n"
             f"Bitrate: `{bitrate} kbps`"
         )
         try:
@@ -1050,7 +1050,7 @@ async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
 
         caption = (
             f"🖼 **{info.get('title') or 'YouTube Thumbnail'}**\n"
-            f"_{info.get('uploader') or ''}_"
+            f"__{info.get('uploader') or ''}__"
         )
         try:
             await client.send_photo(chat_id=user_id, photo=filepath, caption=caption)
@@ -1204,7 +1204,7 @@ async def handle_yt_auto_detect(client, message):
             f"▶️ **YouTube Tool**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"**🎬 {title}**\n"
-            f"_by {uploader} · ⏱ {duration}_\n\n"
+            f"__by {uploader} · ⏱ {duration}__\n\n"
             f"Choose what you want to do:",
             reply_markup=_mode_menu_markup(),
             disable_web_page_preview=True,
