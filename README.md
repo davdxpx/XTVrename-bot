@@ -23,12 +23,23 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
-### 📋 What's New in v1.5.1
+### 📋 What's New in v1.5.2
+*   **🎬 YouTube Tool (`/yt`)**: Full-featured downloader — Video (up to 4K / 4GB with 𝕏TV Pro), Audio (MP3 128/192/320 kbps with embedded cover art), Thumbnail (HQ JPG), Subtitles/Captions (12 languages, SRT output, auto-caption fallback), and complete Video Info metadata.
+*   **🛡 YouTube Anti-Bot Hardening**: Three-layer defense against YouTube's "sign in to confirm you're not a bot" guard — cookie file support (`/ytcookies` admin command to upload a Netscape `cookies.txt`), automatic player-client rotation (iOS / Android / TV / web-embedded) on bot-check failures, and a dedicated in-chat help screen with Retry + Upload-cookies buttons.
+*   **🎛 File Converter Mega Edition (`/c`)**: Completely redesigned with category-based submenus. **Video**: Container swap (MP4, MKV, MOV, AVI, WEBM, FLV, 3GP, TS), Codec (x264, x265, VP9, AV1), Extract Audio (MP3, M4A, OGG, OPUS, FLAC, WAV), Extract Frame (PNG/JPG/WEBP), Animated GIF presets, Audio FX (Normalize / Boost / Mono), Transform (Resolution 480p/720p/1080p/4K, Mute, Speed 0.5×/1.5×/2×, Reverse). **Audio**: Format (MP3/M4A/OGG/OPUS/FLAC/WAV/WMA), Bitrate 128/192/256/320 kbps, FX (Normalize, Boost, Bass Boost, Speed, Reverse, Mono). **Image**: Format (PNG/JPG/WEBP/BMP/TIFF/GIF/ICO/AVIF/PDF), Resize (presets + 50% / 25%), Rotate/Flip, Filters (Grayscale/Invert/Sepia), Compress presets.
+*   **📡 Unified Dumb Channel Wizard (v2)**: The old broken "Add Dumb Channel" flow is replaced by a proper 3-step wizard. Accepts forwarded messages (both legacy and new Pyrogram forward APIs), `-100…` IDs, `@usernames`, bare usernames, `t.me/user` and `t.me/c/id` links. Pre-save bot-admin validation with 5 distinct result states (ok+post, ok-no-post, member-no-admin, not-member, invalid). Native Telegram "Add me as admin" deep-link button. Dedup check, retry flow, and quick-default shortcuts (set as Standard / Movie / Series default after save).
+*   **🧰 New Media Tools**: MediaInfo (`/mi`) for detailed stream analysis, Subtitle Extractor (`/s`) for ripping subs from MKV/MP4, Video Trimmer (`/t`) for cutting clips without re-encoding, Voice Note Converter (`/v`) and Video Note Converter (`/vn`) for Telegram's round-note formats.
+*   **🎨 YouTube Tool UX Polish**: Thumbnail flow now offers `← Back to Menu` and `🔗 New Link` buttons (session persists across retries). Fixed markdown italic rendering across 8 label locations so text no longer shows literal underscores.
+
+<details>
+<summary><b>📋 What's New in v1.5.1</b></summary>
+
 *   **Migration to Pyrofork**: The underlying Telegram framework was migrated from Pyrogram to Pyrofork, enabling the usage of modern Telegram API Layer features.
 *   **Expandable Quotes**: Added native support for `<blockquote expandable>` for long text fields (e.g. inside `/help`).
 *   **System Info Refactor**: Added detailed system info natively in the `/info` menu.
 *   **Robust Peer Caching**: Fixed pesky `PeerIdInvalid` errors. The bot now explicitly forces a re-cache by fetching the chat when channels are not found dynamically!
-  
+</details>
+
 <details>
 <summary><b>📋 What's New in v1.5.0</b></summary>
 • The biggest update in 𝕏TV history — 77 pull requests, a full rebrand, and an entirely new product.
@@ -95,14 +106,39 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
     *   **Temporary vs Permanent Storage**: Admins can set precise plan limits for how many "Permanent" slots users receive. Files exceeding the limits are stored as "Temporary" and automatically cleared by the bot's background cleanup engine based on expiration rules.
     *   **Team Drive Mode**: In Non-Public Mode, the `/myfiles` system transforms into a single, shared "Global Workspace" where the entire team can securely access and manage all files across a unified global database channel.
 *   **Multiple Dumb Channels & Sequential Batch Forwarding**: Configure multiple independent destination channels (globally or per-user). The bot automatically queues seasons or movie collections in bulk and strictly forwards them in sequential order (e.g., sorting series by Season/Episode and movies by resolution precedence: 2160p > 1080p > 720p > 480p).
+*   **Unified Dumb Channel Wizard (v2)**: Adding a channel is now a clean 3-step flow — prompt → resolve → validate → save. Accepts forwarded messages (both legacy `forward_from_chat` and the newer `forward_origin.chat` APIs), `-100…` IDs, `@username`, bare usernames, `t.me/user` and `t.me/c/id` links. Rejects invite links with a helpful hint. Pre-save bot-permission validation with 5 distinct outcomes (admin+post / admin-no-post / member-no-admin / not-member / invalid) and a native Telegram "Add me as admin" deep-link button. Dedup check prevents duplicate adds. Quick-default shortcuts right after save let you flag the new channel as your Standard / Movie / Series default in one click.
 *   **Smart Debounce Queue Manager**: Automatically sorts batched media uploads logically. Instead of simple alphabetical sorting, series are ordered by SxxExx and movies by quality precedence, preventing out-of-order uploads to your channels.
 *   **Smart Timeout Queue**: Never get stuck waiting for crashed files. The sequential forwarding queue obeys a customizable timeout limit.
 *   **Spam-Proof Forwarding**: Utilizing Pyrogram's `copy()` method, the bot cleanly removes 'Forwarded from' tags when sending to Dumb Channels, preventing Telegram's spam detection from flagging bulk media.
 *   **Personal Media & Unlisted Content**: Direct menu options to bypass metadata databases for personal files, preserving original file extensions (like `.jpeg`) and letting you choose your preferred output format.
-*   **Multipurpose File Utilities**: Built-in direct editing tools accessible via the **✨ Other Features** menu for general renaming (`/g`), audio metadata & cover art editing (`/a`), advanced media format conversion (including **x264/x265** and **Audio Normalization**) (`/c`), automated image watermarking (`/w`), and a standalone **Subtitle Extractor**!
+*   **Multipurpose File Utilities**: A complete in-bot suite of direct editing tools accessible via the **✨ Other Features** menu or their shortcut commands:
+    *   **`/g` General Rename** — rename any file, bypass TMDb lookup.
+    *   **`/a` Audio Metadata Editor** — edit MP3/FLAC title, artist, album, cover art.
+    *   **`/c` File Converter Mega Edition** — category-based menus for Video (container swap, codec, audio/frame extract, GIF, audio FX, resolution/speed/reverse), Audio (format, bitrate, FX, bass boost), and Image (format, resize, rotate/flip, filters, compression). See the v1.5.2 changelog for the full op list.
+    *   **`/w` Image Watermarker** — text or overlay-image watermarks.
+    *   **`/s` Subtitle Extractor** — rip embedded subtitle tracks from MKV/MP4 containers.
+    *   **`/t` Video Trimmer** — fast clip-cut without re-encoding, configurable start/end.
+    *   **`/v` Voice Note Converter** — convert audio to Telegram's native voice-note format.
+    *   **`/vn` Video Note Converter** — convert video to Telegram's round "video note" bubble format.
+    *   **`/mi` MediaInfo** — detailed stream / codec / bitrate / duration / track breakdown for any media file.
+    *   **`/yt` YouTube Tool** — see "YouTube Tool" section below.
 *   **Dynamic Filename Templates**: Fully customizable filename structures via the Admin Panel for Movies, Series, and Subtitles using variables like `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, and `{Channel}`.
 
-### 🔹 Torrent Downloader
+### 🔹 YouTube Tool (`/yt`)
+*   **Five Download Modes**:
+    *   **🎬 Video** — 360p / 480p / 720p / 1080p / Best-Available. Merges into MP4 with embedded thumbnail and FFmpeg metadata. Respects your plan's filesize cap (2 GB Standard, 4 GB with 𝕏TV Pro).
+    *   **🎵 Audio (MP3)** — 128 / 192 / 320 kbps with embedded cover art.
+    *   **🖼 Thumbnail** — highest-available JPG. Success screen offers `← Back to Menu` and `🔗 New Link` so you can chain multiple downloads without re-sending the URL.
+    *   **📝 Subtitles / Captions** — 12 languages (EN/ES/FR/DE/HI/PT/IT/JA/KO/ZH/RU/AR), SRT output, automatic fallback to auto-captions if manual subs aren't available.
+    *   **ℹ️ Video Info** — full yt-dlp metadata dump (title, uploader, duration, view count, formats, upload date, etc.).
+*   **Live Progress**: status message edits every ~3 seconds with a visual progress bar, size, speed, ETA.
+*   **Auto-URL Detection**: paste any `youtube.com` / `youtu.be` / `music.youtube.com` / `youtube-nocookie.com` link in chat without an active state and the bot offers to open the tool.
+*   **🛡 Anti-Bot Hardening** — three defensive layers against YouTube's "sign in to confirm you're not a bot" guard:
+    1. **Cookies**: admin command `/ytcookies` lets you upload a Netscape-format `cookies.txt`. The file is stored at `config/yt_cookies.txt` and used automatically for every subsequent request. Export with a browser extension like "Get cookies.txt LOCALLY" while logged into youtube.com.
+    2. **Player-Client Fallback**: on bot-check failure the extractor automatically rotates through `default → ios → android → tv_embedded → web_embedded → mweb` before giving up.
+    3. **Dedicated UI**: when YouTube still blocks the request the bot shows a clear in-chat help screen with a Retry button, an `🍪 Upload cookies` button (admins only), and cookie-status indicator — never a silent "Could not fetch info".
+
+  ### 🔹 Torrent Downloader
 *   **Multi-Provider Search Engine**: Searches **1337x**, **TorrentGalaxy**, and **LimeTorrents** concurrently and deduplicates results by info hash.
 *   **Category-Based Filtering**: Narrow searches by Movies, TV Shows, Music, Games, Software, or Anime.
 *   **Paginated Results**: Browse results 5 at a time with detailed info views (seeders, leechers, size, provider, date).
@@ -177,6 +213,7 @@ Create a `.env` file in the root directory. You will need a **MongoDB** instance
 | `PUBLIC_MODE` | Set to `True` to allow anyone to use the bot. | ❌ |
 | `DEBUG_MODE` | Enable verbose debug logging. Default: False. | ❌ |
 | `TMDB_API_KEY` | TMDb API Key for metadata | ✅ |
+| `YT_COOKIES_FILE` | Absolute path to a Netscape-format YouTube `cookies.txt`. Overrides the default `config/yt_cookies.txt` lookup. Admins can instead upload cookies at runtime via `/ytcookies`. | ❌ |
 
 > **Note:** The Torrent Downloader requires **aria2** to be installed and running as an RPC daemon on port 6800. See the Deployment Guide below for setup instructions.
 
@@ -323,6 +360,18 @@ settings - ⚙️ Customize your templates & thumbnails
 myfiles - 🗃️ Your personal Cloud Media Library
 premium - 💎 View and upgrade your premium plan
 usage - 📊 Track your limits & active storage
+yt - 🎬 YouTube downloader (video, audio, thumb, subs)
+c - 🎛 File Converter (video/audio/image)
+a - 🎵 Audio metadata editor
+w - 🖼 Image watermarker
+s - 📝 Subtitle extractor
+t - ✂️ Video trimmer
+v - 🎙 Voice note converter
+vn - ⭕ Video note converter
+mi - 🔍 MediaInfo (stream analyzer)
+g - ✏️ General rename (skip TMDb)
+p - 📁 Personal files mode
+r - 🏷 Classic manual rename
 help - 🆘 Read the Help Guide & troubleshooting
 info - ℹ️ View bot version and support info
 end - 🚫 Cancel the current task or state
@@ -337,6 +386,19 @@ admin - ⛔ Access Global Configurations (CEO Only)
 ```text
 start - ▶️ Start the bot
 myfiles - 🗃️ Open your Cloud Media Library
+yt - 🎬 YouTube downloader (video, audio, thumb, subs)
+c - 🎛 File Converter (video/audio/image)
+a - 🎵 Audio metadata editor
+w - 🖼 Image watermarker
+s - 📝 Subtitle extractor
+t - ✂️ Video trimmer
+v - 🎙 Voice note converter
+vn - ⭕ Video note converter
+mi - 🔍 MediaInfo (stream analyzer)
+g - ✏️ General rename (skip TMDb)
+p - 📁 Personal files mode
+r - 🏷 Classic manual rename
+ytcookies - 🍪 Upload YouTube cookies (admins)
 help - 🆘 Read the Help Guide & troubleshooting
 info - ℹ️ View bot version and support info
 end - 🚫 Cancel the current task or state
@@ -347,7 +409,8 @@ admin - ⛔ Access Global Configurations (Admins Only)
 ---
 ## 🎮 Usage Commands
 
-*   **/start**: Check bot status and ping.
+### Core Commands
+*   **/start**: Check bot status and show the interactive starter menu.
 *   **/admin**: Access the **Admin Panel** to configure global settings (or CEO controls in Public Mode).
 *   **/settings**: Access **Personal Settings** to configure your own templates and thumbnails (Public Mode only).
 *   **/myfiles**: Open your interactive cloud storage menu to view, manage, and batch-send your processed files.
@@ -355,15 +418,27 @@ admin - ⛔ Access Global Configurations (Admins Only)
 *   **/info**: View bot details and support info.
 *   **/usage**: View your daily limits and personal usage (Public Mode only).
 *   **/end**: Clear current session state (useful to reset auto-detection).
+*   **/help**: Open the Help Guide & troubleshooting pages.
 
-**Shortcut Commands:**
+### Rename & Metadata
 *   **/r** or **/rename**: Open the classic manual rename menu directly.
 *   **/p** or **/personal**: Open Personal Files mode directly.
-*   **/g** or **/general**: Open General Mode (Rename any file, bypass TMDb lookup).
-*   **/a** or **/audio**: Open Audio Metadata Editor (Edit MP3/FLAC title, artist, cover art).
-*   **/c** or **/convert**: Open File Converter (Extract audio, image to webp, video to gif, etc).
-*   **/w** or **/watermark**: Open Image Watermarker (Add text or overlay image).
-*   **/t** or **/torrent**: Open Torrent Downloader (Search, download, and process torrents).
+*   **/g** or **/general**: Open General Mode (rename any file, bypass TMDb lookup).
+*   **/a** or **/audio**: Open the Audio Metadata Editor (MP3/FLAC title, artist, album, cover art).
+
+### Media Tools
+*   **/yt** or **/youtube**: Open the **YouTube Tool** (video / audio / thumbnail / subtitles / info).
+*   **/c** or **/convert**: Open the **File Converter Mega Edition** (category-based video / audio / image operations).
+*   **/w** or **/watermark**: Open the **Image Watermarker** (text or overlay image).
+*   **/s** or **/subtitle**: Open the **Subtitle Extractor** (rip subs from MKV/MP4).
+*   **/trim**: Open the **Video Trimmer** (fast cut without re-encoding).
+*   **/v** or **/voice**: Open the **Voice Note Converter** (to Telegram voice-note format).
+*   **/vn** or **/videonote**: Open the **Video Note Converter** (to Telegram round-note format).
+*   **/mi** or **/mediainfo**: Open **MediaInfo** (detailed stream/codec analyzer).
+*   **/t** or **/torrent**: Open Torrent Downloader (Search, download, and process torrents)
+
+### Admin-Only
+*   **/ytcookies**: Upload a Netscape-format `cookies.txt` to bypass YouTube's anti-bot guard. Admins only — see the [YouTube Tool section](#-youtube-tool-yt) for the full flow.
 
 ---
 
