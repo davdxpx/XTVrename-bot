@@ -55,6 +55,132 @@ def _cancel_kb() -> InlineKeyboardMarkup:
     )
 
 
+async def _configured_uploader_ids(user_id: int) -> list[str]:
+    """Return the uploader ids the user has credentials for AND the bot
+    supports (binary / python import present)."""
+    configured: list[str] = []
+    for cls in available_uploaders():
+        try:
+            if await cls().is_configured(user_id):
+                configured.append(cls.id)
+        except Exception:
+            continue
+    return configured
+
+
+async def _render_uploader_picker(
+    client: Client,
+    chat_id: int,
+    message_id: int,
+    cid: str,
+    user_id: int,
+) -> None:
+    """Edit / send the "pick a destination" keyboard for picker ctx `cid`."""
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text="⌛ Mirror-Leech picker expired — run /ml again to retry.",
+        )
+        return
+
+    configured = await _configured_uploader_ids(user_id)
+
+    if not configured:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=(
+                "No destinations configured yet.\n\n"
+                "Open `/settings → ☁️ Mirror-Leech` (public mode) or\n"
+                "`/admin → ☁️ Mirror-Leech Config` (non-public) to link a "
+                "provider, then run /ml again."
+            ),
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("⚙️ Open config", callback_data="ml_cfg")],
+                    [InlineKeyboardButton("❌ Cancel", callback_data="ml_cancel_picker")],
+                ]
+            ),
+        )
+        return
+
+    rows: list[list[InlineKeyboardButton]] = []
+    from tools.mirror_leech.uploaders import uploader_by_id
+
+    selected = set(ctx.selected_uploaders)
+    for up_id in configured:
+        cls = uploader_by_id(up_id)
+        if cls is None:
+            continue
+        marker = "✅ " if up_id in selected else "▫️ "
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"{marker}{cls.display_name}",
+                    callback_data=f"ml_prov_{up_id}_{cid}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                f"🚀 Start ({len(selected)})", callback_data=f"ml_go_{cid}"
+            ),
+            InlineKeyboardButton("❌ Cancel", callback_data="ml_cancel_picker"),
+        ]
+    )
+
+    from tools.mirror_leech.downloaders import downloader_by_id
+
+    dl_cls = downloader_by_id(ctx.candidate_downloader or "")
+    dl_line = dl_cls.display_name if dl_cls else "auto"
+    preview = ctx.source
+    if len(preview) > 60:
+        preview = preview[:57] + "…"
+
+    await client.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text=(
+            f"☁️ **Mirror-Leech**\n\n"
+            f"📥 `{dl_line}`\n"
+            f"🔗 `{preview}`\n\n"
+            "Tap to toggle destinations, then **Start**."
+        ),
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_prov_([a-z0-9_]+)_([A-Za-z0-9_-]{4,10})$"))
+async def ml_toggle_uploader(client: Client, callback_query: CallbackQuery) -> None:
+    """Toggle a destination on/off inside the picker for ctx_id."""
+    _, _, rest = callback_query.data.partition("ml_prov_")
+    up_id, _, cid = rest.rpartition("_")
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await callback_query.answer("Picker expired — run /ml again.", show_alert=True)
+        return
+    if ctx.user_id != callback_query.from_user.id:
+        await callback_query.answer("This picker belongs to another user.", show_alert=True)
+        return
+
+    if up_id in ctx.selected_uploaders:
+        ctx.selected_uploaders.remove(up_id)
+    else:
+        ctx.selected_uploaders.append(up_id)
+
+    await callback_query.answer()
+    await _render_uploader_picker(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        cid,
+        callback_query.from_user.id,
+    )
+
+
 async def _feature_enabled() -> bool:
     from database import db
 
@@ -104,14 +230,12 @@ async def ml_command(client: Client, message: Message) -> None:
         )
     )
 
-    # Render the uploader picker. Actual button rendering lives in
-    # _render_uploader_picker (added in a follow-up commit); for now we
-    # drop a placeholder so the command is wired end-to-end.
-    await message.reply_text(
-        f"📥 Using **{dl_cls.display_name}**.\n\n"
-        f"Pick destinations (ctx `{cid}`) — uploader picker UI ships in a "
-        "follow-up commit.",
+    prompt = await message.reply_text(
+        f"📥 Using **{dl_cls.display_name}**. Building picker…",
         reply_markup=_cancel_kb(),
+    )
+    await _render_uploader_picker(
+        client, message.chat.id, prompt.id, cid, message.from_user.id
     )
 
 
