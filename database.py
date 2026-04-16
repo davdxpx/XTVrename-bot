@@ -7,6 +7,7 @@ from utils.log import get_logger
 import certifi
 
 import database_schema as _schema
+from database_shim import SettingsCollectionShim
 
 logger = get_logger("database")
 
@@ -27,6 +28,11 @@ class Database:
             self.db = None
             self.settings = None
             self.users = None
+            self.daily_stats = None
+            self.pending_payments = None
+            self.files = None
+            self.folders = None
+            self.file_groups = None
         else:
             try:
                 self.client = AsyncIOMotorClient(
@@ -41,12 +47,20 @@ class Database:
                 raise
 
             self.db = self.client[Config.DB_NAME]
-            self.settings = self.db["user_settings"]
-            self.users = self.db["users"]
-            self.daily_stats = self.db["daily_stats"]
-            self.pending_payments = self.db["pending_payments"]
-            self.files = self.db["files"]
-            self.folders = self.db["folders"]
+
+            # MediaStudio layout. `self.settings` is a back-compat shim over
+            # the new per-concern docs; it transparently routes legacy access
+            # patterns (find_one({"_id": "global_settings"}), etc.). All other
+            # attributes point directly at their renamed collections.
+            self.users = self.db[_schema.USERS_COLLECTION]
+            self.settings = SettingsCollectionShim(
+                self.db[_schema.SETTINGS_COLLECTION], self.users
+            )
+            self.daily_stats = self.db[_schema.DAILY_STATS_COLLECTION]
+            self.pending_payments = self.db[_schema.PENDING_PAYMENTS_COLLECTION]
+            self.files = self.db[_schema.FILES_COLLECTION]
+            self.folders = self.db[_schema.FOLDERS_COLLECTION]
+            self.file_groups = self.db[_schema.FILE_GROUPS_COLLECTION]
 
     def _invalidate_settings_cache(self, user_id=None):
         doc_id = self._get_doc_id(user_id)
@@ -109,108 +123,17 @@ class Database:
             logger.warning(f"Could not create indexes: {e}")
 
     def _get_doc_id(self, user_id=None):
-        if Config.PUBLIC_MODE and user_id is not None:
+        """Return the legacy virtual doc id for a settings lookup.
+
+        The SettingsCollectionShim routes "global_settings" and "user_<id>"
+        transparently onto the MediaStudio layout, so call sites don't need
+        to know anything about the underlying split. Public/non-public mode
+        no longer special-cases this — if `user_id` is given, we address the
+        user's personal settings; otherwise we address the global doc.
+        """
+        if user_id is not None:
             return f"user_{user_id}"
         return "global_settings"
-
-    async def migrate_old_db_to_new(self):
-        if self.db is None: return
-
-        global_doc = await self.settings.find_one({"_id": "global_settings"})
-        if global_doc and global_doc.get("migration_to_users_done"):
-            return
-
-        old_settings = self.db["MediaStudio-Settings"]
-        count = await old_settings.count_documents({})
-        if count == 0:
-            await self.settings.update_one({"_id": "global_settings"}, {"$set": {"migration_to_users_done": True}}, upsert=True)
-            return
-
-        logger.info("Migrating old MediaStudio-Settings to user_settings and users collections...")
-
-        async for doc in old_settings.find({}):
-            doc_id = doc.get("_id")
-
-            if doc_id in ["global_settings", "xtv_pro_settings", "public_mode_config"]:
-                await self.settings.update_one({"_id": doc_id}, {"$set": doc}, upsert=True)
-                continue
-
-            if isinstance(doc_id, str) and doc_id.startswith("user_"):
-                try:
-                    user_id = int(doc_id.replace("user_", ""))
-                except ValueError:
-                    continue
-
-                await self.settings.update_one({"_id": doc_id}, {"$set": doc}, upsert=True)
-
-                user_doc = await self.users.find_one({"user_id": user_id})
-                now = time.time()
-                if not user_doc:
-                    new_user = {
-                        "user_id": user_id,
-                        "updated_at": now,
-                        "first_name": "Unknown",
-                        "username": None,
-                        "banned": False,
-                        "is_premium": False,
-                        "premium_plan": "standard",
-                        "premium_expiry": None,
-                        "trial_claimed": False,
-                        "joined_at": now,
-                        "history": [],
-                        "referral_count": 0,
-                    }
-                    await self.users.insert_one(new_user)
-                else:
-                    if user_doc.get("is_premium") and "premium_plan" not in user_doc:
-                        await self.users.update_one({"user_id": user_id}, {"$set": {"premium_plan": "standard"}})
-
-        await self.settings.update_one({"_id": "global_settings"}, {"$set": {"migration_to_users_done": True}}, upsert=True)
-        logger.info("Migration completed.")
-
-    async def migrate_global_dumb_channels_to_ceo(self):
-        if not Config.PUBLIC_MODE or self.settings is None:
-            return
-
-        global_doc = await self.settings.find_one({"_id": "global_settings"})
-        if not global_doc:
-            return
-
-        if global_doc.get("dumb_channels_migrated_to_ceo"):
-            return
-
-        global_channels = global_doc.get("dumb_channels", {})
-        if not global_channels:
-            await self.settings.update_one({"_id": "global_settings"}, {"$set": {"dumb_channels_migrated_to_ceo": True}})
-            return
-
-        ceo_doc_id = f"user_{Config.CEO_ID}"
-        ceo_doc = await self.settings.find_one({"_id": ceo_doc_id})
-
-        update_data = {}
-
-        ceo_channels = ceo_doc.get("dumb_channels", {}) if ceo_doc else {}
-        merged_channels = {**global_channels, **ceo_channels}
-        update_data["dumb_channels"] = merged_channels
-
-        global_links = global_doc.get("dumb_channel_links", {})
-        ceo_links = ceo_doc.get("dumb_channel_links", {}) if ceo_doc else {}
-        merged_links = {**global_links, **ceo_links}
-        if merged_links:
-            update_data["dumb_channel_links"] = merged_links
-
-        if (not ceo_doc or not ceo_doc.get("default_dumb_channel")) and global_doc.get("default_dumb_channel"):
-            update_data["default_dumb_channel"] = global_doc.get("default_dumb_channel")
-
-        if (not ceo_doc or not ceo_doc.get("movie_dumb_channel")) and global_doc.get("movie_dumb_channel"):
-            update_data["movie_dumb_channel"] = global_doc.get("movie_dumb_channel")
-
-        if (not ceo_doc or not ceo_doc.get("series_dumb_channel")) and global_doc.get("series_dumb_channel"):
-            update_data["series_dumb_channel"] = global_doc.get("series_dumb_channel")
-
-        await self.settings.update_one({"_id": ceo_doc_id}, {"$set": update_data}, upsert=True)
-        await self.settings.update_one({"_id": "global_settings"}, {"$set": {"dumb_channels_migrated_to_ceo": True}})
-        logger.info(f"Migrated {len(global_channels)} dumb channels from global to CEO.")
 
     async def get_settings(self, user_id=None):
         if self.settings is None:
