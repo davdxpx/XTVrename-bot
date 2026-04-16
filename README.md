@@ -188,18 +188,37 @@ Admins can easily set Free, Standard, and Deluxe plan limits (daily files, egres
 
 Create a `.env` file in the root directory. You will need a **MongoDB** instance and **Pyrogram** session (optional for 4GB files).
 
-| Variable | Description | Required |
-| :--- | :--- | :--- |
-| `API_ID` | Telegram API ID (my.telegram.org) | ✅ |
-| `API_HASH` | Telegram API Hash (my.telegram.org) | ✅ |
-| `BOT_TOKEN` | Bot Token from @BotFather | ✅ |
-| `MAIN_URI` | MongoDB Connection String | ✅ |
-| `CEO_ID` | Your Telegram User ID (Admin) | ✅ |
-| `ADMIN_IDS` | Allowed User IDs (comma separated) | ❌ |
-| `PUBLIC_MODE` | Set to `True` to allow anyone to use the bot. | ❌ |
-| `DEBUG_MODE` | Enable verbose debug logging. Default: False. | ❌ |
-| `TMDB_API_KEY` | TMDb API Key for metadata | ✅ |
-| `YT_COOKIES_FILE` | Absolute path to a Netscape-format YouTube `cookies.txt`. Overrides the default `config/yt_cookies.txt` lookup. Admins can instead upload cookies at runtime via `/ytcookies`. | ❌ |
+### 🏁 Minimal setup (5 env vars → running bot)
+
+Five vars and you're live. Everything else is optional.
+
+```env
+BOT_TOKEN=<from @BotFather>
+API_ID=<from my.telegram.org>
+API_HASH=<from my.telegram.org>
+MAIN_URI=<MongoDB connection string — free Atlas tier works>
+CEO_ID=<your Telegram user ID>
+```
+
+Features that need an API key (TMDb poster lookup, Mirror-Leech cloud
+uploads) ship a friendly 🔒 notice when the key is missing and unlock
+themselves the moment you add it — no redeploy needed for most keys.
+
+### Full variable reference
+
+| Variable | Required | Default | Description |
+| :--- | :---: | :---: | :--- |
+| `BOT_TOKEN` | ✅ | — | Bot token from @BotFather |
+| `API_ID` | ✅ | — | Telegram API ID (my.telegram.org) |
+| `API_HASH` | ✅ | — | Telegram API Hash (my.telegram.org) |
+| `MAIN_URI` | ✅ | — | MongoDB connection string (free Atlas tier supported) |
+| `CEO_ID` | ✅ | — | Your Telegram user ID — only this user can open `/admin` |
+| `ADMIN_IDS` | ❌ | empty | Comma-separated extra admin user IDs |
+| `PUBLIC_MODE` | ❌ | `false` | `true` to open the bot to everyone |
+| `DEBUG_MODE` | ❌ | `false` | Verbose logs |
+| `TMDB_API_KEY` | ❌ | empty | Unlocks title matching, posters, auto channel routing. Free key at https://www.themoviedb.org/settings/api |
+| `SECRETS_KEY` | ❌ | empty | Fernet key encrypting Mirror-Leech provider credentials. Required only when Mirror-Leech is enabled. |
+| `YT_COOKIES_FILE` | ❌ | `config/yt_cookies.txt` | Absolute path to a Netscape YouTube cookies file. Admins can also upload at runtime via `/ytcookies`. |
 
 ---
 
@@ -254,6 +273,8 @@ The bot can operate in two distinct modes via the `PUBLIC_MODE` environment vari
 ## 🛠 Deployment Guide
 
 Welcome to the **𝕏TV MediaStudio™** deployment documentation! Because this bot processes media with **FFmpeg**, it consumes significant **RAM** and **Bandwidth (Egress)**. Keep this in mind when choosing a provider!
+
+> **TL;DR** — set the 5 required env vars and click any deploy button below. `TMDB_API_KEY` is **optional**; the bot runs fine without it and shows a 🔒 notice on TMDb-dependent features until you add one. Same story for `SECRETS_KEY` (Mirror-Leech only).
 
 <details>
 <summary><b>⚡ 1-Click Cloud Deployments (PaaS)</b></summary>
