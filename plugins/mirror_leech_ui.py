@@ -390,3 +390,88 @@ async def _render_queue(
         except Exception:
             pass
     await client.send_message(chat_id, body, reply_markup=markup)
+
+
+# ---------------------------------------------------------------------------
+# ml_cfg — per-user provider configuration root
+# ---------------------------------------------------------------------------
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg$"))
+async def ml_cfg_root(client: Client, callback_query: CallbackQuery) -> None:
+    await _render_cfg_root(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+    await callback_query.answer()
+
+
+async def _render_cfg_root(
+    client: Client,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+) -> None:
+    from tools.mirror_leech import Secrets
+    from tools.mirror_leech.uploaders import all_uploaders
+
+    lines = ["☁️ **Mirror-Leech — Destinations**", ""]
+    if not Secrets.is_available():
+        lines.append(
+            "🚨 `SECRETS_KEY` is **not configured** — the bot refuses to "
+            "store provider credentials until you set it.\n"
+        )
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for cls in all_uploaders():
+        avail = cls.available()
+        try:
+            configured = avail and await cls().is_configured(user_id)
+        except Exception:
+            configured = False
+        if not avail:
+            badge = "🚫"
+            suffix = "unavailable on this host"
+        elif configured:
+            badge = "✅"
+            suffix = "linked"
+        elif cls.needs_credentials:
+            badge = "🔑"
+            suffix = "link to enable"
+        else:
+            badge = "▫️"
+            suffix = "anonymous OK"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"{badge} {cls.display_name} — {suffix}",
+                    callback_data=f"ml_cfg_up_{cls.id}",
+                )
+            ]
+        )
+
+    rows.append([InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")])
+    rows.append([InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")])
+
+    text = "\n".join(lines) + "\n\nTap a provider to link it, test it, or clear its credentials."
+    try:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+    except Exception:
+        await client.send_message(
+            chat_id, text, reply_markup=InlineKeyboardMarkup(rows)
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_close$"))
+async def ml_cfg_close(client: Client, callback_query: CallbackQuery) -> None:
+    try:
+        await callback_query.message.edit_text("☁️ Mirror-Leech config closed.")
+    except Exception:
+        pass
+    await callback_query.answer()
