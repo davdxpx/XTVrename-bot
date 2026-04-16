@@ -46,33 +46,7 @@ logger = get_logger("plugins.admin")
 # here temporarily — they will move to their respective domain modules
 # in later migration steps.
 
-def get_admin_templates_menu():
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "📝 Edit Filename Templates",
-                    callback_data="admin_filename_templates",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "📝 Edit Caption Template", callback_data="admin_caption"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "📝 Edit Metadata Templates", callback_data="admin_templates"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔤 Preferred Separator", callback_data="admin_pref_separator"
-                )
-            ],
-            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
-        ]
-    )
+# get_admin_templates_menu moved to plugins/admin/templates.py
 
 def get_admin_public_settings_menu():
     return InlineKeyboardMarkup(
@@ -112,7 +86,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$|access_limits$|quick_toggle_(?:premium|deluxe|trial|myfiles)$|feature_toggles$|gtoggle_|per_plan_limits$|global_daily_egress$|thumb_(?:menu|view|set|remove)$|delete_msg$)|edit_template_|edit_fn_template_|prompt_admin_(?!dumb_timeout|thumb_set)|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$|access_limits$|quick_toggle_(?:premium|deluxe|trial|myfiles)$|feature_toggles$|gtoggle_|per_plan_limits$|global_daily_egress$|thumb_(?:menu|view|set|remove)$|delete_msg$|templates_menu$|templates$|caption$|filename_templates$|fn_templates_(?:personal|subtitles)$|pref_separator$|set_sep_)|prompt_admin_(?!dumb_timeout|thumb_set|caption)|prompt_public_|prompt_daily_|prompt_global_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -1783,16 +1757,8 @@ async def admin_callback(client, callback_query):
         except MessageNotModified:
             pass
         return
-    # admin_thumb_*, set_admin_thumb_mode_*, prompt_admin_thumb_set,
-    # admin_delete_msg moved to plugins/admin/thumbnails.py
-    elif data == "admin_templates_menu":
-        try:
-            await callback_query.message.edit_text(
-                "📋 **Templates Menu**\n\n" "Select a template category to edit:",
-                reply_markup=get_admin_templates_menu(),
-            )
-        except MessageNotModified:
-            pass
+    # admin_thumb_* moved to plugins/admin/thumbnails.py
+    # admin_templates_menu moved to plugins/admin/templates.py
     # admin_access_limits moved to plugins/admin/feature_toggles.py
     elif data == "admin_public_settings":
         try:
@@ -1802,300 +1768,9 @@ async def admin_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-    elif data == "admin_pref_separator":
-        try:
-            current_sep = await db.get_preferred_separator(user_id)
-            sep_display = "Space" if current_sep == " " else current_sep
-            await callback_query.message.edit_text(
-                f"🔤 **Preferred Separator**\n\n"
-                f"Choose the separator used when cleaning up filename templates.\n"
-                f"Current: **{sep_display}**\n\n"
-                f"Select your preferred separator below:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton("Dot (.)", callback_data="admin_set_sep_."),
-                            InlineKeyboardButton("Underscore (_)", callback_data="admin_set_sep__"),
-                        ],
-                        [
-                            InlineKeyboardButton("Space ( )", callback_data="admin_set_sep_space"),
-                        ],
-                        [InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")],
-                    ]
-                )
-            )
-        except MessageNotModified:
-            pass
-    elif data.startswith("admin_set_sep_"):
-        try:
-            new_sep = data.split("_set_sep_")[1]
-            if new_sep == "space":
-                new_sep = " "
-
-            await db.update_preferred_separator(new_sep, user_id)
-            sep_display = "Space" if new_sep == " " else new_sep
-
-            await callback_query.answer(f"Separator set to: {sep_display}", show_alert=True)
-
-            await callback_query.message.edit_text(
-                f"🔤 **Preferred Separator**\n\n"
-                f"Choose the separator used when cleaning up filename templates.\n"
-                f"Current: **{sep_display}**\n\n"
-                f"Select your preferred separator below:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton("Dot (.)", callback_data="admin_set_sep_."),
-                            InlineKeyboardButton("Underscore (_)", callback_data="admin_set_sep__"),
-                        ],
-                        [
-                            InlineKeyboardButton("Space ( )", callback_data="admin_set_sep_space"),
-                        ],
-                        [InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")],
-                    ]
-                )
-            )
-        except MessageNotModified:
-            pass
-    elif data == "admin_templates":
-        try:
-            await callback_query.message.edit_text(
-                "📝 **Edit Metadata Templates**\n\n" "Select a field to edit:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Title", callback_data="edit_template_title"
-                            ),
-                            InlineKeyboardButton(
-                                "Author", callback_data="edit_template_author"
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Artist", callback_data="edit_template_artist"
-                            ),
-                            InlineKeyboardButton(
-                                "Video", callback_data="edit_template_video"
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Audio", callback_data="edit_template_audio"
-                            ),
-                            InlineKeyboardButton(
-                                "Subtitle", callback_data="edit_template_subtitle"
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Templates", callback_data="admin_templates_menu"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data == "admin_caption":
-        templates = await db.get_all_templates()
-        current_caption = templates.get("caption", "{random}")
-        try:
-            await callback_query.message.edit_text(
-                f"📝 **Edit Caption Template**\n\n"
-                f"Current: `{current_caption}`\n\n"
-                "**Variables:**\n"
-                "- `{filename}` : The final filename\n"
-                "- `{size}` : File size (e.g. 1.5 GB)\n"
-                "- `{duration}` : Video duration\n"
-                "- `{random}` : Random string (Anti-Hash)\n\n"
-                "Click below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_admin_caption"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Templates", callback_data="admin_templates_menu"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data == "prompt_admin_caption":
-        admin_sessions[user_id] = {"state": "awaiting_template_caption", "msg_id": callback_query.message.id}
-        try:
-            await callback_query.message.edit_text(
-                "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="admin_templates_menu"
-                            )
-                        ]
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    # admin_view moved to plugins/admin/general.py
-    elif data == "admin_filename_templates":
-        try:
-            await callback_query.message.edit_text(
-                "📝 **Edit Filename Templates**\n\n" "Select media type to edit:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Movies", callback_data="edit_fn_template_movies"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Series", callback_data="edit_fn_template_series"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Personal", callback_data="admin_fn_templates_personal"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Subtitles",
-                                callback_data="admin_fn_templates_subtitles",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Templates", callback_data="admin_templates_menu"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data == "admin_fn_templates_personal":
-        try:
-            await callback_query.message.edit_text(
-                "📝 **Edit Personal Filename Templates**\n\n"
-                "Select media type to edit:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Personal Files",
-                                callback_data="edit_fn_template_personal_file",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Personal Photos",
-                                callback_data="edit_fn_template_personal_photo",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Personal Videos",
-                                callback_data="edit_fn_template_personal_video",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Filename Templates", callback_data="admin_filename_templates"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data == "admin_fn_templates_subtitles":
-        try:
-            await callback_query.message.edit_text(
-                "📝 **Edit Subtitles Filename Templates**\n\n"
-                "Select media type to edit:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Movies",
-                                callback_data="edit_fn_template_subtitles_movies",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Series",
-                                callback_data="edit_fn_template_subtitles_series",
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data.startswith("edit_fn_template_"):
-        field = data.replace("edit_fn_template_", "")
-        templates = await db.get_filename_templates()
-        current_val = templates.get(field, "")
-        try:
-            vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
-            if field.lower() in ["series", "subtitles_series"]:
-                vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
-
-            await callback_query.message.edit_text(
-                f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
-                f"Current: `{current_val}`\n\n"
-                f"Variables: {vars_text}\n"
-                f"Note: File extension will be added automatically.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data=f"prompt_fn_template_{field}"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Filename Templates", callback_data="admin_filename_templates"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data.startswith("prompt_fn_template_"):
-        field = data.replace("prompt_fn_template_", "")
-        admin_sessions[user_id] = {"state": f"awaiting_fn_template_{field}", "msg_id": callback_query.message.id}
-        try:
-            vars_text = ""
-            if field.lower() in ["series", "subtitles_series"]:
-                vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
-            else:
-                vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
-
-            await callback_query.message.edit_text(
-                f"✏️ **Send the new filename template for {field.capitalize()}:**{vars_text}",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="admin_filename_templates"
-                            )
-                        ]
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
+    # admin_pref_separator, admin_set_sep_*, admin_templates, admin_caption,
+    # prompt_admin_caption, admin_filename_templates, admin_fn_templates_*,
+    # edit_fn_template_*, prompt_fn_template_* moved to plugins/admin/templates.py
     # admin_general_settings_menu moved to plugins/admin/general.py
     elif data == "admin_general_workflow":
         current_mode = await db.get_workflow_mode(None)
@@ -2243,52 +1918,7 @@ async def admin_callback(client, callback_query):
         await callback_query.message.delete()
         return
     # admin_main moved to plugins/admin/panel.py
-
-    elif data.startswith("edit_template_"):
-        field = data.split("_")[-1]
-        templates = await db.get_all_templates()
-        current_val = templates.get(field, "")
-        try:
-            await callback_query.message.edit_text(
-                f"✏️ **Edit {field.capitalize()} Template**\n\n"
-                f"Current: `{current_val}`\n\n"
-                f"Variables: `{{title}}`, `{{season_episode}}`, `{{lang}}` (for audio/subtitle)\n\n"
-                "Click below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data=f"prompt_template_{field}"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Metadata Templates", callback_data="admin_templates"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data.startswith("prompt_template_"):
-        field = data.replace("prompt_template_", "")
-        admin_sessions[user_id] = {"state": f"awaiting_template_{field}", "msg_id": callback_query.message.id}
-        try:
-            await callback_query.message.edit_text(
-                f"✏️ **Send the new template text for {field.capitalize()}:**",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="admin_templates"
-                            )
-                        ]
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
+    # edit_template_*, prompt_template_* moved to plugins/admin/templates.py
 
 # handle_admin_photo moved to plugins/admin/thumbnails.py
 

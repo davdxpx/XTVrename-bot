@@ -44,6 +44,7 @@ from . import general  # noqa: F401
 from . import panel  # noqa: F401
 from . import feature_toggles  # noqa: F401
 from . import thumbnails  # noqa: F401
+from . import templates  # noqa: F401
 from . import _legacy  # noqa: F401
 
 __all__ = [
