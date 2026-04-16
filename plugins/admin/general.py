@@ -300,7 +300,7 @@ async def handle_text(client, message, state, state_obj, msg_id):
     await db.update_channel(new_channel, None)
 
     reply_markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_channel")]]
+        [[InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")]]
     )
     await edit_or_reply(client, message, msg_id,
         f"✅ Global channel variable updated to:\n`{new_channel}`",

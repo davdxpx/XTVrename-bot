@@ -54,7 +54,7 @@ async def admin_myfiles_callback(client, callback_query):
             buttons.append([InlineKeyboardButton("⚙️ Global Limits", callback_data="admin_myfiles_limits")])
 
         buttons.append([InlineKeyboardButton("🧹 DB Cleanup Tools", callback_data="admin_myfiles_cleanup")])
-        buttons.append([InlineKeyboardButton("← Back", callback_data="admin_access_limits" if Config.PUBLIC_MODE else "admin_main")])
+        buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         except MessageNotModified:
