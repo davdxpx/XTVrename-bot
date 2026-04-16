@@ -102,19 +102,28 @@ class SettingsCollectionShim:
             schema.LEGACY_MISC_DOC_ID,
         )
 
-    async def _merge_global_docs(self) -> dict:
+    async def _merge_global_docs(self) -> dict | None:
         """Merge all real Settings docs into a virtual flat dict matching the
-        shape callers expect from {"_id": "global_settings"}."""
-        merged: dict[str, Any] = {"_id": schema.VIRTUAL_GLOBAL_SETTINGS}
+        shape callers expect from {"_id": "global_settings"}.
+
+        Returns None when no underlying docs exist, preserving the legacy
+        "no settings yet, insert defaults" signal that bootstrap paths rely
+        on for a fresh install.
+        """
+        merged: dict[str, Any] = {}
+        count = 0
         async for doc in self._settings.find({"_id": {"$in": list(schema.MERGED_GLOBAL_DOCS)}}):
-            real_id = doc.pop("_id", None)
+            count += 1
+            doc.pop("_id", None)
             for key, value in doc.items():
                 if key in schema.MERGE_EXCLUDE:
                     continue
                 # Later docs win on collision — should not happen with a
                 # well-maintained GLOBAL_KEY_TO_DOC but guard against it.
                 merged[key] = value
-            _ = real_id  # unused but explicit
+        if count == 0:
+            return None
+        merged["_id"] = schema.VIRTUAL_GLOBAL_SETTINGS
         return merged
 
     async def _read_personal(self, uid: int) -> dict | None:

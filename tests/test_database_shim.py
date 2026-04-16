@@ -53,6 +53,14 @@ async def test_find_one_public_mode_config_uses_same_merge(shim):
     assert merged["bot_name"] == "PublicBot"
 
 
+async def test_find_one_global_settings_returns_none_on_empty_db(shim):
+    """Preserves the legacy 'no settings yet' signal so bootstrap paths that
+    insert a default document still trigger on a fresh install."""
+    s, _, _ = shim
+    assert await s.find_one({"_id": "global_settings"}) is None
+    assert await s.find_one({"_id": "public_mode_config"}) is None
+
+
 # A.07 — routed update -----------------------------------------------------
 
 
