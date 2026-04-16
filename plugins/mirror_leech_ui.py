@@ -247,3 +247,61 @@ async def ml_cancel_picker(client: Client, callback_query: CallbackQuery) -> Non
     except Exception:
         pass
     await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_go_([A-Za-z0-9_-]{4,10})$"))
+async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
+    """Resolve the picker context and schedule one MLTask per selected uploader."""
+    from tools.mirror_leech.ProgressRender import (
+        render_task_text,
+        update_progress_message,
+    )
+    from tools.mirror_leech.Runner import run_task
+    from tools.mirror_leech.Tasks import MLTask, ml_worker_pool
+
+    cid = callback_query.data.removeprefix("ml_go_")
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await callback_query.answer("Picker expired — run /ml again.", show_alert=True)
+        return
+    if ctx.user_id != callback_query.from_user.id:
+        await callback_query.answer("This picker belongs to another user.", show_alert=True)
+        return
+    if not ctx.selected_uploaders:
+        await callback_query.answer("Pick at least one destination first.", show_alert=True)
+        return
+
+    await callback_query.answer("Queued.")
+
+    task = MLTask.new(
+        user_id=ctx.user_id,
+        source=ctx.source,
+        downloader_id=ctx.candidate_downloader or "",
+        uploader_ids=list(ctx.selected_uploaders),
+    )
+    task.message_chat_id = callback_query.message.chat.id
+    task.message_id = callback_query.message.id
+
+    # Prime the progress message so the user sees something immediately.
+    try:
+        await callback_query.message.edit_text(
+            render_task_text(task),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("⏹ Cancel", callback_data=f"ml_cancel_{task.id}")]]
+            ),
+        )
+    except Exception:
+        pass
+
+    ContextStore.drop(cid)
+
+    async def _runner(t: MLTask) -> None:
+        await run_task(
+            t,
+            client,
+            progress_cb=lambda current: update_progress_message(client, current),
+        )
+        # Final render — terminal states always flush.
+        await update_progress_message(client, t)
+
+    ml_worker_pool.enqueue(task, _runner)
