@@ -305,3 +305,88 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
         await update_progress_message(client, t)
 
     ml_worker_pool.enqueue(task, _runner)
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cancel_([0-9a-f]{6,16})$"))
+async def ml_cancel_running(client: Client, callback_query: CallbackQuery) -> None:
+    """Signal cancel on a running task and ack the user."""
+    from tools.mirror_leech.Tasks import ml_worker_pool
+
+    task_id = callback_query.data.removeprefix("ml_cancel_")
+    task = ml_worker_pool.get(task_id)
+    if not task:
+        await callback_query.answer("Task already done or unknown.", show_alert=True)
+        return
+    if task.user_id != callback_query.from_user.id:
+        await callback_query.answer("Not your task.", show_alert=True)
+        return
+    ml_worker_pool.cancel(task_id)
+    await callback_query.answer("Cancel requested.")
+
+
+@Client.on_message(filters.command("mlqueue") & filters.private)
+async def ml_queue_command(client: Client, message: Message) -> None:
+    await _render_queue(client, message.chat.id, None, message.from_user.id)
+
+
+@Client.on_callback_query(filters.regex(r"^ml_queue$"))
+async def ml_queue_callback(client: Client, callback_query: CallbackQuery) -> None:
+    await _render_queue(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+    await callback_query.answer()
+
+
+async def _render_queue(
+    client: Client,
+    chat_id: int,
+    message_id: int | None,
+    user_id: int,
+) -> None:
+    from tools.mirror_leech.Tasks import ml_worker_pool
+
+    tasks = ml_worker_pool.list_for_user(user_id)[:20]
+    if not tasks:
+        body = "📭 **Your Mirror-Leech queue is empty.**"
+        rows: list[list[InlineKeyboardButton]] = []
+    else:
+        icon = {
+            "queued": "⏳",
+            "downloading": "⬇️",
+            "uploading": "☁️",
+            "done": "✅",
+            "failed": "❌",
+            "cancelled": "🚫",
+        }
+        lines = ["🗂 **Your last Mirror-Leech tasks**", ""]
+        rows = []
+        for t in tasks:
+            lines.append(
+                f"{icon.get(t.status, '•')} `{t.id}` · {t.status} · "
+                f"{t.progress_fraction * 100:.0f}%  ·  `{t.source[:50]}`"
+            )
+            if t.status in ("queued", "downloading", "uploading"):
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            f"⏹ Cancel `{t.id}`",
+                            callback_data=f"ml_cancel_{t.id}",
+                        )
+                    ]
+                )
+        body = "\n".join(lines)
+    rows.append([InlineKeyboardButton("↻ Refresh", callback_data="ml_queue")])
+
+    markup = InlineKeyboardMarkup(rows)
+    if message_id:
+        try:
+            await client.edit_message_text(
+                chat_id=chat_id, message_id=message_id, text=body, reply_markup=markup
+            )
+            return
+        except Exception:
+            pass
+    await client.send_message(chat_id, body, reply_markup=markup)
