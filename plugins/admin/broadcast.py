@@ -7,7 +7,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database import db
 from config import Config
 from utils.state import set_state, get_state, update_data, get_data, clear_session
-from plugins.admin import is_admin
+from plugins.admin.core import is_admin
 from utils.logger import debug
 
 debug("✅ Loaded handler: broadcast_callback")

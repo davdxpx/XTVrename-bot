@@ -8,9 +8,9 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from config import Config
 from database import db
 from utils.log import get_logger
-from plugins.admin import admin_sessions
+from plugins.admin.core import admin_sessions
 
-logger = get_logger("plugins.admin_users")
+logger = get_logger("plugins.admin.users")
 
 # === Helper Functions ===
 def is_admin(user_id):

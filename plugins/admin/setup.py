@@ -1,12 +1,20 @@
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------
 from pyrogram import Client, filters, StopPropagation
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from config import Config
 from database import db
 from utils.log import get_logger
-from plugins.admin import admin_sessions
+from plugins.admin.core import admin_sessions
 
-logger = get_logger("plugins.admin_setup")
+logger = get_logger("plugins.admin.setup")
 
 # ---------------------------------------------------------------------------
 # Helpers
