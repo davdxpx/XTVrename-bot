@@ -33,6 +33,9 @@ from plugins.admin.core import (
 
 # Guarantee all submodule handlers register on import, independent of
 # pyrofork's plugin discovery behaviour.
+# text_dispatcher must be imported first — it provides register() used
+# by domain modules to register their text-input state handlers.
+from . import text_dispatcher  # noqa: F401
 from . import noop  # noqa: F401
 from . import dumb_channels  # noqa: F401
 from . import dashboard  # noqa: F401

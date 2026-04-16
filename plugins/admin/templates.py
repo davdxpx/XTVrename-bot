@@ -17,8 +17,8 @@ The menu builder `get_admin_templates_menu` also lives here so layout
 stays close to its handlers.
 
 Text-input flows (`awaiting_template_*`, `awaiting_fn_template_*`,
-`awaiting_caption`) still route through `_legacy.handle_admin_text`
-for now.
+`awaiting_caption`) are registered with the shared ``text_dispatcher``
+and routed here at runtime.
 """
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -26,7 +26,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from database import db
-from plugins.admin.core import admin_sessions, is_admin
+from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 
 
 def get_admin_templates_menu():
@@ -448,3 +448,48 @@ async def templates_cb(client, callback_query: CallbackQuery):
         except MessageNotModified:
             pass
         return
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handlers (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def _handle_template_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_template_* and awaiting_caption states."""
+    user_id = message.from_user.id
+    field = state.split("_")[-1]
+    new_template = message.text
+    await db.update_template(field, new_template)
+    if field == "caption":
+        reply_markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")]]
+        )
+    else:
+        reply_markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("← Back to Metadata Templates", callback_data="admin_templates")]]
+        )
+    await edit_or_reply(client, message, msg_id,
+        f"✅ Template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        reply_markup=reply_markup,
+    )
+    admin_sessions.pop(user_id, None)
+
+
+async def _handle_fn_template_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_fn_template_* states."""
+    user_id = message.from_user.id
+    field = state.replace("awaiting_fn_template_", "")
+    new_template = message.text
+    await db.update_filename_template(field, new_template)
+    reply_markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("← Back to Filename Templates", callback_data="admin_filename_templates")]]
+    )
+    await edit_or_reply(client, message, msg_id,
+        f"✅ Filename template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        reply_markup=reply_markup,
+    )
+    admin_sessions.pop(user_id, None)
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("awaiting_template_", _handle_template_text)
+_register("awaiting_fn_template_", _handle_fn_template_text)

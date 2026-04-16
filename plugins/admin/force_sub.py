@@ -13,8 +13,8 @@ Covers the force-subscription settings: channel management (add, remove,
 toggle), gate banner, gate message, button customisation, and welcome
 message.
 
-Text-input flows (`awaiting_fs_*`) still route through
-`_legacy.handle_admin_text`.
+Text-input flows (`awaiting_fs_*`) are registered with the shared
+``text_dispatcher`` and handled here via ``handle_text``.
 """
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -23,7 +23,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from config import Config
 from database import db
-from plugins.admin.core import admin_sessions, is_admin
+from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 
 
 async def _render_force_sub_menu(callback_query: CallbackQuery):
@@ -382,3 +382,47 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
         except MessageNotModified:
             pass
         return
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handler (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def handle_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_fs_* states."""
+    user_id = message.from_user.id
+    val = message.text.strip() if message.text else ""
+    if val == "/cancel":
+        admin_sessions.pop(user_id, None)
+        await edit_or_reply(client, message, msg_id, "Cancelled.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]]))
+        return
+
+    field = state.replace("awaiting_fs_", "")
+
+    if field == "msg":
+        await db.update_public_config("force_sub_message_text", val)
+        await edit_or_reply(client, message, msg_id, "✅ Gate message updated successfully.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]])
+        )
+    elif field == "btn_label":
+        await db.update_public_config("force_sub_button_label", val)
+        await edit_or_reply(client, message, msg_id, f"✅ Button label updated to `{val}`.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Button Settings", callback_data="admin_fs_edit_btn")]])
+        )
+    elif field == "btn_emoji":
+        emoji = val[0] if val else "📢"
+        await db.update_public_config("force_sub_button_emoji", emoji)
+        await edit_or_reply(client, message, msg_id, f"✅ Button emoji updated to {emoji}.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Button Settings", callback_data="admin_fs_edit_btn")]])
+        )
+    elif field == "welcome":
+        await db.update_public_config("force_sub_welcome_text", val)
+        await edit_or_reply(client, message, msg_id, "✅ Welcome message updated successfully.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]])
+        )
+
+    admin_sessions.pop(user_id, None)
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("awaiting_fs_", handle_text)

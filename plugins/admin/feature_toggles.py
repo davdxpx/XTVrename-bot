@@ -23,8 +23,8 @@ use local `_render_*` helpers instead.
 
 The `admin_global_daily_egress` branch here only renders the preview
 screen; the text-input flow that backs the "Change" button
-(`awaiting_global_egress`) still lives in `_legacy.handle_admin_text`
-for now.
+(`awaiting_global_egress`) is registered with the shared
+``text_dispatcher`` and handled in ``premium.py``.
 """
 
 from pyrogram import Client, ContinuePropagation, filters

@@ -17,8 +17,8 @@ Covers the General Settings submenu and its sub-flows:
 - admin_general_language / prompt_admin_language / admin_set_lang_* → language selection
 - admin_cancel → cancel / dismiss admin message
 
-Text-input flows (awaiting_admin_channel) still route through
-_legacy.handle_admin_text.
+Text-input flows (awaiting_admin_channel) are registered with the shared
+``text_dispatcher`` and handled here via ``handle_text``.
 """
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -286,3 +286,28 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
         except MessageNotModified:
             pass
         return
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handler (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def handle_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_admin_channel state."""
+    from plugins.admin.core import edit_or_reply
+
+    user_id = message.from_user.id
+    new_channel = message.text
+    await db.update_channel(new_channel, None)
+
+    reply_markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_channel")]]
+    )
+    await edit_or_reply(client, message, msg_id,
+        f"✅ Global channel variable updated to:\n`{new_channel}`",
+        reply_markup=reply_markup,
+    )
+    admin_sessions.pop(user_id, None)
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("awaiting_admin_channel", handle_text)

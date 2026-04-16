@@ -15,8 +15,8 @@ premium system toggles, trial system, per-plan feature toggles
 free and premium plans, and currency selection.
 
 Text-input flows (awaiting_premium_*, awaiting_trial_days,
-awaiting_public_daily_*) still route through
-_legacy.handle_admin_text.
+awaiting_public_daily_*) are registered with the shared
+``text_dispatcher`` and routed here at runtime.
 """
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -25,7 +25,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from config import Config
 from database import db
-from plugins.admin.core import admin_sessions, is_admin
+from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 
 
 # ── Shared tool definitions ────────────────────────────────────────────
@@ -819,3 +819,133 @@ async def premium_cb(client, callback_query: CallbackQuery):
         except MessageNotModified:
             pass
         return
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handlers (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def _handle_global_daily_egress(client, message, state, state_obj, msg_id):
+    """Handle awaiting_global_daily_egress state."""
+    user_id = message.from_user.id
+    val = message.text.strip() if message.text else ""
+    if not val.isdigit():
+        await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_access_limits")]]
+            ),
+        )
+        return
+    await db.update_global_daily_egress_limit(float(val))
+    await edit_or_reply(client, message, msg_id,
+        f"✅ Global daily egress limit updated to `{val}` MB.",
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]]
+        ),
+    )
+    admin_sessions.pop(user_id, None)
+
+
+async def _handle_premium_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_premium_* states (string and dict variants)."""
+    user_id = message.from_user.id
+
+    # Dict state variant (state_obj is dict with extra fields like currency)
+    if isinstance(state_obj, dict) and isinstance(state, str) and state.startswith("awaiting_premium_"):
+        parts = state.replace("awaiting_premium_", "").split("_")
+        if len(parts) >= 2 and parts[0] in ["standard", "deluxe"]:
+            plan_name = parts[0]
+            field = parts[1]
+            val = message.text.strip() if message.text else ""
+
+            config = await db.get_public_config()
+            plan_key = f"premium_{plan_name}"
+            plan_settings = config.get(plan_key, {})
+
+            if field == "price":
+                try:
+                    float_val = float(val.replace(",", "."))
+                except ValueError:
+                    await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
+                    )
+                    return
+                currency = state_obj.get("currency", "USD")
+                formatted_price = f"{float_val:g} {currency}"
+                plan_settings["price_string"] = formatted_price
+                await db.update_public_config(plan_key, plan_settings)
+                await edit_or_reply(client, message, msg_id,
+                    f"✅ {plan_name.capitalize()} fiat price updated to `{formatted_price}`.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]])
+                )
+                admin_sessions.pop(user_id, None)
+                return
+
+            if field in ["egress", "files", "stars"]:
+                val_num = 0
+                if field == "egress":
+                    val_lower = val.lower().strip()
+                    if "gb" in val_lower:
+                        try:
+                            gb_val = float(val_lower.replace("gb", "").strip())
+                            val_num = int(gb_val * 1024)
+                        except ValueError:
+                            await edit_or_reply(client, message, msg_id, "❌ Invalid GB format. Please use something like `2 GB`.",
+                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
+                            )
+                            return
+                    else:
+                        try:
+                            val_num = int(float(val_lower.replace("mb", "").strip()))
+                        except ValueError:
+                            await edit_or_reply(client, message, msg_id, "❌ Invalid number format. Try again.",
+                                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]])
+                            )
+                            return
+                    plan_settings["daily_egress_mb"] = val_num
+                elif field == "files":
+                    if not val.isdigit():
+                        await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
+                        )
+                        return
+                    val_num = int(val)
+                    plan_settings["daily_file_count"] = val_num
+                elif field == "stars":
+                    if not val.isdigit():
+                        await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]])
+                        )
+                        return
+                    val_num = int(val)
+                    plan_settings["stars_price"] = val_num
+
+                await db.update_public_config(plan_key, plan_settings)
+                await edit_or_reply(client, message, msg_id,
+                    f"✅ **Success!**\n\nThe {field.capitalize()} Limit for the **{plan_name.capitalize()} Plan** has been successfully updated to **{val_num}**.\n\nChanges have been saved and applied globally.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=f"admin_edit_plan_{plan_name}")]])
+                )
+                admin_sessions.pop(user_id, None)
+                return
+
+
+async def _handle_trial_days(client, message, state, state_obj, msg_id):
+    """Handle awaiting_trial_days state."""
+    user_id = message.from_user.id
+    val = message.text.strip() if message.text else ""
+    if not val.isdigit():
+        await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]])
+        )
+        return
+    await db.update_public_config("premium_trial_days", int(val))
+    await edit_or_reply(client, message, msg_id,
+        f"✅ Premium trial duration updated to `{val}` days.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Premium Settings", callback_data="admin_premium_settings")]])
+    )
+    admin_sessions.pop(user_id, None)
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("awaiting_global_daily_egress", _handle_global_daily_egress)
+_register("awaiting_premium_", _handle_premium_text)
+_register("awaiting_trial_days", _handle_trial_days)

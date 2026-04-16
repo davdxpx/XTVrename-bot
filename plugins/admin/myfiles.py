@@ -23,7 +23,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from config import Config
 from database import db
-from plugins.admin.core import admin_sessions, is_admin
+from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 from utils.log import get_logger
 
 logger = get_logger("plugins.admin.myfiles")
@@ -349,3 +349,85 @@ async def admin_myfiles_callback(client, callback_query):
 
         asyncio.create_task(run_admin_cleanup())
         return
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handler (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def handle_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_myfiles_db_* and awaiting_myfiles_lim_* states."""
+    from pyrogram import StopPropagation
+
+    user_id = message.from_user.id
+
+    if state.startswith("awaiting_myfiles_db_"):
+        plan = state.replace("awaiting_myfiles_db_", "")
+        val = message.text.strip() if message.text else ""
+
+        ch_id = None
+        if message.forward_from_chat:
+            ch_id = message.forward_from_chat.id
+        elif val:
+            try:
+                chat = await client.get_chat(val)
+                ch_id = chat.id
+            except Exception as e:
+                await edit_or_reply(client, message, msg_id,
+                    f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_myfiles_db_channels")]])
+                )
+                return
+
+        if ch_id:
+            await db.update_db_channel(plan, ch_id)
+            await edit_or_reply(client, message, msg_id,
+                f"✅ {plan.capitalize()} DB Channel updated to `{ch_id}`.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to DB Channels", callback_data="admin_myfiles_db_channels")]])
+            )
+            admin_sessions.pop(user_id, None)
+            raise StopPropagation
+        return
+
+    if state.startswith("awaiting_myfiles_lim_"):
+        parts = state.replace("awaiting_myfiles_lim_", "").split("_")
+        plan = parts[0]
+        field = parts[1]
+        val = message.text.strip() if message.text else ""
+
+        cancel_cb = "admin_myfiles_edit_limits_global" if plan == "global" else f"admin_edit_plan_{plan}"
+
+        try:
+            val_int = int(val)
+        except ValueError:
+            await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]])
+            )
+            raise StopPropagation
+
+        config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+        limits = config.get("myfiles_limits", {})
+        if plan not in limits:
+            limits[plan] = {}
+
+        if field == "permanent":
+            limits[plan]["permanent_limit"] = val_int
+        elif field == "folder":
+            limits[plan]["folder_limit"] = val_int
+        elif field == "expiry":
+            limits[plan]["expiry_days"] = val_int
+
+        if Config.PUBLIC_MODE:
+            await db.update_public_config("myfiles_limits", limits)
+        else:
+            await db.settings.update_one({"_id": "global_settings"}, {"$set": {"myfiles_limits": limits}}, upsert=True)
+
+        await edit_or_reply(client, message, msg_id,
+            f"✅ {plan.capitalize()} {field} limit updated to `{val_int}`.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=cancel_cb)]])
+        )
+        admin_sessions.pop(user_id, None)
+        raise StopPropagation
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("awaiting_myfiles_", handle_text)

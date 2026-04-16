@@ -22,9 +22,7 @@ All handlers were already standalone-decorated in the legacy monolith.
 This is a pure move, including the shared `show_user_lookup` helper.
 
 Note: the text dispatcher here uses `utils.state` (own dict), not the
-`admin_sessions` dict. A stale `awaiting_user_lookup` branch that reads
-`admin_sessions` still lives in `_legacy.handle_admin_text` — it stays
-until the shared text dispatcher lands in Schritt 15.
+`admin_sessions` dict used by the shared ``text_dispatcher``.
 """
 
 from pyrogram import Client, ContinuePropagation, filters

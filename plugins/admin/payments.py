@@ -13,8 +13,8 @@ Covers the Manage Payments submenu: payment method settings (PayPal, UPI,
 Crypto, Telegram Stars), crypto address editing, discount settings,
 pending approval queue, and approve/reject flows.
 
-Text-input flows (`awaiting_pay_*`) still route through
-`_legacy.handle_admin_text`.
+Text-input flows (`awaiting_pay_*`) are registered with the shared
+``text_dispatcher`` and routed here at runtime.
 """
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -22,7 +22,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from database import db
-from plugins.admin.core import admin_sessions, is_admin
+from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 
 
 async def _render_pay_settings(client, callback_query: CallbackQuery):
@@ -294,3 +294,69 @@ async def payments_cb(client, callback_query: CallbackQuery):
 
         await _render_pay_queue(client, callback_query)
         return
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handler (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def handle_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_pay_* states (discounts + payment method details)."""
+    from pyrogram import ContinuePropagation
+
+    user_id = message.from_user.id
+    val = message.text.strip() if message.text else ""
+    if not val:
+        raise ContinuePropagation
+
+    if state.startswith("awaiting_pay_disc_"):
+        months = state.replace("awaiting_pay_disc_", "")
+        if not val.isdigit() or not (0 <= int(val) <= 99):
+            await edit_or_reply(client, message, msg_id,
+                "❌ Invalid discount percentage. Must be a number between 0 and 99.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_pay_discounts")]])
+            )
+            return
+
+        config = await db.get_public_config()
+        disc = config.get("discounts", {})
+        disc[f"months_{months}"] = int(val)
+        await db.update_public_config("discounts", disc)
+
+        await edit_or_reply(client, message, msg_id,
+            f"✅ {months}-Month discount updated to `{val}%`.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Discounts", callback_data="admin_pay_discounts")]])
+        )
+        admin_sessions.pop(user_id, None)
+        return
+
+    # Payment method address/ID/email
+    method = state.replace("awaiting_pay_", "")
+    config = await db.get_public_config()
+    pm = config.get("payment_methods", {})
+
+    if method == "paypal":
+        pm["paypal_email"] = val
+    elif method == "upi":
+        pm["upi_id"] = val
+    elif method == "crypto_usdt":
+        pm["crypto_usdt"] = val
+    elif method == "crypto_btc":
+        pm["crypto_btc"] = val
+    elif method == "crypto_eth":
+        pm["crypto_eth"] = val
+
+    await db.update_public_config("payment_methods", pm)
+
+    back_data = "admin_pay_settings"
+    if method.startswith("crypto_"):
+        back_data = "admin_pay_crypto_menu"
+
+    await edit_or_reply(client, message, msg_id,
+        f"✅ {method.replace('_', ' ').upper()} details updated to `{val}`.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=back_data)]])
+    )
+    admin_sessions.pop(user_id, None)
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("awaiting_pay_", handle_text)

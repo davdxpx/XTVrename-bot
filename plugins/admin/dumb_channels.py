@@ -14,9 +14,8 @@ auto-forwarding uploads: list/paginate, open per-channel settings, rename,
 add, delete, set as default for Standard/Movie/Series, and edit the global
 forward-wait timeout.
 
-Text-input handlers for `awaiting_dumb_*` states still live in
-`plugins.admin._legacy.handle_admin_text` and will move here in Schritt 15
-when the shared text dispatcher is introduced.
+Text-input handlers for `awaiting_dumb_*` states are registered with the
+shared ``text_dispatcher`` and routed here at runtime.
 """
 
 import math
@@ -25,8 +24,12 @@ from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from config import Config
 from database import db
-from plugins.admin.core import admin_sessions, is_admin
+from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
+from utils.log import get_logger
+
+logger = get_logger("plugins.admin.dumb_channels")
 
 
 # --- Render helpers ----------------------------------------------------------
@@ -266,3 +269,106 @@ async def dumb_channels_callback(client, callback_query):
         except MessageNotModified:
             pass
         return
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handler (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def handle_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_dumb_timeout, awaiting_dumb_rename_*, awaiting_dumb_add."""
+    user_id = message.from_user.id
+
+    if state == "awaiting_dumb_timeout":
+        val = message.text.strip() if message.text else ""
+        if not val.isdigit():
+            await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                ),
+            )
+            return
+        await db.update_dumb_channel_timeout(int(val))
+        await edit_or_reply(client, message, msg_id,
+            f"✅ Dumb channel timeout updated to `{val}` seconds.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")]]
+            ),
+        )
+        admin_sessions.pop(user_id, None)
+        return
+
+    if state.startswith("awaiting_dumb_rename_") and not Config.PUBLIC_MODE:
+        ch_id = state.replace("awaiting_dumb_rename_", "")
+        val = message.text.strip() if message.text else ""
+        if val.lower() == "disable":
+            admin_sessions.pop(user_id, None)
+            await edit_or_reply(client, message, msg_id, "Cancelled.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back to Channel Settings", callback_data=f"dumb_opt_{ch_id}")]]
+                ),
+            )
+            return
+
+        channels = await db.get_dumb_channels()
+        if ch_id in channels:
+            channels[ch_id] = val
+            doc_id = "global_settings"
+            await db.settings.update_one({"_id": doc_id}, {"$set": {"dumb_channels": channels}}, upsert=True)
+            await edit_or_reply(client, message, msg_id, f"✅ Channel renamed to **{val}**.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back to Channel Settings", callback_data=f"dumb_opt_{ch_id}")]]
+                ),
+            )
+        admin_sessions.pop(user_id, None)
+        return
+
+    if state == "awaiting_dumb_add" and not Config.PUBLIC_MODE:
+        val = message.text.strip() if message.text else ""
+        if val.lower() == "disable":
+            admin_sessions.pop(user_id, None)
+            await edit_or_reply(client, message, msg_id, "Cancelled.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_menu")]]
+                ),
+            )
+            return
+
+        ch_id = None
+        ch_name = "Custom Channel"
+        if message.forward_from_chat:
+            ch_id = message.forward_from_chat.id
+            ch_name = message.forward_from_chat.title
+        elif val:
+            try:
+                chat = await client.get_chat(val)
+                ch_id = chat.id
+                ch_name = chat.title or "Channel"
+            except Exception as e:
+                await edit_or_reply(client, message, msg_id,
+                    f"❌ Error finding channel: {e}\nTry forwarding a message instead.",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]]
+                    ),
+                )
+                return
+
+        if ch_id:
+            invite_link = None
+            try:
+                invite_link = await client.export_chat_invite_link(ch_id)
+            except Exception as e:
+                logger.warning(f"Could not export invite link for {ch_id}: {e}")
+
+            await db.add_dumb_channel(ch_id, ch_name, invite_link=invite_link)
+            await edit_or_reply(client, message, msg_id,
+                f"✅ Added Dumb Channel: **{ch_name}** (`{ch_id}`)",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_menu")]]
+                ),
+            )
+            admin_sessions.pop(user_id, None)
+        return
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("awaiting_dumb_", handle_text)
