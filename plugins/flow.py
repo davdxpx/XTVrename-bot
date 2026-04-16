@@ -449,6 +449,11 @@ async def manual_title_handler(client, message):
         raise StopPropagation
 
 async def search_handler(client, message, media_type):
+    from utils.tmdb_gate import ensure_tmdb
+
+    if not await ensure_tmdb(client, message, feature="Manual TMDb search"):
+        return
+
     user_id = message.from_user.id
     query = message.text
     logger.debug(f"Searching {media_type} for: {query}")
@@ -871,6 +876,11 @@ async def handle_send_as_preference(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
+    from utils.tmdb_gate import ensure_tmdb
+
+    if not await ensure_tmdb(client, callback_query, feature="TMDb title selection"):
+        return
+
     user_id = callback_query.from_user.id
     data = callback_query.data.split("_")
     media_type = data[2]
@@ -2955,6 +2965,11 @@ async def handle_change_type(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^change_tmdb_(\d+)$"))
 async def handle_change_tmdb_init(client, callback_query):
+    from utils.tmdb_gate import ensure_tmdb
+
+    if not await ensure_tmdb(client, callback_query, feature="Change TMDb match"):
+        return
+
     await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
     user_id = callback_query.from_user.id
@@ -3014,6 +3029,11 @@ async def handle_change_se_menu(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^correct_tmdb_(\d+)_(\d+)$"))
 async def handle_correct_tmdb_selection(client, callback_query):
+    from utils.tmdb_gate import ensure_tmdb
+
+    if not await ensure_tmdb(client, callback_query, feature="Correct TMDb match"):
+        return
+
     await callback_query.answer()
     user_id = callback_query.from_user.id
     data = callback_query.data.split("_")
