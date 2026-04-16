@@ -15,10 +15,6 @@ fields.
 
 The menu builder `get_admin_public_settings_menu` also lives here.
 
-Daily egress / file limits (`admin_daily_*`, `set_daily_egress_*`,
-`prompt_daily_*`) remain in `_legacy.py` for now because they are
-tightly coupled to the per-plan editing flow.
-
 Text-input flows (`awaiting_public_*`) are registered with the shared
 ``text_dispatcher`` and routed here at runtime.
 """

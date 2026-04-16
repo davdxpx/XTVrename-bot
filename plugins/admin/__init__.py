@@ -11,16 +11,11 @@
 
 This package replaces the former monolithic plugins/admin.py. Shared state
 and helpers live in `core`; callback / message handlers are split across
-domain-specific submodules; the legacy monolith still lives in `_legacy`
-while its contents are being carved out domain by domain.
+domain-specific submodules.
 
 For backward compatibility with callers that used to do
 `from plugins.admin import admin_sessions` (e.g. force_sub_handler.py),
 we re-export the core names at the package level.
-
-The explicit `from . import _legacy` ensures every Pyrogram handler
-decorator in the legacy module still runs at package import time,
-regardless of how the plugin loader discovers submodules.
 """
 
 from plugins.admin.core import (
@@ -53,7 +48,6 @@ from . import force_sub  # noqa: F401
 from . import myfiles  # noqa: F401
 from . import payments  # noqa: F401
 from . import premium  # noqa: F401
-from . import _legacy  # noqa: F401
 
 __all__ = [
     "admin_sessions",
