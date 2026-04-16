@@ -48,6 +48,7 @@ from . import templates  # noqa: F401
 from . import public_settings  # noqa: F401
 from . import force_sub  # noqa: F401
 from . import myfiles  # noqa: F401
+from . import payments  # noqa: F401
 from . import _legacy  # noqa: F401
 
 __all__ = [
