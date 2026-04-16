@@ -343,7 +343,11 @@ if __name__ == "__main__":
 
     # --- Startup diagnostics ---
     admins_count = len(Config.ADMIN_IDS)
-    tmdb_status = "Configured" if Config.TMDB_API_KEY else "Missing"
+    tmdb_status = (
+        "Configured"
+        if Config.TMDB_API_KEY
+        else "Missing (optional — TMDb features disabled)"
+    )
     db_status = "Configured" if Config.MAIN_URI else "Missing"
     xtv_pro_status = "Enabled (4GB Support)" if getattr(app, 'user_bot', None) else "Disabled (2GB Limit)"
 
