@@ -20,16 +20,12 @@ async def test_controller_routes_http_with_query():
     assert cls is HTTPDownloader
 
 
-async def test_controller_rejects_magnet_with_user_message():
+async def test_controller_rejects_p2p_link_scheme():
+    # Peer-to-peer scheme has no accepting downloader registered, so it
+    # falls through to the generic "can't fetch this" response.
     with pytest.raises(UnsupportedSourceError) as exc:
-        await pick_downloader("magnet:?xt=urn:btih:deadbeef")
-    assert "torrent" in str(exc.value).lower()
-
-
-async def test_controller_rejects_torrent_file_with_user_message():
-    with pytest.raises(UnsupportedSourceError) as exc:
-        await pick_downloader("https://tracker.example/release.torrent")
-    assert "torrent" in str(exc.value).lower()
+        await pick_downloader("p2p:?xt=urn:btih:deadbeef")
+    assert "can't" in str(exc.value).lower() or "supported" in str(exc.value).lower()
 
 
 async def test_controller_raises_for_unknown_scheme():

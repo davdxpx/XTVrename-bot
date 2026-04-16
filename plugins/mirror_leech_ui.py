@@ -206,8 +206,7 @@ async def ml_command(client: Client, message: Message) -> None:
         await message.reply_text(
             "Usage: `/ml <url>`\n\n"
             "Supported: direct HTTP(S), YouTube / social video (yt-dlp),\n"
-            "Telegram file refs, and RSS feeds. "
-            "Torrents / magnets are out of scope on this branch.",
+            "Telegram file refs, and RSS feeds.",
         )
         return
 

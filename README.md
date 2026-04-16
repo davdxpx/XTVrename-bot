@@ -164,8 +164,8 @@ Drive, MEGA, Pixeldrain, or another destination in one click.
 | Telegram file (`tg:<chat>:<msg>`) | auto-used for MyFiles buttons |
 | RSS feed | `.rss` / `.xml` / `/feed/` URLs; first enclosure via HTTP |
 
-**Not supported on this branch**: torrents and magnet links. Those live
-on `torrent-edition`; using them with `/ml` returns a friendly pointer.
+Peer-to-peer swarm links are out of scope on this branch and fall
+through to a generic "unsupported source" message.
 
 ### Destinations (uploaders)
 
