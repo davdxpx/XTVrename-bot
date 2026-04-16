@@ -26,8 +26,8 @@ from database import db
 from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 
 
-async def _render_force_sub_menu(callback_query: CallbackQuery):
-    """Build and display the force-sub settings menu."""
+async def get_force_sub_menu_content():
+    """Build force-sub menu text and keyboard (no message editing)."""
     config = await db.get_public_config()
     channels = config.get("force_sub_channels", [])
     legacy_ch = config.get("force_sub_channel")
@@ -80,10 +80,14 @@ async def _render_force_sub_menu(callback_query: CallbackQuery):
         [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]
     )
 
+    return text, InlineKeyboardMarkup(keyboard)
+
+
+async def _render_force_sub_menu(callback_query: CallbackQuery):
+    """Build and display the force-sub settings menu."""
+    text, markup = await get_force_sub_menu_content()
     try:
-        await callback_query.message.edit_text(
-            text, reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await callback_query.message.edit_text(text, reply_markup=markup)
     except MessageNotModified:
         pass
 

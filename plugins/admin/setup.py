@@ -405,8 +405,8 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
 
     # --- Force-Sub settings ---
     elif data == "setup_force_sub":
-        from plugins.admin import get_admin_force_sub_menu
-        msg, kb = await get_admin_force_sub_menu()
+        from plugins.admin.force_sub import get_force_sub_menu_content
+        msg, kb = await get_force_sub_menu_content()
         try:
             await callback_query.message.edit_text(msg, reply_markup=kb)
         except Exception:
