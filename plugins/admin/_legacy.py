@@ -103,40 +103,7 @@ def get_admin_public_settings_menu():
         ]
     )
 
-@Client.on_message(filters.command("admin") & filters.private)
-
-# --- Handlers ---
-async def admin_panel(client, message):
-    if not is_admin(message.from_user.id):
-        return
-
-    # Redirect to setup wizard if initial setup is not complete
-    setup_complete = await db.get_setting("is_bot_setup_complete", default=False, user_id=Config.CEO_ID)
-    if not setup_complete:
-        from plugins.admin.setup import send_ceo_setup_menu
-        await send_ceo_setup_menu(client, message.chat.id)
-        return
-
-    pro_session = await db.get_pro_session()
-
-    if Config.PUBLIC_MODE:
-        text = (
-            "⚙️ **Control Center** · __Public Mode__\n\n"
-            "You're running the show.\n"
-            "Everything here applies globally — branding, rate limits, payment methods, the works.\n\n"
-            "__(Your personal renaming templates live in /settings)__"
-        )
-    else:
-        text = (
-            "⚙️ **𝕏TV Admin Panel**\n\n"
-            "__Your studio. Your rules.__\n"
-            "These settings shape how every file passing through the bot gets handled."
-        )
-
-    myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
-    await message.reply_text(
-        text, reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE, myfiles_enabled)
-    )
+# /admin command + admin_main callback moved to plugins/admin/panel.py
 
 from pyrogram import ContinuePropagation
 from utils.logger import debug
@@ -145,7 +112,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$)|edit_template_|edit_fn_template_|prompt_admin_(?!dumb_timeout)|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$)|edit_template_|edit_fn_template_|prompt_admin_(?!dumb_timeout)|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -2576,32 +2543,7 @@ async def admin_callback(client, callback_query):
         admin_sessions.pop(user_id, None)
         await callback_query.message.delete()
         return
-    elif data == "admin_main":
-        admin_sessions.pop(user_id, None)
-
-        pro_session = await db.get_pro_session()
-
-        if Config.PUBLIC_MODE:
-            try:
-                await callback_query.message.edit_text(
-                    "⚙️ **Control Center** · __Public Mode__\n\n"
-                    "You're running the show.\n"
-                    "Everything here applies globally — branding, rate limits, payment methods, the works.\n\n"
-                    "__(Your personal renaming templates live in /settings)__",
-                    reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE, await db.get_setting("myfiles_enabled", default=False)),
-                )
-            except MessageNotModified:
-                pass
-        else:
-            try:
-                await callback_query.message.edit_text(
-                    "⚙️ **𝕏TV Admin Panel**\n\n"
-                    "__Your studio. Your rules.__\n"
-                    "These settings shape how every file passing through the bot gets handled.",
-                    reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE, await db.get_setting("myfiles_enabled", default=False)),
-                )
-            except MessageNotModified:
-                pass
+    # admin_main moved to plugins/admin/panel.py
 
     elif data.startswith("edit_template_"):
         field = data.split("_")[-1]

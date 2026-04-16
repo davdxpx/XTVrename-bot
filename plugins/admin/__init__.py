@@ -41,6 +41,7 @@ from . import setup  # noqa: F401
 from . import users  # noqa: F401
 from . import broadcast  # noqa: F401
 from . import general  # noqa: F401
+from . import panel  # noqa: F401
 from . import _legacy  # noqa: F401
 
 __all__ = [
