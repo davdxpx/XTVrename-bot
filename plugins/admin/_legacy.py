@@ -48,34 +48,7 @@ logger = get_logger("plugins.admin")
 
 # get_admin_templates_menu moved to plugins/admin/templates.py
 
-def get_admin_public_settings_menu():
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "🤖 Edit Bot Name", callback_data="admin_public_bot_name"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "👥 Edit Community Name",
-                    callback_data="admin_public_community_name",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🔗 Edit Support Contact",
-                    callback_data="admin_public_support_contact",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "👀 View Public Config", callback_data="admin_public_view"
-                )
-            ],
-            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
-        ]
-    )
+# get_admin_public_settings_menu moved to plugins/admin/public_settings.py
 
 # /admin command + admin_main callback moved to plugins/admin/panel.py
 
@@ -86,7 +59,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$|access_limits$|quick_toggle_(?:premium|deluxe|trial|myfiles)$|feature_toggles$|gtoggle_|per_plan_limits$|global_daily_egress$|thumb_(?:menu|view|set|remove)$|delete_msg$|templates_menu$|templates$|caption$|filename_templates$|fn_templates_(?:personal|subtitles)$|pref_separator$|set_sep_)|prompt_admin_(?!dumb_timeout|thumb_set|caption)|prompt_public_|prompt_daily_|prompt_global_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$|access_limits$|quick_toggle_(?:premium|deluxe|trial|myfiles)$|feature_toggles$|gtoggle_|per_plan_limits$|global_daily_egress$|thumb_(?:menu|view|set|remove)$|delete_msg$|templates_menu$|templates$|caption$|filename_templates$|fn_templates_(?:personal|subtitles)$|pref_separator$|set_sep_|public_(?:settings|view|bot_name|community_name|support_contact)$)|prompt_admin_(?!dumb_timeout|thumb_set|caption)|prompt_daily_|prompt_global_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -1275,122 +1248,18 @@ async def admin_callback(client, callback_query):
     # dumb_add / dumb_del_ / admin_dumb_channels / admin_dumb_timeout /
     # prompt_admin_dumb_timeout moved to plugins/admin/dumb_channels.py
 
+    # admin_public_view, admin_public_bot_name, admin_public_community_name,
+    # admin_public_support_contact moved to plugins/admin/public_settings.py
+
     if Config.PUBLIC_MODE and (
-        data.startswith("admin_public_")
-        or data.startswith("admin_daily_")
+        data.startswith("admin_daily_")
         or data.startswith("admin_force_sub_")
         or data.startswith("admin_fs_")
         or data.startswith("admin_premium_")
         or data.startswith("prompt_premium_")
         or data.startswith("set_daily_egress_")
     ):
-        if data == "admin_public_view":
-            config = await db.get_public_config()
-            text = "👀 **Public Mode Config**\n\n"
-            text += f"**Bot Name:** {config.get('bot_name', 'Not set')}\n"
-            text += f"**Community Name:** {config.get('community_name', 'Not set')}\n"
-            text += f"**Support Contact:** {config.get('support_contact', 'Not set')}\n"
-            text += (
-                f"**Force-Sub Channel:** {config.get('force_sub_channel', 'Not set')}\n"
-            )
-            text += f"**Daily Egress Limit:** {config.get('daily_egress_mb', 0)} MB\n"
-            text += f"**Daily File Limit:** {config.get('daily_file_count', 0)} files\n"
-
-            try:
-                await callback_query.message.edit_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "← Back to Public Settings", callback_data="admin_public_settings"
-                                )
-                            ]
-                        ]
-                    ),
-                )
-            except MessageNotModified:
-                pass
-            return
-
-        elif data == "admin_public_bot_name":
-            config = await db.get_public_config()
-            current_val = config.get("bot_name", "Not set")
-            try:
-                await callback_query.message.edit_text(
-                    f"🤖 **Edit Bot Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "✏️ Change", callback_data="prompt_public_bot_name"
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "← Back to Public Settings", callback_data="admin_public_settings"
-                                )
-                            ],
-                        ]
-                    ),
-                )
-            except MessageNotModified:
-                pass
-            return
-
-        elif data == "admin_public_community_name":
-            config = await db.get_public_config()
-            current_val = config.get("community_name", "Not set")
-            try:
-                await callback_query.message.edit_text(
-                    f"👥 **Edit Community Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "✏️ Change",
-                                    callback_data="prompt_public_community_name",
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "← Back to Public Settings", callback_data="admin_public_settings"
-                                )
-                            ],
-                        ]
-                    ),
-                )
-            except MessageNotModified:
-                pass
-            return
-
-        elif data == "admin_public_support_contact":
-            config = await db.get_public_config()
-            current_val = config.get("support_contact", "Not set")
-            try:
-                await callback_query.message.edit_text(
-                    f"🔗 **Edit Support Contact**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "✏️ Change",
-                                    callback_data="prompt_public_support_contact",
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    "← Back to Public Settings", callback_data="admin_public_settings"
-                                )
-                            ],
-                        ]
-                    ),
-                )
-            except MessageNotModified:
-                pass
-            return
-
-        elif data == "admin_force_sub_menu":
+        if data == "admin_force_sub_menu":
             config = await db.get_public_config()
             channels = config.get("force_sub_channels", [])
             legacy_ch = config.get("force_sub_channel")
@@ -1710,36 +1579,19 @@ async def admin_callback(client, callback_query):
                 pass
             return
 
-    if Config.PUBLIC_MODE and (
-        data.startswith("prompt_public_") or data.startswith("prompt_daily_")
-    ):
-        field = data.replace("prompt_public_", "").replace("prompt_daily_", "daily_")
+    # prompt_public_bot_name/community_name/support_contact moved to
+    # plugins/admin/public_settings.py; prompt_daily_* stays here.
+    if Config.PUBLIC_MODE and data.startswith("prompt_daily_"):
+        field = data.replace("prompt_daily_", "daily_")
         admin_sessions[user_id] = {"state": f"awaiting_public_{field}", "msg_id": callback_query.message.id}
 
-        if field == "bot_name":
-            text = "🤖 **Send the new bot name:**"
-        elif field == "community_name":
-            text = "👥 **Send the new community name:**"
-        elif field == "support_contact":
-            text = "🔗 **Send the new support contact (e.g., @username or link):**"
-        elif field == "force_sub":
-            text = (
-                "📢 **Setup Force-Sub Channel**\n\n"
-                "⏳ **I am waiting...**\n\n"
-                "Simply **add me as an Administrator** to your desired channel right now!\n"
-                "Make sure I have the 'Invite Users via Link' permission.\n\n"
-                "I will automatically detect the channel and set it up instantly.\n\n"
-                "__Send /cancel to cancel.__"
-            )
-        elif field == "daily_egress":
+        if field == "daily_egress":
             text = "📦 **Send the new daily egress limit.**\n\nYou can send the value in MB (e.g., `2048`) or use `GB` format (e.g., `2 GB` or `5.5 GB`).\nSend `0` to disable."
-            cancel_btn = "admin_edit_plan_free"
         elif field == "daily_files":
             text = "📄 **Send the new daily file limit.**\nSend `0` to disable."
-            cancel_btn = "admin_edit_plan_free"
         else:
             text = "Send the new value:"
-            cancel_btn = "admin_public_settings"
+        cancel_btn = "admin_edit_plan_free"
 
         try:
             await callback_query.message.edit_text(
@@ -1760,14 +1612,7 @@ async def admin_callback(client, callback_query):
     # admin_thumb_* moved to plugins/admin/thumbnails.py
     # admin_templates_menu moved to plugins/admin/templates.py
     # admin_access_limits moved to plugins/admin/feature_toggles.py
-    elif data == "admin_public_settings":
-        try:
-            await callback_query.message.edit_text(
-                "🌐 **Public Mode Settings**\n\n" "Select a setting to edit:",
-                reply_markup=get_admin_public_settings_menu(),
-            )
-        except MessageNotModified:
-            pass
+    # admin_public_settings moved to plugins/admin/public_settings.py
     # admin_pref_separator, admin_set_sep_*, admin_templates, admin_caption,
     # prompt_admin_caption, admin_filename_templates, admin_fn_templates_*,
     # edit_fn_template_*, prompt_fn_template_* moved to plugins/admin/templates.py
