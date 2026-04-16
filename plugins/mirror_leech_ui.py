@@ -475,3 +475,153 @@ async def ml_cfg_close(client: Client, callback_query: CallbackQuery) -> None:
     except Exception:
         pass
     await callback_query.answer()
+
+
+# ---------------------------------------------------------------------------
+# ml_cfg_up_<provider> — per-provider drilldown
+# ---------------------------------------------------------------------------
+
+# Short hints shown under the provider name so the user knows what to paste.
+_PROVIDER_HINTS: dict[str, str] = {
+    "gdrive": (
+        "Needs an OAuth refresh token + client_id + client_secret. Generate "
+        "one via Google's OAuth playground or `rclone config`."
+    ),
+    "rclone": (
+        "Paste your `rclone.conf` body, then set a default remote name "
+        "(e.g. `gdrive:XTVBot`)."
+    ),
+    "mega": "Paste your MEGA email + password.",
+    "gofile": "Optional token — anonymous upload works without linking.",
+    "pixeldrain": "Optional API key — anonymous upload works without linking.",
+    "telegram": "Defaults to DM. Paste a channel id to override.",
+    "ddl": "Set DDL_BASE_URL on the bot host to enable one-time download links.",
+}
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_up_([a-z0-9_]+)$"))
+async def ml_cfg_provider(client: Client, callback_query: CallbackQuery) -> None:
+    provider = callback_query.data.removeprefix("ml_cfg_up_")
+    await _render_provider_screen(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+        provider,
+    )
+    await callback_query.answer()
+
+
+async def _render_provider_screen(
+    client: Client,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+    provider: str,
+) -> None:
+    from tools.mirror_leech import Secrets
+    from tools.mirror_leech.uploaders import uploader_by_id
+
+    cls = uploader_by_id(provider)
+    if cls is None:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=f"❓ Unknown provider `{provider}`.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back", callback_data="ml_cfg")]]
+            ),
+        )
+        return
+
+    try:
+        configured = cls.available() and await cls().is_configured(user_id)
+    except Exception:
+        configured = False
+
+    secrets_ok = Secrets.is_available()
+    hint = _PROVIDER_HINTS.get(provider, "")
+    status = "✅ Linked" if configured else (
+        "🚫 Unavailable on this host" if not cls.available() else "🔑 Not linked"
+    )
+    body_lines = [
+        f"☁️ **{cls.display_name}**",
+        f"Status: {status}",
+    ]
+    if hint:
+        body_lines.append("")
+        body_lines.append(hint)
+    if not secrets_ok:
+        body_lines.append("")
+        body_lines.append(
+            "🚨 `SECRETS_KEY` is not set — paste-to-link is disabled until an "
+            "admin configures it. Test / anonymous flows still work."
+        )
+
+    rows: list[list[InlineKeyboardButton]] = []
+    if cls.available():
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "🔌 Test connection", callback_data=f"ml_cfg_test_{provider}"
+                )
+            ]
+        )
+        if cls.needs_credentials or provider in {"gofile", "pixeldrain", "telegram"}:
+            paste_label = "📝 Paste / update credentials"
+            rows.append(
+                [InlineKeyboardButton(paste_label, callback_data=f"ml_cfg_paste_{provider}")]
+            )
+        if configured:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "🗑 Clear credential", callback_data=f"ml_cfg_clr_{provider}"
+                    )
+                ]
+            )
+    rows.append([InlineKeyboardButton("← Back", callback_data="ml_cfg")])
+
+    text = "\n".join(body_lines)
+    try:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+    except Exception:
+        pass
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_test_([a-z0-9_]+)$"))
+async def ml_cfg_test(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech.uploaders import uploader_by_id
+
+    provider = callback_query.data.removeprefix("ml_cfg_test_")
+    cls = uploader_by_id(provider)
+    if cls is None:
+        await callback_query.answer("Unknown provider.", show_alert=True)
+        return
+    try:
+        ok, message = await cls().test_connection(callback_query.from_user.id)
+    except Exception as exc:
+        ok, message = False, f"crashed: {exc}"
+    prefix = "✅" if ok else "❌"
+    await callback_query.answer(f"{prefix} {message}"[:200], show_alert=True)
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_clr_([a-z0-9_]+)$"))
+async def ml_cfg_clear(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Accounts
+
+    provider = callback_query.data.removeprefix("ml_cfg_clr_")
+    await Accounts.clear_account(callback_query.from_user.id, provider)
+    await callback_query.answer("Credential cleared.")
+    await _render_provider_screen(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+        provider,
+    )
