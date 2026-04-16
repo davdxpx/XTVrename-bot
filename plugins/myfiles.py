@@ -632,7 +632,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             hours = dur_map.get(dur, 24)
             group_doc["expires_at"] = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
 
-        await db.db.file_groups.insert_one(group_doc)
+        await db.file_groups.insert_one(group_doc)
 
         deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
 
