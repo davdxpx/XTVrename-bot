@@ -801,3 +801,109 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
     except Exception:
         pass
     await message.reply_text(f"✅ `{provider}` linked. Use **Test connection** to verify.")
+
+
+# ---------------------------------------------------------------------------
+# MyFiles entry points — single-file and multi-select Mirror-Leech Options
+# ---------------------------------------------------------------------------
+
+async def _tg_ref_for_myfile(file_id: str) -> str | None:
+    """Turn a MyFiles file _id into a `tg:<chat>:<message>` source string
+    TelegramDownloader understands. Returns None when the file is gone."""
+    from bson import ObjectId  # type: ignore
+    from database import db
+
+    try:
+        record = await db.files.find_one({"_id": ObjectId(file_id)})
+    except Exception:
+        return None
+    if not record:
+        return None
+    chat = record.get("channel_id")
+    message_id = record.get("message_id")
+    if not chat or not message_id:
+        return None
+    return f"tg:{chat}:{message_id}"
+
+
+@Client.on_callback_query(filters.regex(r"^ml_opt_single_([A-Fa-f0-9]{24})$"))
+async def ml_opt_single(client: Client, callback_query: CallbackQuery) -> None:
+    """Open the uploader picker for one MyFiles file."""
+    if not await _feature_enabled():
+        await callback_query.answer("Mirror-Leech is disabled.", show_alert=True)
+        return
+
+    file_id = callback_query.data.removeprefix("ml_opt_single_")
+    source = await _tg_ref_for_myfile(file_id)
+    if source is None:
+        await callback_query.answer("File not found.", show_alert=True)
+        return
+
+    cid = ContextStore.put(
+        ContextStore.PickerContext(
+            user_id=callback_query.from_user.id,
+            source=source,
+            candidate_downloader="telegram",
+            origin_chat_id=callback_query.message.chat.id,
+            origin_msg_id=callback_query.message.id,
+            file_ids=[file_id],
+        )
+    )
+    await callback_query.answer()
+    await _render_uploader_picker(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        cid,
+        callback_query.from_user.id,
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_opt_multi$"))
+async def ml_opt_multi(client: Client, callback_query: CallbackQuery) -> None:
+    """Open the uploader picker for the user's current multi-select."""
+    if not await _feature_enabled():
+        await callback_query.answer("Mirror-Leech is disabled.", show_alert=True)
+        return
+
+    from database import db
+
+    user_id = callback_query.from_user.id
+    user = await db.users.find_one({"user_id": user_id})
+    state = (user or {}).get("myfiles_state") or {}
+    file_ids = list(state.get("selected_files") or [])
+    if not file_ids:
+        await callback_query.answer("No files selected.", show_alert=True)
+        return
+
+    # Resolve each file's tg ref up front; drop missing rows.
+    sources: list[tuple[str, str]] = []  # (file_id, tg-ref)
+    for fid in file_ids:
+        ref = await _tg_ref_for_myfile(fid)
+        if ref:
+            sources.append((fid, ref))
+
+    if not sources:
+        await callback_query.answer("None of the selected files resolved.", show_alert=True)
+        return
+
+    # For the picker UI we only need one "source" label; actual batch
+    # fan-out happens in ml_go when it sees file_ids populated.
+    cid = ContextStore.put(
+        ContextStore.PickerContext(
+            user_id=user_id,
+            source=f"{len(sources)} selected files",
+            candidate_downloader="telegram",
+            origin_chat_id=callback_query.message.chat.id,
+            origin_msg_id=callback_query.message.id,
+            file_ids=[fid for fid, _ in sources],
+        )
+    )
+    await callback_query.answer()
+    await _render_uploader_picker(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        cid,
+        user_id,
+    )
