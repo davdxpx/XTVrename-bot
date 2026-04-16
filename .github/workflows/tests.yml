@@ -1,0 +1,56 @@
+name: tests
+
+on:
+  push:
+    branches: [main, claude/**]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Runtime deps needed to import the modules under test. We skip
+          # pyrofork / TgCrypto on purpose — the tests under tests/ only
+          # cover pure-python pieces (schema routing, shim, migrations).
+          pip install motor python-dotenv certifi pymongo dnspython requests \
+            aiohttp guessit psutil cryptography cffi \
+            pytest pytest-asyncio mongomock mongomock-motor
+
+      - name: Run pytest
+        env:
+          BOT_TOKEN: test-bot-token
+          API_ID: "1"
+          API_HASH: test-hash
+          MAIN_URI: mongodb://localhost/test
+          CEO_ID: "1"
+          PUBLIC_MODE: "false"
+        run: python -m pytest -ra
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check .
