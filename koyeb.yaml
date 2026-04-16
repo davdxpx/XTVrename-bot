@@ -1,0 +1,39 @@
+# Koyeb deployment config.
+# Deploy via the web UI (https://app.koyeb.com/deploy) or the Koyeb CLI:
+#   koyeb app init xtv-mediastudio --docker Dockerfile --type worker
+#
+# Required env vars: BOT_TOKEN, API_ID, API_HASH, MAIN_URI, CEO_ID.
+# Optional: ADMIN_IDS, PUBLIC_MODE, DEBUG_MODE, TMDB_API_KEY, SECRETS_KEY.
+
+services:
+  - name: xtv-mediastudio
+    type: worker
+    git:
+      branch: main
+    docker:
+      dockerfile: Dockerfile
+    instance_types:
+      - type: nano
+    regions:
+      - fra
+    env:
+      - key: BOT_TOKEN
+        value: ""
+      - key: API_ID
+        value: ""
+      - key: API_HASH
+        value: ""
+      - key: MAIN_URI
+        value: ""
+      - key: CEO_ID
+        value: ""
+      - key: ADMIN_IDS
+        value: ""
+      - key: PUBLIC_MODE
+        value: "false"
+      - key: DEBUG_MODE
+        value: "false"
+      - key: TMDB_API_KEY
+        value: ""
+      - key: SECRETS_KEY
+        value: ""
