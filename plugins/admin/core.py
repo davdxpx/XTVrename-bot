@@ -163,6 +163,9 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
     keyboard.append(
         [InlineKeyboardButton(pro_btn_text, callback_data="pro_setup_menu")]
     )
+    keyboard.append(
+        [InlineKeyboardButton("🩺 DB Schema Health", callback_data="admin_db_health")]
+    )
 
     return InlineKeyboardMarkup(keyboard)
 
