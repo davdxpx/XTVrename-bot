@@ -55,14 +55,12 @@ async def check_force_sub(client, user_id):
                 logger.error(
                     f"Error checking force sub for {user_id} in {channel} (after get_chat fallback): {e}"
                 )
-
-                continue
+                return False
         except Exception as e:
             logger.error(
                 f"Error checking force sub for {user_id} in {channel}: {e}"
             )
-
-            continue
+            return False
 
     return True
 
