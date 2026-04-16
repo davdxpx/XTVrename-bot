@@ -125,6 +125,7 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
                                 "⚙️ Workflow Mode", callback_data="admin_general_workflow"
                             )
                         ],
+                        [InlineKeyboardButton("🎨 Preferences", callback_data="admin_general_preferences")],
                         [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
                     ]
                 ),
@@ -143,6 +144,12 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
         await db.update_workflow_mode(new_mode, None)
         await callback_query.answer("Global Workflow Mode updated!", show_alert=True)
         await _render_workflow(callback_query)
+        return
+
+    # --- Preferences ---
+    if data == "admin_general_preferences":
+        from plugins.user_setup import send_user_tool_preferences_setup
+        await send_user_tool_preferences_setup(client, user_id, callback_query)
         return
 
     # --- Channel username ---

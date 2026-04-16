@@ -59,6 +59,7 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
     voice_en = toggles.get("voice_converter", True)
     vnote_en = toggles.get("video_note_converter", True)
     yt_en = toggles.get("youtube_tool", True)
+    torrent_en = toggles.get("torrent_downloader", True)
     four_k_en = toggles.get("4k_enhancement", True)
     batch_pro_en = toggles.get("batch_processing_pro", True)
 
@@ -124,6 +125,12 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
             InlineKeyboardButton(
                 f"{emoji(yt_en)} ▶️ YouTube Tool",
                 callback_data="admin_gtoggle_youtube_tool",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"{emoji(torrent_en)} 🧲 Torrent Downloader",
+                callback_data="admin_gtoggle_torrent_downloader",
             )
         ],
         [
