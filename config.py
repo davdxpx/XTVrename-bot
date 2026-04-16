@@ -9,7 +9,7 @@ load_dotenv()
 
 class Config:
     VERSION = "v1.5.2"
-    MYFILES_VERSION = "2.1"
+    MYFILES_VERSION = "2.2"
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     API_ID = int(os.getenv("API_ID", 0))
     API_HASH = os.getenv("API_HASH")
@@ -53,7 +53,13 @@ class Config:
 
     @classmethod
     def validate(cls):
-        """Validate required configuration at startup."""
+        """Validate required configuration at startup.
+
+        Note: TMDB_API_KEY is intentionally NOT validated here. It is
+        optional as of the broaden-audience refactor — see utils.tmdb_gate
+        for the availability check. Features that need it gracefully
+        degrade with a friendly message; everything else keeps working.
+        """
         errors = []
         if not cls.BOT_TOKEN:
             errors.append("BOT_TOKEN is required (get one from @BotFather)")

@@ -1,0 +1,23 @@
+# Fly.io deployment config. Edit `primary_region` to one close to you.
+# Deploy:
+#   fly launch --no-deploy                 # first time, accept the detected Dockerfile
+#   fly secrets set BOT_TOKEN=... API_ID=... API_HASH=... MAIN_URI=... CEO_ID=...
+#   fly deploy
+
+app = "xtv-mediastudio"
+# primary_region = "fra"   # ← pick a region from `fly platform regions`
+
+[build]
+  dockerfile = "Dockerfile"
+
+[processes]
+  app = "python3 main.py"
+
+# Bot has no HTTP listener — no [[services]] section.
+
+[env]
+  PUBLIC_MODE = "false"
+  DEBUG_MODE = "false"
+
+# Secrets (set via `fly secrets set`): BOT_TOKEN, API_ID, API_HASH, MAIN_URI,
+# CEO_ID, ADMIN_IDS (optional), TMDB_API_KEY (optional), SECRETS_KEY (optional).
