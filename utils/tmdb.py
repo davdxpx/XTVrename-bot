@@ -4,8 +4,11 @@ import asyncio
 import aiohttp
 from config import Config
 from utils.log import get_logger
+from utils.tmdb_gate import is_tmdb_available
 
 logger = get_logger("utils.tmdb")
+
+_MISSING_KEY_LOGGED = False
 
 # === Classes ===
 class TMDb:
@@ -48,6 +51,17 @@ class TMDb:
                 del self._cache[k]
 
     async def _request(self, endpoint, params=None, language="en-US"):
+        # Short-circuit when no TMDB_API_KEY is configured. Logging once at
+        # INFO keeps startup clean; repeated hits stay silent.
+        global _MISSING_KEY_LOGGED
+        if not is_tmdb_available():
+            if not _MISSING_KEY_LOGGED:
+                logger.info(
+                    "TMDb disabled — set TMDB_API_KEY to enable title matching."
+                )
+                _MISSING_KEY_LOGGED = True
+            return None
+
         if params is None:
             params = {}
         else:
