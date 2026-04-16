@@ -51,6 +51,10 @@ import tools.VoiceNoteConverter
 import tools.VideoNoteConverter
 import tools.YouTubeTool
 
+# Mirror-Leech registers its downloaders / uploaders on import so the
+# registries are populated before the plugin's handlers fire.
+import tools.mirror_leech  # noqa: F401
+
 def register_tool_handlers(client, module):
     for name in dir(module):
         obj = getattr(module, name)
@@ -378,6 +382,16 @@ if __name__ == "__main__":
 
     # --- Graceful shutdown ---
     logger.info("Shutting down...")
+
+    # Cancel every in-flight Mirror-Leech task so the worker pool lets
+    # the event loop close cleanly instead of hanging on an async http
+    # stream.
+    try:
+        from tools.mirror_leech.Tasks import ml_worker_pool
+
+        app.loop.run_until_complete(ml_worker_pool.shutdown())
+    except Exception as e:
+        logger.debug(f"ML worker pool shutdown: {e}")
 
     # Close persistent HTTP sessions
     try:
