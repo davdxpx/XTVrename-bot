@@ -768,6 +768,7 @@ class TaskProcessor:
                 .strip()
             )
 
+        final_filename = os.path.basename(final_filename) or "unnamed_file"
         self.output_path = os.path.join(self.download_dir, final_filename)
 
         if os.path.exists(self.output_path):
