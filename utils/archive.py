@@ -54,7 +54,8 @@ async def extract_archive(archive_path: str, dest_dir: str, password: str = None
 
         args = ["7z", "x", archive_path, f"-o{dest_dir}", "-y"]
         if password:
-            args.append(f"-p{password}")
+            pw = password.replace("\x00", "")[:256]
+            args.append(f"-p{pw}")
 
         process = await asyncio.create_subprocess_exec(
             *args,
