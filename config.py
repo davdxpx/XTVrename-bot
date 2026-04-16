@@ -26,6 +26,11 @@ class Config:
 
     TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
+    # Fernet key for encrypting Mirror-Leech provider credentials at rest.
+    # Required only when the mirror_leech feature toggle is on. Generate one via:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    SECRETS_KEY = os.getenv("SECRETS_KEY")
+
     DOWNLOAD_DIR = "downloads/"
     THUMB_PATH = "downloads/thumb.jpg"
     
