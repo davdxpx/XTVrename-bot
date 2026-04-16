@@ -49,7 +49,10 @@ async def _render_access_limits(callback_query: CallbackQuery):
 
 
 async def _render_feature_toggles(callback_query: CallbackQuery):
+    from utils.tmdb_gate import is_tmdb_available
+
     toggles = await db.get_feature_toggles()
+    tmdb_on = is_tmdb_available()
     audio_en = toggles.get("audio_editor", True)
     conv_en = toggles.get("file_converter", True)
     wm_en = toggles.get("watermarker", True)
@@ -65,9 +68,15 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
     def emoji(state):
         return "✅" if state else "❌"
 
+    tmdb_row = (
+        "🎬 **TMDb:** ✅ Configured"
+        if tmdb_on
+        else "🎬 **TMDb:** ❌ Missing (optional — tap _TMDb Status_ in the main menu)"
+    )
     text = (
         "⚙️ **Global Feature Toggles**\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"{tmdb_row}\n\n"
         "Enable or disable features globally (master switch).\n"
         "> Disabled features are hidden for **all** users & plans.\n"
         "> Per-plan overrides can be set in Per-Plan Settings.\n\n"
