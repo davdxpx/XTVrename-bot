@@ -148,6 +148,69 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
+## ☁️ Mirror-Leech
+
+`MYFILES_VERSION 2.2` adds a **Mirror-Leech** subsystem that takes any
+supported source and fans it out to one or more cloud destinations.
+Deeply fused with MyFiles — every file in your cloud can be pushed to
+Drive, MEGA, Pixeldrain, or another destination in one click.
+
+### Sources (downloaders)
+
+| Source | Notes |
+|---|---|
+| Direct HTTP(S) URL | streaming aiohttp, resume on Content-Length |
+| YouTube + social (via yt-dlp) | any URL a yt-dlp extractor accepts |
+| Telegram file (`tg:<chat>:<msg>`) | auto-used for MyFiles buttons |
+| RSS feed | `.rss` / `.xml` / `/feed/` URLs; first enclosure via HTTP |
+
+**Not supported on this branch**: torrents and magnet links. Those live
+on `torrent-edition`; using them with `/ml` returns a friendly pointer.
+
+### Destinations (uploaders)
+
+| Destination | Credentials |
+|---|---|
+| Google Drive | OAuth refresh_token + client_id + client_secret |
+| Rclone (70+ backends) | `rclone.conf` body + default `remote:path` |
+| MEGA.nz | email + password (requires `pip install mega.py`) |
+| GoFile | anonymous OK, optional account token |
+| Pixeldrain | anonymous OK, optional API key |
+| Telegram | DM by default; set a channel id to override |
+| Direct Download Link | needs `DDL_BASE_URL` env — one-time URLs |
+
+### Usage
+
+1. **Enable** under `/admin → ☁️ Mirror-Leech Config`. The feature stays
+   off until an admin flips it on, and the toggle itself refuses to
+   turn on until `SECRETS_KEY` is configured.
+2. **Link providers** under `/settings → ☁️ Mirror-Leech` (public mode)
+   or the same admin screen (non-public mode). Paste-to-link messages
+   are deleted automatically after storage.
+3. **Run a transfer**: `/ml <url>` picks a downloader automatically,
+   prompts for destinations, and edits a single progress message in
+   place until the task finishes.
+4. **From MyFiles**: every single-file view has an "☁️ Mirror-Leech
+   Options" button, and multi-select adds a "☁️ Mirror-Leech Selected
+   (N)" batch action — each file queues its own task.
+5. **Queue & cancel**: `/mlqueue` lists your last 20 tasks with inline
+   cancel buttons.
+
+### Secrets
+
+Provider credentials are Fernet-encrypted at rest with `SECRETS_KEY`
+(required — the bot refuses to store plaintext). Back the key up before
+handing out logins — losing it means every user has to re-link their
+providers.
+
+Generate one with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+---
+
 ## 💎 Premium & Payment System
 
 The 𝕏TV MediaStudio™ features a highly robust, business-class **Premium Subscription System** designed to monetize your bot and provide exclusive features to power users.

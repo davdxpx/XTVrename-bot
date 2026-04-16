@@ -169,6 +169,9 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
             InlineKeyboardButton("🎬 TMDb Status", callback_data="admin_tmdb_status"),
         ]
     )
+    keyboard.append(
+        [InlineKeyboardButton("☁️ Mirror-Leech Config", callback_data="ml_admin")]
+    )
 
     return InlineKeyboardMarkup(keyboard)
 

@@ -29,6 +29,7 @@ def get_user_main_menu():
                 InlineKeyboardButton("📺 Channels", callback_data="dumb_user_menu"),
                 InlineKeyboardButton("⚙️ General", callback_data="user_general_settings_menu"),
             ],
+            [InlineKeyboardButton("☁️ Mirror-Leech", callback_data="ml_cfg")],
             [
                 InlineKeyboardButton("👀 View Current Config", callback_data="user_view"),
             ],
