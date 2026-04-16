@@ -625,3 +625,179 @@ async def ml_cfg_clear(client: Client, callback_query: CallbackQuery) -> None:
         callback_query.from_user.id,
         provider,
     )
+
+
+# ---------------------------------------------------------------------------
+# ml_cfg_paste_<provider> — text-input flow for pasting tokens
+# ---------------------------------------------------------------------------
+
+# What each provider expects the user to send as plain text. The dicts
+# map free-text arriving from the user to the stored fields; anything
+# more structured (multi-field forms) would need a multi-step flow which
+# is deferred to v1.6.x.
+_PROVIDER_PASTE_FORMAT: dict[str, dict[str, str]] = {
+    "gdrive": {
+        "prompt": (
+            "Send your Google OAuth credentials as three lines:\n"
+            "```\n<refresh_token>\n<client_id>\n<client_secret>\n```"
+        ),
+        "mode": "three_secrets:refresh_token,client_id,client_secret",
+    },
+    "rclone": {
+        "prompt": (
+            "Paste your rclone.conf contents as a single message, then "
+            "reply again with the default remote name in the format "
+            "`remote:path`."
+        ),
+        "mode": "rclone_conf",
+    },
+    "mega": {
+        "prompt": "Send `email password` as one message separated by a space.",
+        "mode": "email_password",
+    },
+    "gofile": {
+        "prompt": "Paste your GoFile account token (leave empty to unlink).",
+        "mode": "single_secret:token",
+    },
+    "pixeldrain": {
+        "prompt": "Paste your Pixeldrain API key (leave empty to unlink).",
+        "mode": "single_secret:api_key",
+    },
+    "telegram": {
+        "prompt": (
+            "Send the destination: `dm` (default) or a channel id like "
+            "`-1001234567890`."
+        ),
+        "mode": "plain:destination",
+    },
+    "ddl": {
+        "prompt": "DDL is host-configured via `DDL_BASE_URL`. Nothing to paste.",
+        "mode": "noop",
+    },
+}
+
+# In-memory waiting state: user_id -> {"provider": str, "step": str, "tmp": ...}
+_paste_state: dict[int, dict] = {}
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_paste_([a-z0-9_]+)$"))
+async def ml_cfg_paste_start(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Secrets
+
+    provider = callback_query.data.removeprefix("ml_cfg_paste_")
+    fmt = _PROVIDER_PASTE_FORMAT.get(provider)
+    if not fmt or fmt["mode"] == "noop":
+        await callback_query.answer(
+            "Nothing to paste for this provider.", show_alert=True
+        )
+        return
+
+    needs_secret = fmt["mode"] != "plain:destination"
+    if needs_secret and not Secrets.is_available():
+        await callback_query.answer(
+            "SECRETS_KEY is not configured — admin must set it first.",
+            show_alert=True,
+        )
+        return
+
+    _paste_state[callback_query.from_user.id] = {
+        "provider": provider,
+        "step": "await_paste",
+        "tmp": {},
+    }
+    await callback_query.answer()
+    try:
+        await callback_query.message.edit_text(
+            f"✏️ **Link {provider}**\n\n" + fmt["prompt"] + "\n\n_Send the next message in this chat._",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data=f"ml_cfg_up_{provider}")]]
+            ),
+        )
+    except Exception:
+        pass
+
+
+@Client.on_message(filters.text & filters.private, group=4)
+async def _ml_paste_text(client: Client, message: Message) -> None:
+    state = _paste_state.get(message.from_user.id)
+    if not state:
+        return  # not a ML paste message; let other handlers run
+
+    provider = state["provider"]
+    fmt = _PROVIDER_PASTE_FORMAT.get(provider, {})
+    mode = fmt.get("mode", "")
+    raw = (message.text or "").strip()
+
+    from tools.mirror_leech import Accounts
+
+    try:
+        if mode.startswith("single_secret:"):
+            field = mode.split(":", 1)[1]
+            if raw:
+                await Accounts.set_secret(message.from_user.id, provider, field, raw)
+            else:
+                await Accounts.clear_account(message.from_user.id, provider)
+        elif mode.startswith("three_secrets:"):
+            fields = mode.split(":", 1)[1].split(",")
+            parts = [p for p in raw.splitlines() if p.strip()]
+            if len(parts) != len(fields):
+                await message.reply_text(
+                    f"⚠️ Need {len(fields)} lines; got {len(parts)}. Try again."
+                )
+                return
+            for field, value in zip(fields, parts):
+                await Accounts.set_secret(
+                    message.from_user.id, provider, field, value.strip()
+                )
+        elif mode == "email_password":
+            parts = raw.split(None, 1)
+            if len(parts) != 2:
+                await message.reply_text(
+                    "⚠️ Send `email password` separated by a space."
+                )
+                return
+            email, password = parts
+            await Accounts.set_plain(
+                message.from_user.id, provider, "email", email.strip()
+            )
+            await Accounts.set_secret(
+                message.from_user.id, provider, "password", password.strip()
+            )
+        elif mode == "rclone_conf":
+            if state["step"] == "await_paste":
+                await Accounts.set_secret(
+                    message.from_user.id, provider, "conf", raw
+                )
+                state["step"] = "await_remote"
+                await message.reply_text(
+                    "✅ Config stored. Now send the default remote name, "
+                    "e.g. `gdrive:MediaStudio`."
+                )
+                return
+            if state["step"] == "await_remote":
+                await Accounts.set_plain(
+                    message.from_user.id, provider, "remote", raw
+                )
+        elif mode == "plain:destination":
+            await Accounts.set_plain(
+                message.from_user.id, provider, "destination", raw
+            )
+        else:
+            await message.reply_text(f"⚠️ Unsupported paste mode `{mode}`.")
+            return
+    except RuntimeError as exc:
+        await message.reply_text(f"❌ {exc}")
+        _paste_state.pop(message.from_user.id, None)
+        return
+    except Exception as exc:
+        await message.reply_text(f"❌ Failed to store credentials: {exc}")
+        _paste_state.pop(message.from_user.id, None)
+        return
+
+    _paste_state.pop(message.from_user.id, None)
+    # Best-effort: delete the user's secret-containing message.
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    await message.reply_text(f"✅ `{provider}` linked. Use **Test connection** to verify.")
