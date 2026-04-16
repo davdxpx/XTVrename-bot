@@ -106,22 +106,6 @@ class Database:
             {"$unset": {"flow_session": "", "flow_session_updated": ""}}
         )
 
-    async def ensure_indexes(self):
-        if self.db is None:
-            return
-        try:
-            await self.users.create_index("user_id", unique=True)
-            await self.files.create_index([("status", 1), ("expires_at", 1)])
-            await self.files.create_index("user_id")
-            await self.folders.create_index("user_id")
-            await self.daily_stats.create_index([("user_id", 1), ("date", 1)])
-            await self.daily_stats.create_index("date")
-            await self.pending_payments.create_index("user_id")
-            await self.pending_payments.create_index("status")
-            logger.info("Database indexes ensured.")
-        except Exception as e:
-            logger.warning(f"Could not create indexes: {e}")
-
     def _get_doc_id(self, user_id=None):
         """Return the legacy virtual doc id for a settings lookup.
 

@@ -112,19 +112,33 @@ if __name__ == "__main__":
     app.start()
 
     # --- Database migrations ---
+    # mediastudio_layout is idempotent and self-advisory-locked. Failure
+    # here must be fatal: booting half-migrated would let the shim route
+    # writes into an incomplete layout and silently corrupt state.
     try:
         from database import db
-        logger.info("Running DB migrations...")
-        app.loop.run_until_complete(db.migrate_old_db_to_new())
-        app.loop.run_until_complete(db.migrate_global_dumb_channels_to_ceo())
-    except Exception as e:
-        logger.warning(f"Error during DB migration: {e}")
+        from db_migrations.mediastudio_layout import run_mediastudio_layout_migration
+
+        logger.info("Running DB migrations (mediastudio_layout)...")
+        app.loop.run_until_complete(
+            run_mediastudio_layout_migration(
+                db.db, public_mode=Config.PUBLIC_MODE, ceo_id=Config.CEO_ID
+            )
+        )
+    except Exception:
+        logger.exception("Fatal: mediastudio_layout migration failed; aborting startup")
+        raise SystemExit(1)
 
     # --- Database indexes ---
+    # Indexes are also re-ensured by the migration, but we run once more
+    # here so a fresh deployment against an already-migrated DB still
+    # provisions them on boot.
     try:
         from database import db
+        from db_migrations.mediastudio_layout import ensure_indexes_v2
+
         logger.info("Ensuring database indexes...")
-        app.loop.run_until_complete(db.ensure_indexes())
+        app.loop.run_until_complete(ensure_indexes_v2(db.db))
     except Exception as e:
         logger.warning(f"Error creating indexes: {e}")
 
