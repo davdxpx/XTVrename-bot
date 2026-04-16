@@ -251,7 +251,14 @@ async def ml_cancel_picker(client: Client, callback_query: CallbackQuery) -> Non
 
 @Client.on_callback_query(filters.regex(r"^ml_go_([A-Za-z0-9_-]{4,10})$"))
 async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
-    """Resolve the picker context and schedule one MLTask per selected uploader."""
+    """Resolve the picker context and schedule MLTask(s).
+
+    Single-source pickers (`/ml <url>` or MyFiles single-file) queue one
+    task whose uploader_ids is the whole selection, running downloads +
+    uploads once. Multi-file pickers (MyFiles multi-select) fan out one
+    task per file — each task itself still fans out over the selected
+    uploaders, so `N files × M destinations = N tasks × M uploads`.
+    """
     from tools.mirror_leech.ProgressRender import (
         render_task_text,
         update_progress_message,
@@ -273,6 +280,74 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
 
     await callback_query.answer("Queued.")
 
+    # Multi-file fan-out: resolve per-file sources now, queue one MLTask
+    # per file. Single-source path falls through the same code with a
+    # single dummy entry.
+    if ctx.file_ids:
+        sources: list[tuple[str, str | None]] = []
+        for fid in ctx.file_ids:
+            ref = await _tg_ref_for_myfile(fid)
+            if ref:
+                sources.append((fid, ref))
+        if not sources:
+            await callback_query.answer(
+                "Selected files are no longer accessible.", show_alert=True
+            )
+            return
+        summary_lines = [
+            f"🗃 Queueing **{len(sources)}** file(s) → "
+            + ", ".join(f"`{u}`" for u in ctx.selected_uploaders),
+            "",
+        ]
+        first_task_id: str | None = None
+        for idx, (_, source) in enumerate(sources, start=1):
+            task = MLTask.new(
+                user_id=ctx.user_id,
+                source=source,
+                downloader_id="telegram",
+                uploader_ids=list(ctx.selected_uploaders),
+            )
+            task.message_chat_id = callback_query.message.chat.id
+            # Only the first task edits the picker message; the rest
+            # spawn fresh progress messages below to avoid overwriting
+            # each other.
+            if first_task_id is None:
+                task.message_id = callback_query.message.id
+                first_task_id = task.id
+            else:
+                fresh = await client.send_message(
+                    callback_query.message.chat.id,
+                    f"⏳ Queued task `{task.id}` ({idx}/{len(sources)})",
+                    reply_markup=InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("⏹ Cancel", callback_data=f"ml_cancel_{task.id}")]]
+                    ),
+                )
+                task.message_id = fresh.id
+            summary_lines.append(f"• `{task.id}` — queued")
+
+            async def _runner(t: MLTask) -> None:
+                await run_task(
+                    t,
+                    client,
+                    progress_cb=lambda current: update_progress_message(client, current),
+                )
+                await update_progress_message(client, t)
+
+            ml_worker_pool.enqueue(task, _runner)
+
+        ContextStore.drop(cid)
+        # Replace the picker with a batch-summary header.
+        try:
+            await client.edit_message_text(
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.id,
+                text="\n".join(summary_lines),
+            )
+        except Exception:
+            pass
+        return
+
+    # Single-source path (either /ml url or MyFiles single-file).
     task = MLTask.new(
         user_id=ctx.user_id,
         source=ctx.source,
