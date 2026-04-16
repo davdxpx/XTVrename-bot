@@ -52,193 +52,22 @@ logger = get_logger("plugins.admin")
 
 # /admin command + admin_main callback moved to plugins/admin/panel.py
 
-from pyrogram import ContinuePropagation
-from utils.logger import debug
-
-debug("✅ Loaded handler: admin_callback")
-
-@Client.on_callback_query(
-    filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$|access_limits$|quick_toggle_(?:premium|deluxe|trial|myfiles)$|feature_toggles$|gtoggle_|per_plan_limits$|global_daily_egress$|thumb_(?:menu|view|set|remove)$|delete_msg$|templates_menu$|templates$|caption$|filename_templates$|fn_templates_(?:personal|subtitles)$|pref_separator$|set_sep_|public_(?:settings|view|bot_name|community_name|support_contact)$|force_sub_menu$|fs_|myfiles_|clean_|payments_menu$|pay_|edit_plan_|toggle_|premium_|trial_|features_|privacy_|daily_|prem_cur_)|prompt_admin_(?!dumb_timeout|thumb_set|caption|fs_)|admin_set_lang_|set_admin_workflow_|set_4gb_access_)"
-    )
-)
-async def admin_callback(client, callback_query):
-    await callback_query.answer()
-    user_id = callback_query.from_user.id
-    if not is_admin(user_id):
-        raise ContinuePropagation
-    data = callback_query.data
-    debug(f"Admin callback: {data} from user {user_id}")
-
-    # Quick-toggles and admin_access_limits moved to plugins/admin/feature_toggles.py
-    # admin_myfiles_settings, admin_myfiles_db_channels, prompt_myfiles_db_*
-    # moved to plugins/admin/myfiles.py
-
-    # admin_per_plan_limits moved to plugins/admin/feature_toggles.py
-
-    # admin_edit_plan_*, admin_toggle_*, admin_premium_*, admin_trial_*,
-    # admin_features_*, admin_privacy_*, admin_daily_*, prompt_premium_*,
-    # prompt_trial_*, prompt_daily_*, prompt_global_daily_egress,
-    # set_prem_egress_*, admin_prem_cur_*, set_daily_egress_*,
-    # prompt_prem_egress_custom_* moved to plugins/admin/premium.py
-
-    # admin_thumb_* moved to plugins/admin/thumbnails.py
-    # admin_templates_menu moved to plugins/admin/templates.py
-    # admin_access_limits moved to plugins/admin/feature_toggles.py
-    # admin_public_settings moved to plugins/admin/public_settings.py
-    # admin_pref_separator, admin_set_sep_*, admin_templates, admin_caption,
-    # prompt_admin_caption, admin_filename_templates, admin_fn_templates_*,
-    # edit_fn_template_*, prompt_fn_template_* moved to plugins/admin/templates.py
-    # admin_general_settings_menu moved to plugins/admin/general.py
-    if data == "admin_general_workflow":
-        current_mode = await db.get_workflow_mode(None)
-        mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Rename Mode"
-        try:
-            await callback_query.message.edit_text(
-                f"⚙️ **Global Workflow Mode Settings**\n\n"
-                f"Current Mode: `{mode_str}`\n\n"
-                "**🧠 Smart Media Mode:** Auto-detects Series/Movies and fetches TMDb metadata.\n"
-                "**⚡ Quick Rename Mode:** Bypasses auto-detection and goes straight to general rename (great for personal/general files).\n\n"
-                "Select the default mode for all users:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✅ Smart Media Mode" if current_mode == "smart_media_mode" else "🧠 Smart Media Mode",
-                                callback_data="set_admin_workflow_smart"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "✅ Quick Rename Mode" if current_mode == "quick_rename_mode" else "⚡ Quick Rename Mode",
-                                callback_data="set_admin_workflow_quick"
-                            )
-                        ],
-                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data.startswith("set_admin_workflow_"):
-        new_mode = "smart_media_mode" if data.endswith("smart") else "quick_rename_mode"
-        await db.update_workflow_mode(new_mode, None)
-        await callback_query.answer("Global Workflow Mode updated!", show_alert=True)
-
-        class MockQuery:
-            def __init__(self, msg, usr):
-                self.message = msg
-                self.from_user = usr
-                self.data = "admin_general_workflow"
-            async def answer(self, *args, **kwargs): pass
-        await admin_callback(client, MockQuery(callback_query.message, callback_query.from_user))
-    elif data == "admin_general_channel":
-        current_channel = await db.get_channel(None)
-        try:
-            await callback_query.message.edit_text(
-                f"📢 **Global Channel Username Settings**\n\n"
-                f"Current Channel Variable: `{current_channel}`\n\n"
-                "Click below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_admin_channel"
-                            )
-                        ],
-                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data == "prompt_admin_channel":
-        admin_sessions[user_id] = {"state": "awaiting_admin_channel", "msg_id": callback_query.message.id}
-        try:
-            await callback_query.message.edit_text(
-                "⚙️ **Send the new Global Channel name variable to use in templates (e.g. `@MyChannel`):**",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_general_channel")]]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data == "admin_general_language":
-        current_language = await db.get_preferred_language(None)
-        try:
-            await callback_query.message.edit_text(
-                f"🌍 **Global Preferred Language Settings**\n\n"
-                f"Current Preferred Language: `{current_language}`\n\n"
-                "This language code is used when fetching data from TMDb (e.g., `en-US`, `de-DE`, `es-ES`).\n\n"
-                "Click below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_admin_language"
-                            )
-                        ],
-                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data == "prompt_admin_language":
-        try:
-            await callback_query.message.edit_text(
-                "🌍 **Select global preferred language for TMDb Metadata:**\n\n"
-                "__(Default is English)__",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton("🇺🇸 English", callback_data="admin_set_lang_en-US"),
-                            InlineKeyboardButton("🇩🇪 German", callback_data="admin_set_lang_de-DE"),
-                        ],
-                        [
-                            InlineKeyboardButton("🇪🇸 Spanish", callback_data="admin_set_lang_es-ES"),
-                            InlineKeyboardButton("🇫🇷 French", callback_data="admin_set_lang_fr-FR"),
-                        ],
-                        [
-                            InlineKeyboardButton("🇮🇳 Hindi", callback_data="admin_set_lang_hi-IN"),
-                            InlineKeyboardButton("🇮🇳 Tamil", callback_data="admin_set_lang_ta-IN"),
-                        ],
-                        [
-                            InlineKeyboardButton("🇮🇳 Telugu", callback_data="admin_set_lang_te-IN"),
-                            InlineKeyboardButton("🇮🇳 Malayalam", callback_data="admin_set_lang_ml-IN"),
-                        ],
-                        [
-                            InlineKeyboardButton("🇯🇵 Japanese", callback_data="admin_set_lang_ja-JP"),
-                            InlineKeyboardButton("🇰🇷 Korean", callback_data="admin_set_lang_ko-KR"),
-                        ],
-                        [
-                            InlineKeyboardButton("🇨🇳 Chinese", callback_data="admin_set_lang_zh-CN"),
-                            InlineKeyboardButton("🇷🇺 Russian", callback_data="admin_set_lang_ru-RU"),
-                        ],
-                        [
-                            InlineKeyboardButton("🇮🇹 Italian", callback_data="admin_set_lang_it-IT"),
-                            InlineKeyboardButton("🇧🇷 Portuguese", callback_data="admin_set_lang_pt-BR"),
-                        ],
-                        [InlineKeyboardButton("← Back to General Settings", callback_data="admin_general_settings_menu")],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-    elif data.startswith("admin_set_lang_"):
-        new_language = data.replace("admin_set_lang_", "")
-        await db.update_preferred_language(new_language, None)
-        callback_query.data = "admin_general_language"
-        await admin_callback(client, callback_query)
-        return
-    elif data == "admin_cancel":
-        admin_sessions.pop(user_id, None)
-        await callback_query.message.delete()
-        return
-    # admin_main moved to plugins/admin/panel.py
-    # edit_template_*, prompt_template_* moved to plugins/admin/templates.py
-
-# handle_admin_photo moved to plugins/admin/thumbnails.py
+# admin_callback dispatcher has been fully retired.
+# All callback handlers now live in their respective domain modules:
+# - panel.py: /admin, admin_main
+# - general.py: admin_general_*, admin_view, admin_cancel, admin_set_lang_*, set_admin_workflow_*
+# - feature_toggles.py: admin_access_limits, admin_quick_toggle_*, admin_feature_toggles, etc.
+# - thumbnails.py: admin_thumb_*, handle_admin_photo
+# - templates.py: admin_templates*, edit_template_*, admin_caption, etc.
+# - public_settings.py: admin_public_*
+# - force_sub.py: admin_force_sub_menu, admin_fs_*
+# - myfiles.py: admin_myfiles_*, admin_clean_*
+# - payments.py: admin_payments_menu, admin_pay_*
+# - premium.py: admin_edit_plan_*, admin_premium_*, admin_daily_*, etc.
+# - dashboard.py: admin_usage_dashboard, admin_dashboard_*
+# - users_mod.py: /lookup, admin_block_*, admin_unblock_*, admin_reset_quota_*
+# - dumb_channels.py: admin_dumb_*, dumb_*
+# - noop.py: noop
 
 from pyrogram import ContinuePropagation
 
