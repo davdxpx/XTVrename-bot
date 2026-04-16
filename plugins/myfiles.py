@@ -768,24 +768,40 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     # === SETTINGS CATEGORY HANDLERS ===
 
     if data == "settings_cat_processing":
+        from utils.tmdb_gate import is_tmdb_available
+
         s = await db.get_settings(user_id)
         quality = s.get("default_quality", "720p") if s else "720p"
         auto_tmdb = s.get("auto_tmdb_match", True) if s else True
         def_type = s.get("default_media_type", "auto") if s else "auto"
         preserve = s.get("preserve_original_filename", False) if s else False
 
+        tmdb_on = is_tmdb_available()
         type_labels = {"auto": "Auto-Detect", "movie": "Movie", "series": "Series", "general": "General"}
+
+        auto_tmdb_effective = auto_tmdb and tmdb_on
+        tmdb_display = (
+            "ON" if auto_tmdb_effective else ("OFF — needs TMDb key" if not tmdb_on else "OFF")
+        )
 
         text = (
             "🎬 **File Processing Settings**\n\n"
             f"**Default Quality:** `{quality}`\n"
-            f"**Auto TMDb Match:** {'ON' if auto_tmdb else 'OFF'}\n"
+            f"**Auto TMDb Match:** {tmdb_display}\n"
             f"**Default Media Type:** {type_labels.get(def_type, def_type)}\n"
             f"**Preserve Original Filename:** {'ON' if preserve else 'OFF'}"
         )
+        tmdb_btn_label = (
+            f"🔍 Auto TMDb: {'✅ ON' if auto_tmdb_effective else '❌ OFF'}"
+            if tmdb_on
+            else "🔒 Auto TMDb (needs API key)"
+        )
+        tmdb_btn_cb = (
+            "stg_toggle_auto_tmdb_match" if tmdb_on else "tmdb_locked_hint"
+        )
         buttons = [
             [InlineKeyboardButton(f"📐 Quality: {quality}", callback_data="stg_sel_default_quality")],
-            [InlineKeyboardButton(f"🔍 Auto TMDb: {'✅ ON' if auto_tmdb else '❌ OFF'}", callback_data="stg_toggle_auto_tmdb_match")],
+            [InlineKeyboardButton(tmdb_btn_label, callback_data=tmdb_btn_cb)],
             [InlineKeyboardButton(f"📂 Default Type: {type_labels.get(def_type, def_type)}", callback_data="stg_sel_default_media_type")],
             [InlineKeyboardButton(f"📎 Preserve Filename: {'✅ ON' if preserve else '❌ OFF'}", callback_data="stg_toggle_preserve_original_filename")],
             [InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")]
@@ -945,6 +961,16 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="myfiles_settings")])
         await safe_edit_or_send(client, callback_query, text, InlineKeyboardMarkup(buttons))
+        return
+
+    # Locked-toggle hint: tapped when a TMDb-dependent toggle is shown
+    # as 🔒 because no TMDB_API_KEY is configured.
+    if data == "tmdb_locked_hint":
+        from utils.tmdb_gate import tmdb_required_message
+        await callback_query.answer(
+            tmdb_required_message("Auto TMDb match"),
+            show_alert=True,
+        )
         return
 
     # === GENERIC SETTINGS TOGGLE HANDLER ===
