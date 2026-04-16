@@ -2334,7 +2334,21 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         tmdb_data = await auto_match_tmdb(metadata, language=lang)
 
         if not tmdb_data:
-            await client.send_message(user_id, f"⚠️ **Detection Failed for `{file_name}`**\nSkipping.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Dismiss", callback_data="cancel_rename")]]))
+            from utils.tmdb_gate import is_tmdb_available
+            if not is_tmdb_available():
+                await client.send_message(
+                    user_id,
+                    f"🔒 **TMDb disabled — skipping `{file_name}`**\n\n"
+                    "Auto-detection needs a TMDb API key. Re-upload this file "
+                    "via `/start` to rename it in General Mode instead.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Dismiss", callback_data="cancel_rename")]]),
+                )
+            else:
+                await client.send_message(
+                    user_id,
+                    f"⚠️ **Detection Failed for `{file_name}`**\nSkipping.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Dismiss", callback_data="cancel_rename")]]),
+                )
             continue
 
         quality = metadata["quality"]
@@ -2481,13 +2495,26 @@ async def handle_auto_detection(client, message):
     tmdb_data = await auto_match_tmdb(metadata, language=lang)
 
     if not tmdb_data:
-        await message.reply_text(
-            f"⚠️ **Detection Failed**\n\nCould not automatically match `{file_name}` with TMDb.\n"
-            "Please use /start to rename manually.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
-            ),
-        )
+        from utils.tmdb_gate import is_tmdb_available
+        if not is_tmdb_available():
+            await message.reply_text(
+                "🔒 **TMDb disabled — use General Mode**\n\n"
+                f"Auto-detection needs a TMDb API key, which the bot owner hasn't "
+                f"configured. Send `{file_name}` via `/start` to rename it "
+                "manually; file conversion, MyFiles, and YouTube tools keep "
+                "working unchanged.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+                ),
+            )
+        else:
+            await message.reply_text(
+                f"⚠️ **Detection Failed**\n\nCould not automatically match `{file_name}` with TMDb.\n"
+                "Please use /start to rename manually.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
+                ),
+            )
         return
 
     is_subtitle = metadata["is_subtitle"]
