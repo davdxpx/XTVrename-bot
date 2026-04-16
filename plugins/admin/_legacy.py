@@ -145,7 +145,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout)|edit_template_|edit_fn_template_|prompt_admin_(?!dumb_timeout)|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$)|edit_template_|edit_fn_template_|prompt_admin_(?!dumb_timeout)|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -2278,55 +2278,7 @@ async def admin_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-    elif data == "admin_view":
-        settings = await db.get_settings()
-        templates = settings.get("templates", {}) if settings else {}
-        thumb_mode = settings.get("thumbnail_mode", "none") if settings else "none"
-        has_thumb = (
-            "✅ Yes" if settings and settings.get("thumbnail_binary") else "❌ No"
-        )
-
-        mode_str = "Deactivated (None)"
-        if thumb_mode == "auto":
-            mode_str = "Auto-detect (Preview)"
-        elif thumb_mode == "custom":
-            mode_str = "Custom Thumbnail"
-
-        text = f"👀 **Current Settings**\n\n"
-        text += f"**Thumbnail Mode:** `{mode_str}`\n"
-        text += f"**Custom Thumbnail Set:** {has_thumb}\n\n"
-        text += "**Metadata Templates:**\n"
-        if templates:
-            for k, v in templates.items():
-                if k == "caption":
-                    text += f"- **Caption:** `{v}`\n"
-                else:
-                    text += f"- **{k.capitalize()}:** `{v}`\n"
-        else:
-            text += "No templates set.\n"
-        text += "\n**Filename Templates:**\n"
-        fn_templates = settings.get("filename_templates", {}) if settings else {}
-        if fn_templates:
-            for k, v in fn_templates.items():
-                text += f"- **{k.capitalize()}:** `{v}`\n"
-        else:
-            text += "No filename templates set.\n"
-        text += f"\n**Channel Variable:** `{settings.get('channel', Config.DEFAULT_CHANNEL) if settings else Config.DEFAULT_CHANNEL}`\n"
-        try:
-            await callback_query.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Admin Panel", callback_data="admin_main"
-                            )
-                        ]
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
+    # admin_view moved to plugins/admin/general.py
     elif data == "admin_filename_templates":
         try:
             await callback_query.message.edit_text(
@@ -2478,34 +2430,7 @@ async def admin_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-    elif data == "admin_general_settings_menu":
-        try:
-            await callback_query.message.edit_text(
-                f"⚙️ **Global General Settings**\n\n"
-                "Select a setting to configure:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "📢 Channel Username", callback_data="admin_general_channel"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "🌍 Preferred Language", callback_data="admin_general_language"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "⚙️ Workflow Mode", callback_data="admin_general_workflow"
-                            )
-                        ],
-                        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
+    # admin_general_settings_menu moved to plugins/admin/general.py
     elif data == "admin_general_workflow":
         current_mode = await db.get_workflow_mode(None)
         mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Rename Mode"
