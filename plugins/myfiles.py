@@ -297,6 +297,16 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         buttons.append([
             InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"mf_ms_sha")
         ])
+        # Mirror-Leech batch entry — gated on feature_toggles.mirror_leech.
+        # We avoid an async DB read inside this keyboard builder for latency
+        # and surface the gate in the ml_opt_multi handler itself instead,
+        # which simply short-circuits with a friendly alert when disabled.
+        buttons.append([
+            InlineKeyboardButton(
+                f"☁️ Mirror-Leech Selected ({len(selected_files)})",
+                callback_data="ml_opt_multi",
+            )
+        ])
 
     buttons.append([
         InlineKeyboardButton("📤 Send All", callback_data=f"mf_sa")
@@ -1349,6 +1359,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             [InlineKeyboardButton(perm_btn_text, callback_data=f"myfiles_toggle_perm_{file_id}")],
             [InlineKeyboardButton("✏️ Rename", callback_data=f"myfiles_rename_{file_id}"),
              InlineKeyboardButton("📂 Move", callback_data=f"myfiles_move_{file_id}")],
+            # Mirror-Leech single-file entry. Feature toggle enforcement
+            # lives inside ml_opt_single so this button can stay latency-free.
+            [InlineKeyboardButton("☁️ Mirror-Leech Options", callback_data=f"ml_opt_single_{file_id}")],
             [InlineKeyboardButton("🗑️ Delete File", callback_data=f"myfiles_delfile_{file_id}")],
             [InlineKeyboardButton("← Back", callback_data=last_menu)]
         ]
