@@ -6,11 +6,17 @@ from config import Config
 from utils.log import get_logger
 import certifi
 
+import database_schema as _schema
+
 logger = get_logger("database")
 
 # === Classes ===
 class Database:
     _SETTINGS_CACHE_TTL = 60  # seconds
+
+    # Exposed for the admin DB Schema Health panel and migration tooling so
+    # they can introspect the routing tables without reaching into globals.
+    schema = _schema
 
     def __init__(self):
         self._settings_cache = {}  # doc_id -> (timestamp, doc)
