@@ -257,21 +257,21 @@ async def handle_text(client, message, state, state_obj, msg_id):
         await db.update_public_config("bot_name", val)
         await edit_or_reply(client, message, msg_id, f"✅ Bot Name updated to `{val}`",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]]
+                [[InlineKeyboardButton("← Back to Public Settings", callback_data="admin_public_settings")]]
             ),
         )
     elif field == "community_name":
         await db.update_public_config("community_name", val)
         await edit_or_reply(client, message, msg_id, f"✅ Community Name updated to `{val}`",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]]
+                [[InlineKeyboardButton("← Back to Public Settings", callback_data="admin_public_settings")]]
             ),
         )
     elif field == "support_contact":
         await db.update_public_config("support_contact", val)
         await edit_or_reply(client, message, msg_id, f"✅ Support Contact updated to `{val}`",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]]
+                [[InlineKeyboardButton("← Back to Public Settings", callback_data="admin_public_settings")]]
             ),
         )
     elif field == "force_sub":
@@ -294,14 +294,14 @@ async def handle_text(client, message, state, state_obj, msg_id):
         if not val.isdigit():
             await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_public_settings")]]
                 ),
             )
             return
         await db.update_public_config("rate_limit_delay", int(val))
         await edit_or_reply(client, message, msg_id, f"✅ Rate limit updated to `{val}` seconds.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]]
+                [[InlineKeyboardButton("← Back to Public Settings", callback_data="admin_public_settings")]]
             ),
         )
     elif field == "daily_egress":
@@ -338,7 +338,7 @@ async def handle_text(client, message, state, state_obj, msg_id):
         if not val.isdigit():
             await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_edit_plan_free")]]
                 ),
             )
             return

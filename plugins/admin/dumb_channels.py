@@ -283,7 +283,7 @@ async def handle_text(client, message, state, state_obj, msg_id):
         if not val.isdigit():
             await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_dumb_timeout")]]
                 ),
             )
             return
@@ -291,7 +291,7 @@ async def handle_text(client, message, state, state_obj, msg_id):
         await edit_or_reply(client, message, msg_id,
             f"✅ Dumb channel timeout updated to `{val}` seconds.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to Templates", callback_data="admin_templates_menu")]]
+                [[InlineKeyboardButton("← Back to Dumb Channel Timeout", callback_data="admin_dumb_timeout")]]
             ),
         )
         admin_sessions.pop(user_id, None)
