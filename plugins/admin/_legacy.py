@@ -112,7 +112,7 @@ debug("✅ Loaded handler: admin_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$)|edit_template_|edit_fn_template_|prompt_admin_(?!dumb_timeout)|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|dumb_channels|dumb_timeout|view$|general_settings_menu$|main$|access_limits$|quick_toggle_(?:premium|deluxe|trial|myfiles)$|feature_toggles$|gtoggle_|per_plan_limits$|global_daily_egress$)|edit_template_|edit_fn_template_|prompt_admin_(?!dumb_timeout)|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
     )
 )
 async def admin_callback(client, callback_query):
@@ -123,41 +123,7 @@ async def admin_callback(client, callback_query):
     data = callback_query.data
     debug(f"Admin callback: {data} from user {user_id}")
 
-    # --- Quick System Toggles (Settings menu) ---
-    if data == "admin_quick_toggle_premium":
-        config = await db.get_public_config()
-        enabled = config.get("premium_system_enabled", False)
-        await db.update_public_config("premium_system_enabled", not enabled)
-        await callback_query.answer(f"Premium System {'Disabled' if enabled else 'Enabled'}", show_alert=True)
-        callback_query.data = "admin_access_limits"
-        await admin_callback(client, callback_query)
-        return
-
-    if data == "admin_quick_toggle_deluxe":
-        config = await db.get_public_config()
-        enabled = config.get("premium_deluxe_enabled", False)
-        await db.update_public_config("premium_deluxe_enabled", not enabled)
-        await callback_query.answer(f"Deluxe Plan {'Disabled' if enabled else 'Enabled'}", show_alert=True)
-        callback_query.data = "admin_access_limits"
-        await admin_callback(client, callback_query)
-        return
-
-    if data == "admin_quick_toggle_trial":
-        config = await db.get_public_config()
-        enabled = config.get("premium_trial_enabled", False)
-        await db.update_public_config("premium_trial_enabled", not enabled)
-        await callback_query.answer(f"Trial Mode {'Disabled' if enabled else 'Enabled'}", show_alert=True)
-        callback_query.data = "admin_access_limits"
-        await admin_callback(client, callback_query)
-        return
-
-    if data == "admin_quick_toggle_myfiles":
-        enabled = await db.get_setting("myfiles_enabled", default=False)
-        await db.update_setting("myfiles_enabled", not enabled)
-        await callback_query.answer(f"MyFiles System {'Disabled' if enabled else 'Enabled'}", show_alert=True)
-        callback_query.data = "admin_access_limits"
-        await admin_callback(client, callback_query)
-        return
+    # Quick-toggles and admin_access_limits moved to plugins/admin/feature_toggles.py
 
     if data == "admin_myfiles_settings":
         myfiles_enabled = await db.get_setting("myfiles_enabled", default=False)
@@ -230,23 +196,7 @@ async def admin_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-    elif data == "admin_per_plan_limits":
-        text = (
-            "⚙️ **Per-Plan Settings**\n\n"
-            "> Select a subscription tier below to view its current quotas, features, pricing, and to modify its settings."
-        )
-
-        buttons = [
-            [InlineKeyboardButton("🆓 Manage Free Plan", callback_data="admin_edit_plan_free")],
-            [InlineKeyboardButton("🌟 Manage Standard Plan", callback_data="admin_edit_plan_standard")],
-            [InlineKeyboardButton("💎 Manage Deluxe Plan", callback_data="admin_edit_plan_deluxe")],
-            [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]
-        ]
-
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
+    # admin_per_plan_limits moved to plugins/admin/feature_toggles.py
     elif data.startswith("admin_edit_plan_"):
         plan_name = data.replace("admin_edit_plan_", "")
 
@@ -828,67 +778,7 @@ async def admin_callback(client, callback_query):
         await admin_callback(client, callback_query)
         return
 
-    if data == "admin_feature_toggles":
-        toggles = await db.get_feature_toggles()
-        audio_en = toggles.get("audio_editor", True)
-        conv_en = toggles.get("file_converter", True)
-        wm_en = toggles.get("watermarker", True)
-        sub_en = toggles.get("subtitle_extractor", True)
-        trim_en = toggles.get("video_trimmer", True)
-        info_en = toggles.get("media_info", True)
-        voice_en = toggles.get("voice_converter", True)
-        vnote_en = toggles.get("video_note_converter", True)
-        yt_en = toggles.get("youtube_tool", True)
-        four_k_en = toggles.get("4k_enhancement", True)
-        batch_pro_en = toggles.get("batch_processing_pro", True)
-
-        def emoji(state): return "✅" if state else "❌"
-
-        text = (
-            "⚙️ **Global Feature Toggles**\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "Enable or disable features globally (master switch).\n"
-            "> Disabled features are hidden for **all** users & plans.\n"
-            "> Per-plan overrides can be set in Per-Plan Settings.\n\n"
-            "> **Performance Impact:**\n"
-            "> • **File Converter:** High CPU & RAM\n"
-            "> • **Watermarker / Trimmer:** Medium CPU\n"
-            "> • **Audio Editor / Voice:** Low CPU\n"
-            "> • **Media Info:** Minimal CPU\n\n"
-            "Click a feature below to toggle:"
-        )
-
-        buttons = [
-            [InlineKeyboardButton(f"{emoji(conv_en)} 🔀 File Converter", callback_data="admin_gtoggle_file_converter"),
-             InlineKeyboardButton(f"{emoji(sub_en)} 📝 Subtitle Extractor", callback_data="admin_gtoggle_subtitle_extractor")],
-            [InlineKeyboardButton(f"{emoji(wm_en)} ©️ Watermarker", callback_data="admin_gtoggle_watermarker"),
-             InlineKeyboardButton(f"{emoji(audio_en)} 🎵 Audio Editor", callback_data="admin_gtoggle_audio_editor")],
-            [InlineKeyboardButton(f"{emoji(trim_en)} ✂️ Video Trimmer", callback_data="admin_gtoggle_video_trimmer"),
-             InlineKeyboardButton(f"{emoji(info_en)} ℹ️ Media Info", callback_data="admin_gtoggle_media_info")],
-            [InlineKeyboardButton(f"{emoji(voice_en)} 🎙️ Voice Converter", callback_data="admin_gtoggle_voice_converter"),
-             InlineKeyboardButton(f"{emoji(vnote_en)} ⭕ Video Note", callback_data="admin_gtoggle_video_note_converter")],
-            [InlineKeyboardButton(f"{emoji(yt_en)} ▶️ YouTube Tool", callback_data="admin_gtoggle_youtube_tool")],
-            [InlineKeyboardButton(f"{emoji(four_k_en)} 📺 4K Enhancement", callback_data="admin_gtoggle_4k_enhancement"),
-             InlineKeyboardButton(f"{emoji(batch_pro_en)} 📦 Batch Pro", callback_data="admin_gtoggle_batch_processing_pro")],
-            [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")]
-        ]
-
-        try:
-            await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
-        return
-
-    if data.startswith("admin_gtoggle_"):
-        feature = data.replace("admin_gtoggle_", "")
-        toggles = await db.get_feature_toggles()
-        current_state = toggles.get(feature, True)
-        new_state = not current_state
-        await db.update_feature_toggle(feature, new_state)
-        await callback_query.answer(f"{'Enabled' if new_state else 'Disabled'} {feature.replace('_', ' ').title()}.", show_alert=True)
-        callback_query.data = "admin_feature_toggles"
-        await admin_callback(client, callback_query)
-        return
+    # admin_feature_toggles and admin_gtoggle_* moved to plugins/admin/feature_toggles.py
 
     if data.startswith("admin_toggle_"):
         # Per-plan free toggles: admin_toggle_{feature}_{plan}
@@ -912,29 +802,7 @@ async def admin_callback(client, callback_query):
         await admin_callback(client, callback_query)
         return
 
-    if data == "admin_global_daily_egress":
-        current_val = await db.get_global_daily_egress_limit()
-        try:
-            await callback_query.message.edit_text(
-                f"🌍 **Edit Global Daily Egress Limit**\n\nCurrent: `{current_val}` MB\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_global_daily_egress"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Settings", callback_data="admin_access_limits"
-                            )
-                        ],
-                    ]
-                ),
-            )
-        except MessageNotModified:
-            pass
-        return
+    # admin_global_daily_egress preview moved to plugins/admin/feature_toggles.py
 
     if Config.PUBLIC_MODE and (
         data.startswith("admin_premium_") or data.startswith("prompt_premium_") or data.startswith("prompt_trial_") or data.startswith("admin_trial_") or data.startswith("admin_features_") or data.startswith("admin_privacy_")
@@ -2084,17 +1952,7 @@ async def admin_callback(client, callback_query):
             )
         except MessageNotModified:
             pass
-    elif data == "admin_access_limits":
-        try:
-            reply_markup = await get_admin_access_limits_menu()
-            await callback_query.message.edit_text(
-                "🔒 **Settings & Controls**\n"
-                "━━━━━━━━━━━━━━━━━━━━\n\n"
-                "Toggle system features on/off and configure plans, limits, and tools.",
-                reply_markup=reply_markup,
-            )
-        except MessageNotModified:
-            pass
+    # admin_access_limits moved to plugins/admin/feature_toggles.py
     elif data == "admin_public_settings":
         try:
             await callback_query.message.edit_text(
