@@ -1623,7 +1623,7 @@ class TaskProcessor:
                                             hours = dur_map.get(dur, 24)
                                             group_doc["expires_at"] = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
 
-                                        await db.db.file_groups.insert_one(group_doc)
+                                        await db.file_groups.insert_one(group_doc)
 
                                         bot_me = await self.client.get_me()
                                         bot_username = bot_me.username

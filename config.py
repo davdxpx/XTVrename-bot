@@ -8,8 +8,10 @@ load_dotenv()
 
 
 class Config:
+    # "T" suffix marks the torrent-edition build; main stays at "v1.5.2".
+    # MyFiles engine is the v2.2 / Mirror-Leech-aware release from main.
     VERSION = "v1.5.2T"
-    MYFILES_VERSION = "2.1"
+    MYFILES_VERSION = "2.2"
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     API_ID = int(os.getenv("API_ID", 0))
     API_HASH = os.getenv("API_HASH")
@@ -25,6 +27,11 @@ class Config:
     DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() in ("true", "1", "yes")
 
     TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+
+    # Fernet key for encrypting Mirror-Leech provider credentials at rest.
+    # Required only when the mirror_leech feature toggle is on. Generate one via:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    SECRETS_KEY = os.getenv("SECRETS_KEY")
 
     DOWNLOAD_DIR = "downloads/"
     THUMB_PATH = "downloads/thumb.jpg"
@@ -53,7 +60,13 @@ class Config:
 
     @classmethod
     def validate(cls):
-        """Validate required configuration at startup."""
+        """Validate required configuration at startup.
+
+        Note: TMDB_API_KEY is intentionally NOT validated here. It is
+        optional as of the broaden-audience refactor — see utils.tmdb_gate
+        for the availability check. Features that need it gracefully
+        degrade with a friendly message; everything else keeps working.
+        """
         errors = []
         if not cls.BOT_TOKEN:
             errors.append("BOT_TOKEN is required (get one from @BotFather)")

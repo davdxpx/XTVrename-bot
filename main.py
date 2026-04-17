@@ -52,6 +52,10 @@ import tools.VideoNoteConverter
 import tools.YouTubeTool
 import tools.TorrentDownloader
 
+# Mirror-Leech registers its downloaders / uploaders on import so the
+# registries are populated before the plugin's handlers fire.
+import tools.mirror_leech  # noqa: F401
+
 def register_tool_handlers(client, module):
     for name in dir(module):
         obj = getattr(module, name)
@@ -114,19 +118,36 @@ if __name__ == "__main__":
     app.start()
 
     # --- Database migrations ---
+    # mediastudio_layout is idempotent and self-advisory-locked. Failure
+    # here must be fatal: booting half-migrated would let the shim route
+    # writes into an incomplete layout and silently corrupt state.
     try:
         from database import db
-        logger.info("Running DB migrations...")
-        app.loop.run_until_complete(db.migrate_old_db_to_new())
-        app.loop.run_until_complete(db.migrate_global_dumb_channels_to_ceo())
-    except Exception as e:
-        logger.warning(f"Error during DB migration: {e}")
+        from db_migrations.mediastudio_layout import run_mediastudio_layout_migration
+
+        logger.info("Running DB migrations (mediastudio_layout)...")
+        app.loop.run_until_complete(
+            run_mediastudio_layout_migration(
+                db.db, public_mode=Config.PUBLIC_MODE, ceo_id=Config.CEO_ID
+            )
+        )
+    except Exception:
+        logger.exception("Fatal: mediastudio_layout migration failed; aborting startup")
+        raise SystemExit(1)
 
     # --- Database indexes ---
+    # Indexes are also re-ensured by the migration, but we run once more
+    # here so a fresh deployment against an already-migrated DB still
+    # provisions them on boot.
     try:
         from database import db
+        from db_migrations.mediastudio_layout import ensure_indexes_v2
+
         logger.info("Ensuring database indexes...")
-        app.loop.run_until_complete(db.ensure_indexes())
+        app.loop.run_until_complete(ensure_indexes_v2(db.db))
+        # Torrent-edition extras: index the torrent_downloads /
+        # torrent_favorites collections the /torrent subsystem reads.
+        app.loop.run_until_complete(db.ensure_torrent_indexes())
     except Exception as e:
         logger.warning(f"Error creating indexes: {e}")
 
@@ -331,7 +352,11 @@ if __name__ == "__main__":
 
     # --- Startup diagnostics ---
     admins_count = len(Config.ADMIN_IDS)
-    tmdb_status = "Configured" if Config.TMDB_API_KEY else "Missing"
+    tmdb_status = (
+        "Configured"
+        if Config.TMDB_API_KEY
+        else "Missing (optional — TMDb features disabled)"
+    )
     db_status = "Configured" if Config.MAIN_URI else "Missing"
     xtv_pro_status = "Enabled (4GB Support)" if getattr(app, 'user_bot', None) else "Disabled (2GB Limit)"
 
@@ -362,6 +387,16 @@ if __name__ == "__main__":
 
     # --- Graceful shutdown ---
     logger.info("Shutting down...")
+
+    # Cancel every in-flight Mirror-Leech task so the worker pool lets
+    # the event loop close cleanly instead of hanging on an async http
+    # stream.
+    try:
+        from tools.mirror_leech.Tasks import ml_worker_pool
+
+        app.loop.run_until_complete(ml_worker_pool.shutdown())
+    except Exception as e:
+        logger.debug(f"ML worker pool shutdown: {e}")
 
     # Close persistent HTTP sessions
     try:

@@ -1,0 +1,61 @@
+{
+  "name": "𝕏TV MediaStudio™",
+  "description": "Telegram bot for renaming, converting, and organising media — with MyFiles storage, YouTube download, and Mirror-Leech.",
+  "keywords": ["telegram", "bot", "pyrogram", "ffmpeg", "tmdb", "media", "mirror-leech"],
+  "repository": "https://github.com/davdxpx/XTV-MediaStudio",
+  "stack": "heroku-24",
+  "buildpacks": [
+    { "url": "https://github.com/heroku/heroku-buildpack-apt" },
+    { "url": "heroku/python" }
+  ],
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Bot token from @BotFather.",
+      "required": true
+    },
+    "API_ID": {
+      "description": "App API ID from my.telegram.org.",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "App API hash from my.telegram.org.",
+      "required": true
+    },
+    "MAIN_URI": {
+      "description": "MongoDB connection string. Free tier works: https://www.mongodb.com/cloud/atlas",
+      "required": true
+    },
+    "CEO_ID": {
+      "description": "Telegram user ID of the bot owner (only this user can open /admin).",
+      "required": true
+    },
+    "ADMIN_IDS": {
+      "description": "Comma-separated Telegram user IDs of additional admins.",
+      "required": false,
+      "value": ""
+    },
+    "PUBLIC_MODE": {
+      "description": "Set to true to open the bot to everyone; leave false for single-user / admins-only.",
+      "required": false,
+      "value": "false"
+    },
+    "DEBUG_MODE": {
+      "description": "Set to true for verbose logs.",
+      "required": false,
+      "value": "false"
+    },
+    "TMDB_API_KEY": {
+      "description": "Optional — enables title matching, posters, and auto channel routing. Get one free at https://www.themoviedb.org/settings/api",
+      "required": false,
+      "value": ""
+    },
+    "SECRETS_KEY": {
+      "description": "Optional — Fernet key used to encrypt Mirror-Leech provider credentials at rest. Required only when you enable Mirror-Leech. Generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"",
+      "required": false,
+      "value": ""
+    }
+  },
+  "formation": {
+    "worker": { "quantity": 1, "size": "eco" }
+  }
+}

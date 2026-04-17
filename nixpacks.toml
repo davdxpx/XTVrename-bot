@@ -1,6 +1,8 @@
 # Nixpacks configuration
 [phases.setup]
-nixPkgs = ["ffmpeg", "python311"]
+# `p7zip` is required for unpacking .7z/.rar/.zip uploads the bot extracts.
+# `rclone` is required for the Mirror-Leech rclone uploader when enabled.
+nixPkgs = ["ffmpeg", "python311", "p7zip", "rclone"]
 
 [phases.install]
 cmds = ["python -m pip install -r requirements.txt"]

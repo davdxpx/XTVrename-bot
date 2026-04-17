@@ -162,6 +162,14 @@ def analyze_filename(filename):
         }
 
 async def auto_match_tmdb(metadata, language="en-US"):
+    # If no TMDB key is configured, auto-matching is disabled. Callers
+    # already treat None as "no match" and fall back to General Mode, so
+    # this short-circuit keeps the rest of the pipeline untouched.
+    from utils.tmdb_gate import is_tmdb_available
+
+    if not is_tmdb_available():
+        return None
+
     title = metadata.get("title")
     year = metadata.get("year")
     media_type = metadata.get("type")

@@ -31,7 +31,7 @@ async def handle_start_command_unique(client, message):
             group_id = param.replace("group_", "")
             from bson.objectid import ObjectId
             try:
-                group_doc = await db.db.file_groups.find_one({"group_id": group_id})
+                group_doc = await db.file_groups.find_one({"group_id": group_id})
                 if group_doc:
                     # Check if link has expired
                     import datetime as _dt

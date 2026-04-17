@@ -1,12 +1,20 @@
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------
 from pyrogram import Client, filters, StopPropagation
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from config import Config
 from database import db
 from utils.log import get_logger
-from plugins.admin import admin_sessions
+from plugins.admin.core import admin_sessions
 
-logger = get_logger("plugins.admin_setup")
+logger = get_logger("plugins.admin.setup")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -397,8 +405,8 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
 
     # --- Force-Sub settings ---
     elif data == "setup_force_sub":
-        from plugins.admin import get_admin_force_sub_menu
-        msg, kb = await get_admin_force_sub_menu()
+        from plugins.admin.force_sub import get_force_sub_menu_content
+        msg, kb = await get_force_sub_menu_content()
         try:
             await callback_query.message.edit_text(msg, reply_markup=kb)
         except Exception:

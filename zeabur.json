@@ -1,0 +1,23 @@
+{
+  "name": "xtv-mediastudio",
+  "description": "𝕏TV MediaStudio™ — Telegram media bot.",
+  "build": {
+    "type": "docker",
+    "dockerfile": "Dockerfile"
+  },
+  "run": {
+    "command": "python3 main.py"
+  },
+  "env": [
+    { "key": "BOT_TOKEN", "required": true },
+    { "key": "API_ID", "required": true },
+    { "key": "API_HASH", "required": true },
+    { "key": "MAIN_URI", "required": true },
+    { "key": "CEO_ID", "required": true },
+    { "key": "ADMIN_IDS", "required": false },
+    { "key": "PUBLIC_MODE", "required": false, "default": "false" },
+    { "key": "DEBUG_MODE", "required": false, "default": "false" },
+    { "key": "TMDB_API_KEY", "required": false },
+    { "key": "SECRETS_KEY", "required": false }
+  ]
+}
