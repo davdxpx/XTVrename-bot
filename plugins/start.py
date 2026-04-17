@@ -808,6 +808,7 @@ async def handle_help_command_unique(client, message):
         "Please select a topic below to explore the guide:",
         reply_markup=InlineKeyboardMarkup(
             [
+                [InlineKeyboardButton("✨ New in v2.2", callback_data="help_new_v22")],
                 [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                 [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
                 [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
@@ -945,6 +946,7 @@ async def handle_help_callbacks(client, callback_query):
                 "Please select a topic below to explore the guide:",
                 reply_markup=InlineKeyboardMarkup(
                     [
+                        [InlineKeyboardButton("✨ New in v2.2", callback_data="help_new_v22")],
                         [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                         [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
                         [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
