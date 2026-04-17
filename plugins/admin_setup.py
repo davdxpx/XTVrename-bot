@@ -4,7 +4,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQ
 from config import Config
 from database import db
 from utils.log import get_logger
-from plugins.admin import admin_sessions
+from plugins.admin_legacy import admin_sessions
 
 logger = get_logger("plugins.admin_setup")
 
@@ -397,7 +397,7 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
 
     # --- Force-Sub settings ---
     elif data == "setup_force_sub":
-        from plugins.admin import get_admin_force_sub_menu
+        from plugins.admin_legacy import get_admin_force_sub_menu
         msg, kb = await get_admin_force_sub_menu()
         try:
             await callback_query.message.edit_text(msg, reply_markup=kb)

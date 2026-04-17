@@ -8,7 +8,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from config import Config
 from database import db
 from utils.log import get_logger
-from plugins.admin import admin_sessions
+from plugins.admin_legacy import admin_sessions
 
 logger = get_logger("plugins.admin_users")
 
