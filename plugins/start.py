@@ -34,33 +34,42 @@ async def handle_start_command_unique(client, message):
                 share = await db.myfiles_resolve_share(token)
                 if not share:
                     await message.reply_text(
-                        "⏳ **Share-Link abgelaufen oder ungültig.**"
+                        "This share link has expired or is invalid."
                     )
                     raise StopPropagation
                 # Expiry / view caps.
                 import datetime as _dt
                 if share.get("expires_at") and _dt.datetime.utcnow() > share["expires_at"]:
                     await db.myfiles_revoke_share(token)
-                    await message.reply_text("⏳ **Share-Link abgelaufen.**")
+                    await message.reply_text("This share link has expired.")
                     raise StopPropagation
                 max_views = int(share.get("max_views", 0) or 0)
                 if max_views and int(share.get("views", 0) or 0) >= max_views:
                     await message.reply_text(
-                        "🔒 **Share-Link: Zugriffslimit erreicht.**"
+                        "Share link view limit reached."
                     )
                     raise StopPropagation
                 # Password check.
                 if share.get("password_hash"):
-                    # For password-protected links we ask for it as the next
-                    # message via a simple in-memory gate.
+                    # For password-protected links we accept the password as
+                    # the third /start argument: "/start share_<token> <pw>".
                     import hashlib
-                    sent_hash = hashlib.sha256(
-                        (message.text.split(None, 2)[2:3] or [""])[0].encode()
-                    ).hexdigest() if len(message.text.split()) >= 3 else None
+                    parts = (message.text or "").split(None, 2)
+                    supplied = parts[2] if len(parts) >= 3 else ""
+                    sent_hash = (
+                        hashlib.sha256(supplied.encode("utf-8")).hexdigest()
+                        if supplied
+                        else None
+                    )
                     if sent_hash != share["password_hash"]:
+                        # Plain text — avoid markdown entity parsing since
+                        # the token and prompt-placeholder can trip Telegram's
+                        # bounds validator (ENTITY_BOUNDS_INVALID).
                         await message.reply_text(
-                            "🔒 Dieser Link ist passwortgeschützt.\n\n"
-                            f"Öffne: `/start share_{token} <passwort>`"
+                            "This share link is password protected.\n\n"
+                            "Send the password as part of the link:\n"
+                            f"/start share_{token} YOUR_PASSWORD",
+                            parse_mode=None,
                         )
                         raise StopPropagation
                 # Deliver.
@@ -108,7 +117,7 @@ async def handle_start_command_unique(client, message):
                 except Exception:
                     pass
                 await message.reply_text(
-                    f"✅ {delivered} Datei(en) ausgeliefert."
+                    f"Delivered {delivered} file(s)."
                 )
                 raise StopPropagation
             except Exception as e:
@@ -116,7 +125,7 @@ async def handle_start_command_unique(client, message):
                     raise
                 logger.error(f"share_ deep link failed: {e}")
                 await message.reply_text(
-                    "❌ Share-Link konnte nicht verarbeitet werden."
+                    "Could not process this share link."
                 )
                 raise StopPropagation
 

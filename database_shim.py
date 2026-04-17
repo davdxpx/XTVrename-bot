@@ -142,10 +142,22 @@ class SettingsCollectionShim:
         unset_fields = _extract_unset_fields(update)
         other_ops = _extract_other_ops(update)
 
-        # Group fields by target doc.
+        # Group fields by target doc. Support Mongo's dotted nested-key
+        # syntax (`feature_toggles.mirror_leech_aria2`): the routing table
+        # is keyed by the top-level name, so we look up the prefix before
+        # the first dot and keep the full dotted key in the rewritten
+        # update so Mongo writes the nested field.
+        def _lookup(key: str) -> str | None:
+            if key in schema.GLOBAL_KEY_TO_DOC:
+                return schema.GLOBAL_KEY_TO_DOC[key]
+            top, _, _ = key.partition(".")
+            if top and top in schema.GLOBAL_KEY_TO_DOC:
+                return schema.GLOBAL_KEY_TO_DOC[top]
+            return None
+
         targets_set: dict[str, dict] = collections.defaultdict(dict)
         for key, value in set_fields.items():
-            target = schema.GLOBAL_KEY_TO_DOC.get(key)
+            target = _lookup(key)
             if target is None:
                 target = schema.LEGACY_MISC_DOC_ID
                 self._record_unknown("update/$set", schema.VIRTUAL_GLOBAL_SETTINGS, key)
@@ -153,8 +165,8 @@ class SettingsCollectionShim:
 
         targets_unset: dict[str, dict] = collections.defaultdict(dict)
         for key in unset_fields:
-            target = schema.GLOBAL_KEY_TO_DOC.get(key, schema.LEGACY_MISC_DOC_ID)
-            if target == schema.LEGACY_MISC_DOC_ID and key not in schema.GLOBAL_KEY_TO_DOC:
+            target = _lookup(key) or schema.LEGACY_MISC_DOC_ID
+            if target == schema.LEGACY_MISC_DOC_ID:
                 self._record_unknown("update/$unset", schema.VIRTUAL_GLOBAL_SETTINGS, key)
             targets_unset[target][key] = ""
 

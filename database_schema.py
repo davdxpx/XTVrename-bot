@@ -164,6 +164,7 @@ GLOBAL_KEY_TO_DOC = {
     # migration bookkeeping — kept readable via the virtual doc
     "migration_to_users_done": DOC_SCHEMA_MIGRATIONS,
     "dumb_channels_migrated_to_ceo": DOC_SCHEMA_MIGRATIONS,
+    "myfiles_extras_v1_applied_at": DOC_SCHEMA_MIGRATIONS,
 }
 
 # --- Per-user personal settings ---
