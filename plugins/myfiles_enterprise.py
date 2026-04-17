@@ -17,6 +17,7 @@ tools.mirror_leech.UIChrome.frame so MyFiles matches the rest of the bot.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import secrets
 from typing import Any
@@ -32,7 +33,7 @@ from pyrogram.types import (
 
 from config import Config
 from database import db
-from tools.mirror_leech.UIChrome import frame, progress_block, format_bytes
+from tools.mirror_leech.UIChrome import format_bytes, frame, progress_block
 from utils.feature_gate import feature_enabled
 from utils.log import get_logger
 
@@ -127,12 +128,10 @@ async def trash_list(client: Client, cq: CallbackQuery) -> None:
         f"🗑 **Papierkorb** ({count})",
         "\n".join(body_lines),
     )
-    try:
+    with contextlib.suppress(Exception):
         await cq.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(rows)
         )
-    except Exception:
-        pass
     await cq.answer()
 
 
@@ -1103,7 +1102,7 @@ async def _handle_smart_create(client: Client, message: Message, pending: dict) 
     if not await feature_enabled("myfiles_smart", user_id):
         _drop_pending(user_id)
         return
-    lines = [l.strip() for l in (message.text or "").splitlines() if l.strip()]
+    lines = [line.strip() for line in (message.text or "").splitlines() if line.strip()]
     if len(lines) < 2:
         await message.reply_text(
             "⚠️ Bitte Name **und** Regel senden (zwei Zeilen)."

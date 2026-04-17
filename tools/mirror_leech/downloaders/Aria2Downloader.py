@@ -13,16 +13,16 @@ this bot.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from utils.log import get_logger
-
 from tools.mirror_leech.downloaders import Downloader, register_downloader
 from tools.mirror_leech.Tasks import MLContext
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.aria2")
 
@@ -101,10 +101,8 @@ class Aria2Downloader(Downloader):
                 await asyncio.sleep(1.5)
         finally:
             # Leave the daemon clean even if the caller cancels.
-            try:
+            with contextlib.suppress(Exception):
                 await asyncio.to_thread(api.purge)
-            except Exception:
-                pass
 
         # aria2 may land the file under a sub-path if the URL carries one.
         files = [Path(f.path) for f in dl.files if f.path]

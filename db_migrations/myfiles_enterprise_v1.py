@@ -210,11 +210,10 @@ async def run_myfiles_enterprise_v1(db: Any, *, dry_run: bool = False) -> None:
         await _tag_existing_files_and_folders(db)
         await _recompute_user_quotas(db)
         # Mark applied so we can inspect from admin panel later.
-        try:
+        import contextlib
+        with contextlib.suppress(Exception):
             await db.update_setting("myfiles_enterprise_v1_applied_at",
                                     datetime.datetime.utcnow().isoformat())
-        except Exception:
-            pass
         logger.info("myfiles_enterprise_v1 migration complete")
     except asyncio.CancelledError:
         raise

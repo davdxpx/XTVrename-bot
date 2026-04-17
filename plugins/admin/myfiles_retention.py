@@ -77,12 +77,11 @@ async def _render(cq: CallbackQuery) -> None:
         + "\n\n━━━━━━━━━━━━━━━━━━━━\n"
         "🤖 **Engine:** 𝕏TV Core v3.1"
     )
-    try:
+    import contextlib
+    with contextlib.suppress(MessageNotModified):
         await cq.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(rows)
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(

@@ -25,7 +25,6 @@ import datetime
 import re
 from typing import Any
 
-
 _SIZE = re.compile(r"^(?P<op>[<>])(?P<num>[0-9]+)(?P<unit>[kmg]?b)?$", re.I)
 _UNITS = {"b": 1, "kb": 1024, "mb": 1024**2, "gb": 1024**3}
 

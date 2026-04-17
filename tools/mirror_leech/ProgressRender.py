@@ -14,15 +14,14 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from utils.log import get_logger
-
 from tools.mirror_leech.UIChrome import (
+    format_bytes,
+    format_elapsed,
+    format_eta,
     frame,
     progress_block,
-    format_bytes,
-    format_eta,
-    format_elapsed,
 )
+from utils.log import get_logger
 
 if TYPE_CHECKING:
     from tools.mirror_leech.Tasks import MLTask
@@ -58,17 +57,16 @@ def render_task_text(task: "MLTask") -> str:
     lines.append("")
     lines.append(progress_block(task.progress_fraction))
 
-    if task.status in ("downloading", "uploading"):
-        if task.speed_bps > 0:
-            lines.append("")
-            lines.append(
-                f"> **Speed:** `{format_bytes(task.speed_bps)}/s`"
-            )
-            elapsed = int(time.time() - (task.started_at or time.time()))
-            lines.append(
-                f"> **Elapsed:** `{format_elapsed(elapsed)}` · "
-                f"**ETA:** `{format_eta(task.eta_sec)}`"
-            )
+    if task.status in ("downloading", "uploading") and task.speed_bps > 0:
+        lines.append("")
+        lines.append(
+            f"> **Speed:** `{format_bytes(task.speed_bps)}/s`"
+        )
+        elapsed = int(time.time() - (task.started_at or time.time()))
+        lines.append(
+            f"> **Elapsed:** `{format_elapsed(elapsed)}` · "
+            f"**ETA:** `{format_eta(task.eta_sec)}`"
+        )
 
     if task.error:
         lines.append("")

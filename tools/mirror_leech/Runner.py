@@ -12,18 +12,18 @@ drive progress-message edits.
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
 from config import Config
-from utils.log import get_logger
-
-from tools.mirror_leech.Controller import pick_downloader, UnsupportedSourceError
-from tools.mirror_leech.Tasks import MLContext, MLTask, UploadResult
+from tools.mirror_leech.Controller import UnsupportedSourceError, pick_downloader
 from tools.mirror_leech.downloaders import downloader_by_id
+from tools.mirror_leech.Tasks import MLContext, MLTask, UploadResult
 from tools.mirror_leech.uploaders import uploader_by_id
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.runner")
 
@@ -64,7 +64,7 @@ def _make_context(task: MLTask, client: Any, temp_dir: Path) -> MLContext:
     # Some providers (TelegramDownloader / TelegramUploader) need the bot
     # client; attach it as an out-of-band attribute so the typed MLContext
     # surface stays clean for tests.
-    setattr(ctx, "client", client)
+    ctx.client = client
     return ctx
 
 
@@ -161,7 +161,5 @@ async def run_task(task: MLTask, client: Any, progress_cb: Optional[Any] = None)
         # Always clean up — the file is either fully handed off upstream
         # (so losing the local copy is fine) or a partial download that
         # the user can retry.
-        try:
+        with contextlib.suppress(Exception):
             shutil.rmtree(temp_dir, ignore_errors=True)
-        except Exception:
-            pass
