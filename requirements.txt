@@ -10,3 +10,6 @@ guessit
 certifi>=2024.7.4
 psutil
 yt-dlp>=2025.1.15
+# Fernet for Mirror-Leech provider credential encryption (Secrets.py)
+# and the /admin → Mirror-Leech Config → Generate SECRETS_KEY button.
+cryptography>=42.0.0
