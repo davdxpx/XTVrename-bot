@@ -1,8 +1,12 @@
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# --------------------------------------------------------------------------
 """Progress-bar formatting and throttled message-edit helper.
 
-Reuses utils.progress for the throttling math so we don't invent a second
-rate-limit. Every update pulls the current task state and patches the
-bot-owned message that the user is watching.
+Mirrors the Rename / Convert visual style: double divider lines
+(`━━━━━━━━━━━━━━━━━━━━`), `■ / □` progress blocks (10 chars) and the
+XTVEngine signature footer.
 """
 
 from __future__ import annotations
@@ -12,67 +16,64 @@ from typing import TYPE_CHECKING
 
 from utils.log import get_logger
 
+from tools.mirror_leech.UIChrome import (
+    frame,
+    progress_block,
+    format_bytes,
+    format_eta,
+    format_elapsed,
+)
+
 if TYPE_CHECKING:
     from tools.mirror_leech.Tasks import MLTask
 
 logger = get_logger("mirror_leech.progress")
 
-_MIN_EDIT_INTERVAL = 3.0  # seconds between message edits
+_MIN_EDIT_INTERVAL = 5.0  # seconds between message edits, aligned with
+                          # plugins/process.py ffmpeg_progress throttle
 _last_edit: dict[str, float] = {}
 
-_BAR_LENGTH = 20
-
-
-def format_bytes(n: float) -> str:
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if n < 1024:
-            return f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} PB"
-
-
-def format_eta(seconds: float) -> str:
-    seconds = max(0, int(seconds))
-    if seconds < 60:
-        return f"{seconds}s"
-    m, s = divmod(seconds, 60)
-    if m < 60:
-        return f"{m}m {s}s"
-    h, m = divmod(m, 60)
-    return f"{h}h {m}m"
-
-
-def progress_bar(fraction: float) -> str:
-    fraction = max(0.0, min(1.0, fraction))
-    filled = int(fraction * _BAR_LENGTH)
-    return "█" * filled + "░" * (_BAR_LENGTH - filled)
+_STATUS_HEADER = {
+    "queued":       "⏳ **Mirror-Leech — Queued**",
+    "downloading":  "⬇️ **Downloading Media...**",
+    "uploading":    "☁️ **Uploading to Destination...**",
+    "done":         "✅ **Mirror-Leech — Completed**",
+    "failed":       "❌ **Mirror-Leech — Failed**",
+    "cancelled":    "🚫 **Mirror-Leech — Cancelled**",
+}
 
 
 def render_task_text(task: "MLTask") -> str:
-    """Render an editable progress message body for `task`."""
-    status_icon = {
-        "queued": "⏳",
-        "downloading": "⬇️",
-        "uploading": "☁️",
-        "done": "✅",
-        "failed": "❌",
-        "cancelled": "🚫",
-    }.get(task.status, "•")
+    """Render the editable progress message body for `task`."""
+    header = _STATUS_HEADER.get(
+        task.status, f"• **Mirror-Leech — {task.status.title()}**"
+    )
+    source_preview = task.source[:60] + ("…" if len(task.source) > 60 else "")
 
-    fraction = task.progress_fraction
-    lines = [
-        f"{status_icon} **Mirror-Leech — {task.status.title()}**",
-        f"`{task.source[:60]}`",
-        "",
-        f"`[{progress_bar(fraction)}]` {fraction * 100:.1f}%",
-    ]
-    if task.speed_bps > 0:
-        lines.append(f"⚡ {format_bytes(task.speed_bps)}/s   ⌛ {format_eta(task.eta_sec)}")
-    if task.downloader_id:
-        lines.append(f"📥 `{task.downloader_id}`  →  📤 {', '.join(f'`{u}`' for u in task.uploader_ids)}")
+    lines: list[str] = []
+    lines.append(f"> 🔗 `{source_preview}`")
+    if task.downloader_id and task.uploader_ids:
+        ups = ", ".join(f"`{u}`" for u in task.uploader_ids)
+        lines.append(f"> 📥 `{task.downloader_id}`  →  📤 {ups}")
+    lines.append("")
+    lines.append(progress_block(task.progress_fraction))
+
+    if task.status in ("downloading", "uploading"):
+        if task.speed_bps > 0:
+            lines.append("")
+            lines.append(
+                f"> **Speed:** `{format_bytes(task.speed_bps)}/s`"
+            )
+            elapsed = int(time.time() - (task.started_at or time.time()))
+            lines.append(
+                f"> **Elapsed:** `{format_elapsed(elapsed)}` · "
+                f"**ETA:** `{format_eta(task.eta_sec)}`"
+            )
+
     if task.error:
         lines.append("")
-        lines.append(f"⚠️ {task.error}")
+        lines.append(f"⚠️ `{task.error}`")
+
     if task.results:
         lines.append("")
         lines.append("**Results**")
@@ -83,15 +84,15 @@ def render_task_text(task: "MLTask") -> str:
                 lines.append(f"• `{r.uploader_id}`: ✅")
             else:
                 lines.append(f"• `{r.uploader_id}`: ❌ {r.message}")
-    return "\n".join(lines)
+
+    return frame(header, "\n".join(lines))
 
 
 async def update_progress_message(client, task: "MLTask") -> None:
-    """Edit the bot-owned progress message for `task`, throttled to one
-    edit per ~3s per task. Safe to call on every chunk boundary."""
+    """Edit the bot-owned progress message for `task`, throttled so we
+    don't hammer Telegram between chunks."""
     now = time.time()
     last = _last_edit.get(task.id, 0.0)
-    # Always edit on terminal statuses so the final state is visible.
     terminal = task.status in ("done", "failed", "cancelled")
     if not terminal and now - last < _MIN_EDIT_INTERVAL:
         return
