@@ -231,7 +231,7 @@ async def get_myfiles_main_menu(user_id: int):
 
     ent_row: list[InlineKeyboardButton] = []
     if ent.get("myfiles_search"):
-        ent_row.append(InlineKeyboardButton("🔎 Suche", callback_data="mf_search_start"))
+        ent_row.append(InlineKeyboardButton("🔎 Search", callback_data="mf_search_start"))
     if ent.get("myfiles_tags"):
         ent_row.append(InlineKeyboardButton("#️⃣ Tags", callback_data="mf_tag_list"))
     if ent_row:
@@ -239,9 +239,9 @@ async def get_myfiles_main_menu(user_id: int):
 
     ent_row2: list[InlineKeyboardButton] = []
     if ent.get("myfiles_trash"):
-        ent_row2.append(InlineKeyboardButton("🗑 Papierkorb", callback_data="mf_trash_list"))
+        ent_row2.append(InlineKeyboardButton("🗑 Trash", callback_data="mf_trash_list"))
     if ent.get("myfiles_activity"):
-        ent_row2.append(InlineKeyboardButton("📊 Aktivität", callback_data="mf_activity_list"))
+        ent_row2.append(InlineKeyboardButton("📊 Activity", callback_data="mf_activity_list"))
     if ent_row2:
         buttons.append(ent_row2)
 
@@ -1420,7 +1420,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             _sharing_on = False
         share_btn = (
             InlineKeyboardButton(
-                "🔗 Share konfigurieren",
+                "🔗 Configure Share",
                 callback_data=f"mf_share_cfg_{file_id}",
             )
             if _sharing_on
@@ -1456,7 +1456,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             )
         if ent.get("myfiles_versions"):
             extras.append(
-                InlineKeyboardButton("📜 Versionen", callback_data=f"mf_ver_list_{file_id}")
+                InlineKeyboardButton("📜 Versions", callback_data=f"mf_ver_list_{file_id}")
             )
         if extras:
             buttons.append(extras)
@@ -1651,7 +1651,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
                 except Exception:
                     pass
                 await callback_query.answer(
-                    "In Papierkorb verschoben.", show_alert=True
+                    "Moved to trash.", show_alert=True
                 )
             else:
                 await db.files.delete_one({"_id": ObjectId(file_id)})

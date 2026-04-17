@@ -99,7 +99,7 @@ async def render_quota_header(user_id: int) -> str | None:
 async def trash_list(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_trash", user_id):
-        await cq.answer("Papierkorb ist deaktiviert.", show_alert=True)
+        await cq.answer("Trash is disabled.", show_alert=True)
         return
     cursor = db.files.find(
         {"user_id": user_id, "is_deleted": True}
@@ -122,13 +122,13 @@ async def trash_list(client: Client, cq: CallbackQuery) -> None:
             ),
         ])
     if count == 0:
-        body_lines = ["> Papierkorb ist leer."]
+        body_lines = ["> Trash is empty."]
     rows.append([
-        InlineKeyboardButton("🔥 Leeren", callback_data="mf_trash_empty"),
-        InlineKeyboardButton("← Zurück", callback_data="myfiles_main"),
+        InlineKeyboardButton("🔥 Empty", callback_data="mf_trash_empty"),
+        InlineKeyboardButton("← Back", callback_data="myfiles_main"),
     ])
     text = frame(
-        f"🗑 **Papierkorb** ({count})",
+        f"🗑 **Trash** ({count})",
         "\n".join(body_lines),
     )
     with contextlib.suppress(Exception):
@@ -142,11 +142,11 @@ async def trash_list(client: Client, cq: CallbackQuery) -> None:
 async def trash_restore(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_trash", user_id):
-        await cq.answer("Deaktiviert.", show_alert=True)
+        await cq.answer("Disabled.", show_alert=True)
         return
     fid = _oid(cq.data.removeprefix("mf_trash_restore_"))
     if fid is None:
-        await cq.answer("Ungültige ID.", show_alert=True)
+        await cq.answer("Invalid ID.", show_alert=True)
         return
     result = await db.files.update_one(
         {"_id": fid, "user_id": user_id, "is_deleted": True},
@@ -156,9 +156,9 @@ async def trash_restore(client: Client, cq: CallbackQuery) -> None:
     if result.modified_count:
         await db.audit_myfiles(user_id, "restore", file_id=fid)
         await db.log_myfiles_activity(user_id, "restored", file_id=fid)
-        await cq.answer("♻️ Wiederhergestellt.")
+        await cq.answer("♻️ Restored.")
     else:
-        await cq.answer("Datei nicht gefunden.", show_alert=True)
+        await cq.answer("File not found.", show_alert=True)
     await trash_list(client, cq)
 
 
@@ -166,15 +166,15 @@ async def trash_restore(client: Client, cq: CallbackQuery) -> None:
 async def trash_purge(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_trash", user_id):
-        await cq.answer("Deaktiviert.", show_alert=True)
+        await cq.answer("Disabled.", show_alert=True)
         return
     fid = _oid(cq.data.removeprefix("mf_trash_purge_"))
     if fid is None:
-        await cq.answer("Ungültige ID.", show_alert=True)
+        await cq.answer("Invalid ID.", show_alert=True)
         return
     doc = await db.files.find_one({"_id": fid, "user_id": user_id})
     if not doc:
-        await cq.answer("Datei nicht gefunden.", show_alert=True)
+        await cq.answer("File not found.", show_alert=True)
         return
     await db.files.delete_one({"_id": fid})
     await db.myfiles_incr_quota(
@@ -183,7 +183,7 @@ async def trash_purge(client: Client, cq: CallbackQuery) -> None:
         file_delta=-1,
     )
     await db.audit_myfiles(user_id, "purge", file_id=fid)
-    await cq.answer("🔥 Endgültig gelöscht.")
+    await cq.answer("🔥 Permanently deleted.")
     await trash_list(client, cq)
 
 
@@ -191,20 +191,20 @@ async def trash_purge(client: Client, cq: CallbackQuery) -> None:
 async def trash_empty(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_trash", user_id):
-        await cq.answer("Deaktiviert.", show_alert=True)
+        await cq.answer("Disabled.", show_alert=True)
         return
     # Confirmation step
     if cq.data == "mf_trash_empty":
         text = frame(
-            "🔥 **Papierkorb leeren**",
-            "> Alle Dateien werden endgültig entfernt. Sicher?",
+            "🔥 **Empty Trash**",
+            "> All files will be permanently removed. Are you sure?",
         )
         await cq.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Ja, leeren",
+                [InlineKeyboardButton("✅ Yes, empty",
                                       callback_data="mf_trash_empty_yes")],
-                [InlineKeyboardButton("← Abbrechen",
+                [InlineKeyboardButton("← Cancel",
                                       callback_data="mf_trash_list")],
             ]),
         )
@@ -215,7 +215,7 @@ async def trash_empty(client: Client, cq: CallbackQuery) -> None:
 async def trash_empty_yes(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_trash", user_id):
-        await cq.answer("Deaktiviert.", show_alert=True)
+        await cq.answer("Disabled.", show_alert=True)
         return
     aggregate = await db.files.aggregate([
         {"$match": {"user_id": user_id, "is_deleted": True}},
@@ -235,7 +235,7 @@ async def trash_empty_yes(client: Client, cq: CallbackQuery) -> None:
     await db.audit_myfiles(
         user_id, "bulk_purge", meta={"count": res.deleted_count}
     )
-    await cq.answer(f"🔥 {res.deleted_count} Dateien entfernt.")
+    await cq.answer(f"🔥 {res.deleted_count} files removed.")
     await trash_list(client, cq)
 
 
@@ -254,21 +254,21 @@ def _sanitize_tag(raw: str) -> str | None:
 async def tag_start(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_tags", user_id):
-        await cq.answer("Tags deaktiviert.", show_alert=True)
+        await cq.answer("Tags disabled.", show_alert=True)
         return
     fid = cq.data.removeprefix("mf_tag_start_")
     _pending[user_id] = {"kind": "tag_edit", "file_id": fid}
     doc = await db.files.find_one({"_id": _oid(fid), "user_id": user_id})
     tags = doc.get("tags", []) if doc else []
     body = (
-        "> Sende die Tags die du setzen willst, jeweils mit `+tag` zum\n"
-        "> Hinzufügen oder `-tag` zum Entfernen.\n"
-        f"> Aktuelle Tags: `{', '.join(tags) or '—'}`"
+        "> Send the tags you want to set. Use `+tag` to add,\n"
+        "> `-tag` to remove.\n"
+        f"> Current tags: `{', '.join(tags) or '—'}`"
     )
     await cq.message.edit_text(
-        frame("#️⃣ **Tags bearbeiten**", body),
+        frame("#️⃣ **Edit Tags**", body),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("← Abbrechen",
+            [InlineKeyboardButton("← Cancel",
                                   callback_data=f"myfiles_file_{fid}")],
         ]),
     )
@@ -279,7 +279,7 @@ async def tag_start(client: Client, cq: CallbackQuery) -> None:
 async def tag_open(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_tags", user_id):
-        await cq.answer("Tags deaktiviert.", show_alert=True)
+        await cq.answer("Tags disabled.", show_alert=True)
         return
     tag = cq.data.removeprefix("mf_tag_open_")
     cursor = db.files.find({
@@ -296,9 +296,9 @@ async def tag_open(client: Client, cq: CallbackQuery) -> None:
             callback_data=f"myfiles_file_{f['_id']}",
         )])
     if not body_lines:
-        body_lines = ["> Keine Dateien mit diesem Tag."]
+        body_lines = ["> No files carry this tag."]
     rows.append([InlineKeyboardButton(
-        "← Tag-Übersicht", callback_data="mf_tag_list"
+        "← Tag overview", callback_data="mf_tag_list"
     )])
     await cq.message.edit_text(
         frame(f"#️⃣ **Tag `{tag}`**", "\n".join(body_lines)),
@@ -311,7 +311,7 @@ async def tag_open(client: Client, cq: CallbackQuery) -> None:
 async def tag_list(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_tags", user_id):
-        await cq.answer("Tags deaktiviert.", show_alert=True)
+        await cq.answer("Tags disabled.", show_alert=True)
         return
     pipeline = [
         {"$match": {"user_id": user_id, "is_deleted": {"$ne": True}}},
@@ -323,18 +323,18 @@ async def tag_list(client: Client, cq: CallbackQuery) -> None:
     rows: list[list[InlineKeyboardButton]] = []
     body_lines: list[str] = []
     async for row in db.files.aggregate(pipeline):
-        body_lines.append(f"> #{row['_id']} — `{row['c']}` Datei(en)")
+        body_lines.append(f"> #{row['_id']} — `{row['c']}` file(s)")
         rows.append([InlineKeyboardButton(
             f"#{row['_id']} ({row['c']})",
             callback_data=f"mf_tag_open_{row['_id']}",
         )])
     if not body_lines:
-        body_lines = ["> Noch keine Tags vergeben."]
+        body_lines = ["> No tags assigned yet."]
     rows.append([InlineKeyboardButton(
-        "← Zurück", callback_data="myfiles_main"
+        "← Back", callback_data="myfiles_main"
     )])
     await cq.message.edit_text(
-        frame("#️⃣ **Tag-Übersicht**", "\n".join(body_lines)),
+        frame("#️⃣ **Tag Overview**", "\n".join(body_lines)),
         reply_markup=InlineKeyboardMarkup(rows),
     )
     await cq.answer()
@@ -348,15 +348,15 @@ async def tag_list(client: Client, cq: CallbackQuery) -> None:
 async def version_list(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_versions", user_id):
-        await cq.answer("Versioning deaktiviert.", show_alert=True)
+        await cq.answer("Versioning disabled.", show_alert=True)
         return
     fid = _oid(cq.data.removeprefix("mf_ver_list_"))
     if fid is None:
-        await cq.answer("Ungültige ID.", show_alert=True)
+        await cq.answer("Invalid ID.", show_alert=True)
         return
     current = await db.files.find_one({"_id": fid, "user_id": user_id})
     if not current:
-        await cq.answer("Datei fehlt.", show_alert=True)
+        await cq.answer("File missing.", show_alert=True)
         return
     root = current.get("version_of") or fid
     cursor = db.files.find({
@@ -373,15 +373,15 @@ async def version_list(client: Client, cq: CallbackQuery) -> None:
         )
         if not v.get("is_current_version"):
             rows.append([InlineKeyboardButton(
-                f"♻️ Zurück auf v{v.get('version_number',1)}",
+                f"♻️ Revert to v{v.get('version_number',1)}",
                 callback_data=f"mf_ver_restore_{v['_id']}",
             )])
     rows.append([InlineKeyboardButton(
-        "← Zurück zur Datei",
+        "← Back to file",
         callback_data=f"myfiles_file_{fid}",
     )])
     await cq.message.edit_text(
-        frame("📜 **Versionen**", "\n".join(body_lines) or "> —"),
+        frame("📜 **Versions**", "\n".join(body_lines) or "> —"),
         reply_markup=InlineKeyboardMarkup(rows),
     )
     await cq.answer()
@@ -391,11 +391,11 @@ async def version_list(client: Client, cq: CallbackQuery) -> None:
 async def version_restore(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_versions", user_id):
-        await cq.answer("Versioning deaktiviert.", show_alert=True)
+        await cq.answer("Versioning disabled.", show_alert=True)
         return
     target_id = _oid(cq.data.removeprefix("mf_ver_restore_"))
     if target_id is None:
-        await cq.answer("Ungültige ID.", show_alert=True)
+        await cq.answer("Invalid ID.", show_alert=True)
         return
     target = await db.files.find_one({"_id": target_id, "user_id": user_id})
     if not target:
@@ -411,7 +411,7 @@ async def version_restore(client: Client, cq: CallbackQuery) -> None:
     )
     await db.audit_myfiles(user_id, "version_restore", file_id=target_id)
     await db.log_myfiles_activity(user_id, "restored", file_id=target_id)
-    await cq.answer(f"♻️ v{target.get('version_number',1)} aktiv.")
+    await cq.answer(f"♻️ v{target.get('version_number',1)} active.")
     await version_list(client, cq)
 
 
@@ -471,7 +471,7 @@ async def _handle_tag_edit(client: Client, message: Message, pending: dict) -> N
     _drop_pending(user_id)
     await message.reply_text(
         frame(
-            "#️⃣ **Tags aktualisiert**",
+            "#️⃣ **Tags updated**",
             f"> +: `{', '.join(add) or '—'}`\n"
             f"> –: `{', '.join(rm) or '—'}`",
         )
@@ -486,20 +486,20 @@ async def _handle_tag_edit(client: Client, message: Message, pending: dict) -> N
 async def search_start(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_search", user_id):
-        await cq.answer("Suche deaktiviert.", show_alert=True)
+        await cq.answer("Search disabled.", show_alert=True)
         return
     _pending[user_id] = {"kind": "search_query"}
     body = (
-        "> Sende deine Suchanfrage. Operatoren:\n"
-        "> `tag:urlaub` `-tag:alt` `ext:mp4`\n"
+        "> Send your search query. Operators:\n"
+        "> `tag:vacation` `-tag:old` `ext:mp4`\n"
         "> `size:>500mb` `size:<1gb`\n"
         "> `before:2026-01` `after:2025-06`\n"
-        "> Freitext → Datei-Namen (Regex ok)."
+        "> Free text → filename (regex allowed)."
     )
     await cq.message.edit_text(
-        frame("🔎 **MyFiles Suche**", body),
+        frame("🔎 **MyFiles Search**", body),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("← Abbrechen", callback_data="myfiles_main")],
+            [InlineKeyboardButton("← Cancel", callback_data="myfiles_main")],
         ]),
     )
     await cq.answer()
@@ -528,14 +528,14 @@ async def _handle_search_query(client: Client, message: Message, pending: dict) 
             callback_data=f"myfiles_file_{f['_id']}",
         )])
     if not lines:
-        lines = ["> Keine Treffer."]
+        lines = ["> No matches."]
     rows.append([InlineKeyboardButton(
-        "🔎 Neue Suche", callback_data="mf_search_start",
+        "🔎 New search", callback_data="mf_search_start",
     )])
-    rows.append([InlineKeyboardButton("← Zurück", callback_data="myfiles_main")])
+    rows.append([InlineKeyboardButton("← Back", callback_data="myfiles_main")])
     await message.reply_text(
         frame(
-            f"🔎 **Suchergebnisse** ({count})",
+            f"🔎 **Search Results** ({count})",
             "\n".join(lines),
         ),
         reply_markup=InlineKeyboardMarkup(rows),
@@ -547,14 +547,14 @@ async def _handle_search_query(client: Client, message: Message, pending: dict) 
 # ---------------------------------------------------------------------------
 
 _EXPIRY_CHOICES = [
-    ("1h", "1 Stunde",  3600),
-    ("1d", "1 Tag",     86400),
-    ("7d", "7 Tage",    7 * 86400),
-    ("30d", "30 Tage",  30 * 86400),
-    ("inf", "nie",      0),
+    ("1h",  "1 hour",  3600),
+    ("1d",  "1 day",   86400),
+    ("7d",  "7 days",  7 * 86400),
+    ("30d", "30 days", 30 * 86400),
+    ("inf", "never",   0),
 ]
 _VIEW_CHOICES = [("1", 1), ("5", 5), ("25", 25), ("inf", 0)]
-_ACCESS_CHOICES = [("read", "👁 Lesen"), ("download", "⬇️ Download")]
+_ACCESS_CHOICES = [("read", "👁 View"), ("download", "⬇️ Download")]
 
 
 def _share_cfg_for(user_id: int, fid: str) -> dict:
@@ -580,11 +580,11 @@ async def _render_share_cfg(cq: CallbackQuery, fid: str) -> None:
         cfg["expiry_key"],
     )
     body = (
-        f"> **Zugriff:** {'👁 Lesen' if cfg['access']=='read' else '⬇️ Download'}\n"
-        f"> **Ablauf:** {exp_label}\n"
-        f"> **Max. Zugriffe:** "
+        f"> **Access:** {'👁 View' if cfg['access']=='read' else '⬇️ Download'}\n"
+        f"> **Expires:** {exp_label}\n"
+        f"> **Max views:** "
         f"{cfg['max_views'] if cfg['max_views'] else '∞'}\n"
-        f"> **Passwort:** {'🔒 gesetzt' if cfg['password'] else '—'}"
+        f"> **Password:** {'🔒 set' if cfg['password'] else '—'}"
     )
     rows: list[list[InlineKeyboardButton]] = []
     rows.append([
@@ -603,19 +603,19 @@ async def _render_share_cfg(cq: CallbackQuery, fid: str) -> None:
         for v_lbl, v in _VIEW_CHOICES
     ])
     rows.append([
-        InlineKeyboardButton("🔒 Passwort setzen",
+        InlineKeyboardButton("🔒 Set password",
                              callback_data=f"mf_shcfg_pwd_{fid}"),
-        InlineKeyboardButton("🧹 Passwort löschen",
+        InlineKeyboardButton("🧹 Clear password",
                              callback_data=f"mf_shcfg_pwdclr_{fid}"),
     ])
     rows.append([
-        InlineKeyboardButton("✅ Link erzeugen",
+        InlineKeyboardButton("✅ Generate link",
                              callback_data=f"mf_shcfg_done_{fid}"),
-        InlineKeyboardButton("← Zurück",
+        InlineKeyboardButton("← Back",
                              callback_data=f"myfiles_file_{fid}"),
     ])
     await cq.message.edit_text(
-        frame("🔗 **Share-Link konfigurieren**", body),
+        frame("🔗 **Configure Share Link**", body),
         reply_markup=InlineKeyboardMarkup(rows),
     )
 
@@ -624,7 +624,7 @@ async def _render_share_cfg(cq: CallbackQuery, fid: str) -> None:
 async def share_cfg_open(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_sharing", user_id):
-        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        await cq.answer("Sharing disabled.", show_alert=True)
         return
     fid = cq.data.removeprefix("mf_share_cfg_")
     _share_cfg_for(user_id, fid)
@@ -636,7 +636,7 @@ async def share_cfg_open(client: Client, cq: CallbackQuery) -> None:
 async def share_cfg_access(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_sharing", user_id):
-        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        await cq.answer("Sharing disabled.", show_alert=True)
         return
     _, _, rest = cq.data.partition("mf_shcfg_acc_")
     fid, _, mode = rest.rpartition("_")
@@ -650,13 +650,13 @@ async def share_cfg_access(client: Client, cq: CallbackQuery) -> None:
 async def share_cfg_expiry(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_sharing", user_id):
-        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        await cq.answer("Sharing disabled.", show_alert=True)
         return
     rest = cq.data.removeprefix("mf_shcfg_exp_")
     fid, _, key = rest.rpartition("_")
     secs = next((s for k, _, s in _EXPIRY_CHOICES if k == key), None)
     if secs is None:
-        await cq.answer("Unbekannte Wahl.", show_alert=True)
+        await cq.answer("Unknown choice.", show_alert=True)
         return
     cfg = _share_cfg_for(user_id, fid)
     cfg["expiry_key"] = key
@@ -669,7 +669,7 @@ async def share_cfg_expiry(client: Client, cq: CallbackQuery) -> None:
 async def share_cfg_views(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_sharing", user_id):
-        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        await cq.answer("Sharing disabled.", show_alert=True)
         return
     rest = cq.data.removeprefix("mf_shcfg_views_")
     fid, _, n = rest.rpartition("_")
@@ -683,7 +683,7 @@ async def share_cfg_views(client: Client, cq: CallbackQuery) -> None:
 async def share_cfg_pwd_prompt(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_sharing", user_id):
-        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        await cq.answer("Sharing disabled.", show_alert=True)
         return
     fid = cq.data.removeprefix("mf_shcfg_pwd_")
     _pending[user_id] = {
@@ -693,12 +693,12 @@ async def share_cfg_pwd_prompt(client: Client, cq: CallbackQuery) -> None:
     }
     await cq.message.edit_text(
         frame(
-            "🔒 **Passwort setzen**",
-            "> Sende das Passwort als nächste Nachricht.\n"
-            "> Leere Nachricht oder `cancel` bricht ab.",
+            "🔒 **Set Password**",
+            "> Send the password as the next message.\n"
+            "> Empty message or `cancel` aborts.",
         ),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("← Abbrechen",
+            [InlineKeyboardButton("← Cancel",
                                   callback_data=f"mf_share_cfg_{fid}")],
         ]),
     )
@@ -709,13 +709,13 @@ async def share_cfg_pwd_prompt(client: Client, cq: CallbackQuery) -> None:
 async def share_cfg_pwd_clear(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_sharing", user_id):
-        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        await cq.answer("Sharing disabled.", show_alert=True)
         return
     fid = cq.data.removeprefix("mf_shcfg_pwdclr_")
     cfg = _share_cfg_for(user_id, fid)
     cfg["password"] = None
     await _render_share_cfg(cq, fid)
-    await cq.answer("🧹 Passwort entfernt.")
+    await cq.answer("🧹 Password removed.")
 
 
 @Client.on_callback_query(filters.regex(r"^mf_shcfg_done_([0-9a-f]{24})$"))
@@ -724,7 +724,7 @@ async def share_cfg_done(client: Client, cq: CallbackQuery) -> None:
 
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_sharing", user_id):
-        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        await cq.answer("Sharing disabled.", show_alert=True)
         return
     fid = cq.data.removeprefix("mf_shcfg_done_")
     cfg = _share_cfg_for(user_id, fid)
@@ -754,7 +754,7 @@ async def share_cfg_done(client: Client, cq: CallbackQuery) -> None:
     }
     share_id = await db.myfiles_create_share(doc)
     if not share_id:
-        await cq.answer("Share-Link konnte nicht erzeugt werden.",
+        await cq.answer("Could not generate share link.",
                         show_alert=True)
         return
 
@@ -768,17 +768,17 @@ async def share_cfg_done(client: Client, cq: CallbackQuery) -> None:
     me = await client.get_me()
     link = f"https://t.me/{me.username}?start=share_{token}"
     body = (
-        f"> ✅ Link erzeugt\n"
-        f"> Zugriff: {'👁 Lesen' if cfg['access']=='read' else '⬇️ Download'}\n"
-        f"> Ablauf: {cfg['expiry_key']}\n"
-        f"> Max. Zugriffe: "
+        f"> ✅ Link generated\n"
+        f"> Access: {'👁 View' if cfg['access']=='read' else '⬇️ Download'}\n"
+        f"> Expires: {cfg['expiry_key']}\n"
+        f"> Max views: "
         f"{cfg['max_views'] if cfg['max_views'] else '∞'}\n\n"
         f"`{link}`"
     )
     await cq.message.edit_text(
-        frame("🔗 **Share-Link erzeugt**", body),
+        frame("🔗 **Share Link Generated**", body),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("← Datei",
+            [InlineKeyboardButton("← Back to file",
                                   callback_data=f"myfiles_file_{fid}")],
         ]),
     )
@@ -793,20 +793,20 @@ async def _handle_share_password(client: Client, message: Message, pending: dict
     raw = (message.text or "").strip()
     fid = pending.get("file_id")
     cfg = pending.get("cfg", {})
-    if raw.lower() in {"", "cancel", "abbrechen"}:
+    if raw.lower() in {"", "cancel", "abort"}:
         _drop_pending(user_id)
-        await message.reply_text("Abgebrochen.")
+        await message.reply_text("Cancelled.")
         return
     cfg["password"] = raw[:64]
     _pending[user_id] = {"kind": "share_cfg", "file_id": fid, "cfg": cfg}
     await message.reply_text(
         frame(
-            "🔒 **Passwort gesetzt**",
-            "> Kehre über die Datei zurück zum Konfigurator, um den\n"
-            "> Link zu erzeugen.",
+            "🔒 **Password Set**",
+            "> Reopen the share configurator on the file to generate\n"
+            "> the link.",
         ),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Weiter zum Share-Konfigurator",
+            [InlineKeyboardButton("🔗 Back to share configurator",
                                   callback_data=f"mf_share_cfg_{fid}")],
         ]),
     )
@@ -834,23 +834,23 @@ def _fmt_event_time(dt: datetime.datetime) -> str:
     if delta.days >= 7:
         return dt.strftime("%Y-%m-%d")
     if delta.days >= 1:
-        return f"vor {delta.days} Tag(en)"
+        return f"{delta.days}d ago"
     minutes = int(delta.total_seconds() // 60)
     if minutes < 1:
-        return "gerade eben"
+        return "just now"
     if minutes < 60:
-        return f"vor {minutes} min"
-    return f"vor {minutes // 60} h"
+        return f"{minutes}m ago"
+    return f"{minutes // 60}h ago"
 
 
 @Client.on_callback_query(filters.regex(r"^mf_activity_list$"))
 async def activity_list(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_activity", user_id):
-        await cq.answer("Aktivität deaktiviert.", show_alert=True)
+        await cq.answer("Activity disabled.", show_alert=True)
         return
     if db.myfiles_activity is None:
-        await cq.answer("DB offline.", show_alert=True)
+        await cq.answer("Database offline.", show_alert=True)
         return
     cursor = db.myfiles_activity.find({"user_id": user_id}).sort("created_at", -1).limit(50)
     lines: list[str] = []
@@ -863,11 +863,11 @@ async def activity_list(client: Client, cq: CallbackQuery) -> None:
         ref = f"`{str(fid)[:10]}`" if fid else ""
         lines.append(f"> {icon} `{ev.get('event','?')}` {ref} · {when}")
     if not lines:
-        lines = ["> Noch keine Aktivität."]
+        lines = ["> No activity yet."]
     await cq.message.edit_text(
-        frame(f"📊 **Aktivität** ({count})", "\n".join(lines)),
+        frame(f"📊 **Activity** ({count})", "\n".join(lines)),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("← Zurück", callback_data="myfiles_main")],
+            [InlineKeyboardButton("← Back", callback_data="myfiles_main")],
         ]),
     )
     await cq.answer()
@@ -933,21 +933,21 @@ async def _selected_file_oids(user_id: int) -> list[ObjectId]:
 async def bulk_tag_start(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_bulk", user_id):
-        await cq.answer("Bulk-Ops deaktiviert.", show_alert=True)
+        await cq.answer("Bulk ops disabled.", show_alert=True)
         return
     ids = await _selected_file_oids(user_id)
     if not ids:
-        await cq.answer("Nichts ausgewählt.", show_alert=True)
+        await cq.answer("Nothing selected.", show_alert=True)
         return
     _pending[user_id] = {"kind": "bulk_tag", "oids": [str(i) for i in ids]}
     await cq.message.edit_text(
         frame(
-            "#️⃣ **Bulk-Tag**",
-            f"> Setzt Tags auf **{len(ids)}** Datei(en).\n"
-            "> Syntax wie beim Einzel-Tag: `+foo -bar`.",
+            "#️⃣ **Bulk Tag**",
+            f"> Applies tags to **{len(ids)}** file(s).\n"
+            "> Same syntax as the single-file editor: `+foo -bar`.",
         ),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("← Abbrechen", callback_data="myfiles_main")],
+            [InlineKeyboardButton("← Cancel", callback_data="myfiles_main")],
         ]),
     )
     await cq.answer()
@@ -986,8 +986,8 @@ async def _handle_bulk_tag(client: Client, message: Message, pending: dict) -> N
     )
     await message.reply_text(
         frame(
-            "#️⃣ **Bulk-Tag abgeschlossen**",
-            f"> Geändert: **{len(oids)}** Datei(en)\n"
+            "#️⃣ **Bulk Tag Complete**",
+            f"> Updated: **{len(oids)}** file(s)\n"
             f"> +: `{', '.join(add) or '—'}`\n"
             f"> –: `{', '.join(rm) or '—'}`",
         )
@@ -998,35 +998,35 @@ async def _handle_bulk_tag(client: Client, message: Message, pending: dict) -> N
 async def bulk_pin(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_bulk", user_id):
-        await cq.answer("Bulk-Ops deaktiviert.", show_alert=True)
+        await cq.answer("Bulk ops disabled.", show_alert=True)
         return
     ids = await _selected_file_oids(user_id)
     if not ids:
-        await cq.answer("Nichts ausgewählt.", show_alert=True)
+        await cq.answer("Nothing selected.", show_alert=True)
         return
     res = await db.files.update_many(
         {"_id": {"$in": ids}, "user_id": user_id},
         {"$set": {"pinned": True}},
     )
     await db.audit_myfiles(user_id, "bulk_pin", meta={"count": res.modified_count})
-    await cq.answer(f"📌 {res.modified_count} gepinnt.", show_alert=True)
+    await cq.answer(f"📌 Pinned {res.modified_count}.", show_alert=True)
 
 
 @Client.on_callback_query(filters.regex(r"^mf_bulk_unpin$"))
 async def bulk_unpin(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_bulk", user_id):
-        await cq.answer("Bulk-Ops deaktiviert.", show_alert=True)
+        await cq.answer("Bulk ops disabled.", show_alert=True)
         return
     ids = await _selected_file_oids(user_id)
     if not ids:
-        await cq.answer("Nichts ausgewählt.", show_alert=True)
+        await cq.answer("Nothing selected.", show_alert=True)
         return
     res = await db.files.update_many(
         {"_id": {"$in": ids}, "user_id": user_id},
         {"$set": {"pinned": False}},
     )
-    await cq.answer(f"📌 {res.modified_count} entpinnt.", show_alert=True)
+    await cq.answer(f"📌 Unpinned {res.modified_count}.", show_alert=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1037,7 +1037,7 @@ async def bulk_unpin(client: Client, cq: CallbackQuery) -> None:
 async def smart_list(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_smart", user_id):
-        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        await cq.answer("Smart Collections disabled.", show_alert=True)
         return
     cursor = db.folders.find({
         "user_id": user_id,
@@ -1057,14 +1057,14 @@ async def smart_list(client: Client, cq: CallbackQuery) -> None:
         )])
     if not body_lines:
         body_lines = [
-            "> Noch keine Smart Collections.\n"
-            "> Tippe auf **Erstellen** um deine erste Regel anzulegen."
+            "> No Smart Collections yet.\n"
+            "> Tap **Create** to add your first rule."
         ]
     rows.append([InlineKeyboardButton(
-        "➕ Erstellen", callback_data="mf_smart_create_start"
+        "➕ Create", callback_data="mf_smart_create_start"
     )])
     rows.append([InlineKeyboardButton(
-        "← Zurück", callback_data="myfiles_main"
+        "← Back", callback_data="myfiles_main"
     )])
     await cq.message.edit_text(
         frame("🧠 **Smart Collections**", "\n".join(body_lines)),
@@ -1077,24 +1077,24 @@ async def smart_list(client: Client, cq: CallbackQuery) -> None:
 async def smart_create_start(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_smart", user_id):
-        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        await cq.answer("Smart Collections disabled.", show_alert=True)
         return
     _pending[user_id] = {"kind": "smart_create"}
     body = (
-        "> Sende zwei Zeilen:\n"
-        "> 1. **Name** der Collection\n"
-        "> 2. **Regel** — Syntax wie in der Suche\n"
-        "> (`tag:urlaub`, `size:>500mb`, `ext:mp4`, …)\n\n"
-        "> Beispiel:\n"
+        "> Send two lines:\n"
+        "> 1. **Name** of the collection\n"
+        "> 2. **Rule** — same syntax as the search DSL\n"
+        "> (`tag:vacation`, `size:>500mb`, `ext:mp4`, …)\n\n"
+        "> Example:\n"
         "> ```\n"
-        "> Große Videos\n"
+        "> Large Videos\n"
         "> ext:mp4 size:>500mb\n"
         "> ```"
     )
     await cq.message.edit_text(
-        frame("🧠 **Neue Smart Collection**", body),
+        frame("🧠 **New Smart Collection**", body),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("← Abbrechen", callback_data="mf_smart_list")],
+            [InlineKeyboardButton("← Cancel", callback_data="mf_smart_list")],
         ]),
     )
     await cq.answer()
@@ -1108,7 +1108,7 @@ async def _handle_smart_create(client: Client, message: Message, pending: dict) 
     lines = [line.strip() for line in (message.text or "").splitlines() if line.strip()]
     if len(lines) < 2:
         await message.reply_text(
-            "⚠️ Bitte Name **und** Regel senden (zwei Zeilen)."
+            "⚠️ Please send both **name** and **rule** (two lines)."
         )
         return
     name, rule = lines[0][:60], lines[1][:200]
@@ -1131,14 +1131,14 @@ async def _handle_smart_create(client: Client, message: Message, pending: dict) 
     )
     await message.reply_text(
         frame(
-            "🧠 **Smart Collection erstellt**",
+            "🧠 **Smart Collection Created**",
             f"> **Name:** `{name}`\n"
-            f"> **Regel:** `{rule}`",
+            f"> **Rule:** `{rule}`",
         ),
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🧠 Öffnen",
+            [InlineKeyboardButton("🧠 Open",
                                   callback_data=f"mf_smart_open_{res.inserted_id}")],
-            [InlineKeyboardButton("← Übersicht",
+            [InlineKeyboardButton("← Overview",
                                   callback_data="mf_smart_list")],
         ]),
     )
@@ -1149,23 +1149,23 @@ async def smart_open(client: Client, cq: CallbackQuery) -> None:
     from utils.myfiles_search import build_query
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_smart", user_id):
-        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        await cq.answer("Smart Collections disabled.", show_alert=True)
         return
     fid = _oid(cq.data.removeprefix("mf_smart_open_"))
     if fid is None:
-        await cq.answer("Ungültige ID.", show_alert=True)
+        await cq.answer("Invalid ID.", show_alert=True)
         return
     folder = await db.folders.find_one({
         "_id": fid, "user_id": user_id, "type": "smart"
     })
     if not folder:
-        await cq.answer("Collection fehlt.", show_alert=True)
+        await cq.answer("Collection missing.", show_alert=True)
         return
     rule = folder.get("smart_rule_text") or folder.get("description", "")
     q = build_query(rule, user_id=user_id)
     cursor = db.files.find(q).sort("created_at", -1).limit(30)
     rows: list[list[InlineKeyboardButton]] = []
-    body: list[str] = [f"> **Regel:** `{rule}`", ""]
+    body: list[str] = [f"> **Rule:** `{rule}`", ""]
     count = 0
     async for f in cursor:
         count += 1
@@ -1177,11 +1177,11 @@ async def smart_open(client: Client, cq: CallbackQuery) -> None:
             callback_data=f"myfiles_file_{f['_id']}",
         )])
     if count == 0:
-        body.append("> — Keine passenden Dateien. —")
+        body.append("> — No matching files. —")
     rows.append([
-        InlineKeyboardButton("🔥 Löschen",
+        InlineKeyboardButton("🔥 Delete",
                              callback_data=f"mf_smart_del_{fid}"),
-        InlineKeyboardButton("← Zurück",
+        InlineKeyboardButton("← Back",
                              callback_data="mf_smart_list"),
     ])
     await cq.message.edit_text(
@@ -1198,17 +1198,17 @@ async def smart_open(client: Client, cq: CallbackQuery) -> None:
 async def smart_delete(client: Client, cq: CallbackQuery) -> None:
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_smart", user_id):
-        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        await cq.answer("Smart Collections disabled.", show_alert=True)
         return
     fid = _oid(cq.data.removeprefix("mf_smart_del_"))
     if fid is None:
-        await cq.answer("Ungültige ID.", show_alert=True)
+        await cq.answer("Invalid ID.", show_alert=True)
         return
     await db.folders.delete_one({
         "_id": fid, "user_id": user_id, "type": "smart"
     })
     await db.audit_myfiles(user_id, "smart_delete", folder_id=fid)
-    await cq.answer("🔥 Gelöscht.")
+    await cq.answer("🔥 Deleted.")
     cq.data = "mf_smart_list"
     await smart_list(client, cq)
 

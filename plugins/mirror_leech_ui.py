@@ -344,11 +344,17 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
             summary_lines.append(f"• `{task.id}` — queued")
 
             async def _runner(t: MLTask) -> None:
-                await run_task(
-                    t,
-                    client,
-                    progress_cb=lambda current: update_progress_message(client, current),
-                )
+                try:
+                    await run_task(
+                        t,
+                        client,
+                        progress_cb=lambda current: update_progress_message(client, current),
+                    )
+                except Exception as exc:
+                    t.status = "failed"
+                    t.error = str(exc)
+                    await update_progress_message(client, t)
+                    raise
                 await update_progress_message(client, t)
 
             try:
@@ -358,7 +364,7 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
                     "enqueue failed for batch task %s", task.id
                 )
                 summary_lines.append(
-                    f"  ⚠️ `{task.id}` konnte nicht gestartet werden: {exc}"
+                    f"  ⚠️ `{task.id}` could not be started: {exc}"
                 )
 
         ContextStore.drop(cid)
@@ -400,12 +406,21 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
     ContextStore.drop(cid)
 
     async def _runner(t: MLTask) -> None:
-        await run_task(
-            t,
-            client,
-            progress_cb=lambda current: update_progress_message(client, current),
-        )
-        # Final render — terminal states always flush.
+        # Always flush the UI with the real terminal state — run_task
+        # propagates downloader / uploader exceptions without mutating
+        # `status`, so we set it here before the final edit. Otherwise
+        # the message stays stuck at "Downloading" forever.
+        try:
+            await run_task(
+                t,
+                client,
+                progress_cb=lambda current: update_progress_message(client, current),
+            )
+        except Exception as exc:
+            t.status = "failed"
+            t.error = str(exc)
+            await update_progress_message(client, t)
+            raise
         await update_progress_message(client, t)
 
     try:
@@ -418,7 +433,7 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
         logger.exception("enqueue failed for task %s", task.id)
         try:
             await callback_query.message.edit_text(
-                f"❌ Konnte Task nicht starten: `{exc}`"
+                f"❌ Could not start task: `{exc}`"
             )
         except Exception:
             pass
