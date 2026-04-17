@@ -782,7 +782,7 @@ async def ml_cfg_paste_start(client: Client, callback_query: CallbackQuery) -> N
     await callback_query.answer()
     try:
         await callback_query.message.edit_text(
-            f"✏️ **Link {provider}**\n\n" + fmt["prompt"] + "\n\n_Send the next message in this chat._",
+            f"✏️ **Link {provider}**\n\n" + fmt["prompt"] + "\n\n__Send the next message in this chat.__",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data=f"ml_cfg_up_{provider}")]]
             ),
