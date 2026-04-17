@@ -5,6 +5,7 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free # Free tier by default, does not require a credit card
     envVars:
+      # --- Required ---
       - key: API_ID
         sync: false
       - key: API_HASH
@@ -15,9 +16,19 @@ services:
         sync: false
       - key: CEO_ID
         sync: false
-      - key: TMDB_API_KEY
+      # --- Optional ---
+      - key: ADMIN_IDS
         sync: false
       - key: PUBLIC_MODE
+        value: "false"
+      - key: DEBUG_MODE
+        value: "false"
+      # TMDb is optional — enables title matching, posters, auto-routing.
+      # Free key at https://www.themoviedb.org/settings/api
+      - key: TMDB_API_KEY
         sync: false
-      - key: ADMIN_IDS
+      # Fernet key for Mirror-Leech provider credentials. Required only
+      # when you enable Mirror-Leech. Generate with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      - key: SECRETS_KEY
         sync: false

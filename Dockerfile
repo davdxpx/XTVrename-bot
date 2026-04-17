@@ -9,6 +9,8 @@ WORKDIR /app
 # git is often needed for some python packages
 # gcc and python3-dev are required to build TgCrypto on ARM architectures
 # p7zip-full is required for unpacking rar/zip/7z archives
+# rclone is required for the Mirror-Leech rclone uploader (covers 70+
+# cloud backends). Safe to keep installed even when Mirror-Leech is off.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     git \
@@ -16,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     p7zip-full \
     aria2 \
+    rclone \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 

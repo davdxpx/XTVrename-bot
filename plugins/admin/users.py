@@ -8,9 +8,9 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from config import Config
 from database import db
 from utils.log import get_logger
-from plugins.admin_legacy import admin_sessions
+from plugins.admin.core import admin_sessions
 
-logger = get_logger("plugins.admin_users")
+logger = get_logger("plugins.admin.users")
 
 # === Helper Functions ===
 def is_admin(user_id):
@@ -331,6 +331,68 @@ async def action_export_json(client, callback):
     )
 
     await show_users_menu(client, callback)
+
+
+# ---------------------------------------------------------------------------
+# Text-input state handlers (registered with text_dispatcher)
+# ---------------------------------------------------------------------------
+async def _handle_search_query(client, message, state, state_obj, msg_id):
+    """Handle wait_search_query state."""
+    user_id = message.from_user.id
+    query = message.text.strip()
+    results = await db.search_users(query)
+
+    if not results:
+        await message.reply("❌ No users found.", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Try Again", callback_data="admin_user_search_start")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="admin_users_menu")]
+        ]))
+        admin_sessions.pop(user_id, None)
+        return
+
+    text = f"**🔍 Search Results: '{query}'**\n\n"
+    markup = []
+    for u in results[:10]:
+        uid = u.get("user_id")
+        name = u.get("first_name") or "Unknown"
+        name = name[:15]
+        uname = f"(@{u.get('username')})" if u.get("username") else ""
+        markup.append([InlineKeyboardButton(f"{name} {uname} ({uid})", callback_data=f"view_user|{uid}")])
+
+    markup.append([InlineKeyboardButton("← Back to User Management", callback_data="admin_users_menu")])
+    await message.reply(text, reply_markup=InlineKeyboardMarkup(markup))
+    admin_sessions.pop(user_id, None)
+
+
+async def _handle_add_prem_days(client, message, state, state_obj, msg_id):
+    """Handle wait_add_prem_days dict state."""
+    user_id = message.from_user.id
+    try:
+        days = float(message.text.strip())
+        uid = state_obj["target_id"]
+        plan = state_obj.get("plan", "standard")
+        await db.add_premium_user(uid, days, plan=plan)
+        await db.add_log("add_premium", user_id, f"Added {days} days premium ({plan}) to {uid}")
+
+        await message.reply(
+            f"✅ **Success!**\nUser `{uid}` has received {days} days of Premium ({plan}).",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Profile", callback_data=f"view_user|{uid}")]])
+        )
+        admin_sessions.pop(user_id, None)
+    except ValueError:
+        await message.reply("❌ Invalid number. Enter days (e.g. 30).",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{state_obj['target_id']}")]])
+        )
+
+
+def _check_add_prem_days(state, state_obj):
+    return isinstance(state_obj, dict) and state_obj.get("state") == "wait_add_prem_days"
+
+
+from plugins.admin.text_dispatcher import register as _register
+_register("wait_search_query", _handle_search_query)
+_register(_check_add_prem_days, _handle_add_prem_days)
+
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
