@@ -198,6 +198,56 @@ async def ml_admin_providers(client: Client, callback_query: CallbackQuery) -> N
         pass
 
 
+@Client.on_callback_query(filters.regex(r"^ml_admin_gen_secrets$"))
+async def ml_admin_generate_secrets(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Generate a fresh Fernet key in one tap and walk the operator through
+    installing it. The bot CANNOT write env vars at runtime on hosted
+    platforms, so the flow is: generate → show → operator pastes into
+    env / Render-secret-vars / fly secrets → restart."""
+    if not is_admin(callback_query.from_user.id):
+        await callback_query.answer("Not authorised.", show_alert=True)
+        return
+
+    if Secrets.is_available():
+        await callback_query.answer(
+            "SECRETS_KEY is already set — generating a new one would invalidate "
+            "every stored credential.",
+            show_alert=True,
+        )
+        return
+
+    try:
+        new_key = Secrets.generate_key()
+    except Exception as exc:
+        logger.exception("Fernet key generation failed")
+        await callback_query.answer(f"Couldn't generate a key: {exc}", show_alert=True)
+        return
+
+    instructions = (
+        "🔐 **Your new SECRETS_KEY**\n\n"
+        f"`{new_key}`\n\n"
+        "**Install it** (pick one that matches your host):\n"
+        "> • `.env` file: add `SECRETS_KEY=<paste>`\n"
+        "> • Render / Railway / Koyeb / Zeabur: add it under Env Vars\n"
+        "> • Heroku: `heroku config:set SECRETS_KEY=<paste>`\n"
+        "> • Fly.io: `fly secrets set SECRETS_KEY=<paste>`\n"
+        "> • Docker: rebuild / re-run with `-e SECRETS_KEY=<paste>`\n\n"
+        "Then restart the bot and come back here to enable Mirror-Leech.\n\n"
+        "⚠️ **Back this key up.** Losing it means every user has to re-link "
+        "their providers."
+    )
+
+    try:
+        await callback_query.message.reply_text(instructions)
+    except Exception as exc:
+        logger.warning("Could not post generated key: %s", exc)
+    await callback_query.answer(
+        "Key generated — copy it from the message below.", show_alert=True
+    )
+
+
 @Client.on_callback_query(filters.regex(r"^ml_admin_toggle$"))
 async def ml_admin_toggle(client: Client, callback_query: CallbackQuery) -> None:
     if not is_admin(callback_query.from_user.id):
