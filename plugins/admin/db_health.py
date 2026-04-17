@@ -110,6 +110,11 @@ async def _render_health(callback_query: CallbackQuery):
                 f"• `{entry['key']}` on `{entry['doc_id']}` ({entry['op']})"
             )
 
+    lines.append("")
+    lines.append(
+        f"_Last refreshed: {_dt.datetime.utcnow().strftime('%H:%M:%S UTC')}_"
+    )
+
     keyboard = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("🔁 Re-run migration (dry-run)", callback_data="admin_db_health_dry_run")],
@@ -200,9 +205,20 @@ async def db_health_callback(client, callback_query: CallbackQuery):
     data = callback_query.data
     if data == "admin_db_health":
         await _render_health(callback_query)
+        # Always ack so Telegram drops the loading spinner, even when the
+        # message content happened to be identical (MessageNotModified was
+        # swallowed in _render_health).
+        try:
+            await callback_query.answer("Refreshed.")
+        except Exception:
+            pass
     elif data == "admin_db_health_dry_run":
         await _run_dry_run(callback_query)
     elif data == "admin_db_health_drop_backups":
         await _render_drop_confirm(callback_query)
+        try:
+            await callback_query.answer()
+        except Exception:
+            pass
     elif data == "admin_db_health_drop_backups_confirm":
         await _run_drop_backups(callback_query)
