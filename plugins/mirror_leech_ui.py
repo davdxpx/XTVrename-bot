@@ -310,7 +310,7 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
             return
         summary_lines = [
             f"> 🗃 Queued **{len(sources)}** file(s) →",
-            f"> 📤 " + ", ".join(f"`{u}`" for u in ctx.selected_uploaders),
+            "> 📤 " + ", ".join(f"`{u}`" for u in ctx.selected_uploaders),
             "",
         ]
         first_task_id: str | None = None

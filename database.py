@@ -1,6 +1,7 @@
 # --- Imports ---
-import time
+import contextlib
 import datetime
+import time
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import Config
 from utils.log import get_logger
@@ -1453,10 +1454,8 @@ class Database:
             "file_count_quota": 0,
             "last_recalculated_at": datetime.datetime.utcnow(),
         }
-        try:
+        with contextlib.suppress(Exception):
             await self.myfiles_quotas.insert_one(default)
-        except Exception:
-            pass
         return default
 
     async def myfiles_incr_quota(
