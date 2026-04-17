@@ -75,7 +75,19 @@ async def run_task(task: MLTask, client: Any, progress_cb: Optional[Any] = None)
     during the download (the downloader itself throttles). Callers
     typically pass `lambda t: ProgressRender.update_progress_message(client, t)`.
     """
-    _TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+    logger.info(
+        "run_task start: task=%s downloader=%s source=%s uploaders=%s",
+        task.id, task.downloader_id, task.source[:80], task.uploader_ids,
+    )
+    try:
+        _TEMP_ROOT.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.exception(
+            "run_task %s: cannot create temp root %s", task.id, _TEMP_ROOT
+        )
+        task.status = "failed"
+        task.error = f"temp dir unavailable: {exc}"
+        raise
     temp_dir = Path(tempfile.mkdtemp(prefix=f"{task.id}-", dir=str(_TEMP_ROOT)))
     ctx = _make_context(task, client, temp_dir)
 
@@ -100,8 +112,14 @@ async def run_task(task: MLTask, client: Any, progress_cb: Optional[Any] = None)
     local_file: Optional[Path] = None
     try:
         downloader_cls = await _resolve_downloader(task)
+        logger.info(
+            "run_task %s: resolved downloader=%s", task.id, downloader_cls.id
+        )
         downloader = downloader_cls()
         local_file = await downloader.download(ctx)
+        logger.info(
+            "run_task %s: download finished -> %s", task.id, local_file
+        )
 
         if task.cancel_event.is_set():
             task.status = "cancelled"

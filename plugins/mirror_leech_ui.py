@@ -332,7 +332,15 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
                 )
                 await update_progress_message(client, t)
 
-            ml_worker_pool.enqueue(task, _runner)
+            try:
+                ml_worker_pool.enqueue(task, _runner)
+            except Exception as exc:
+                logger.exception(
+                    "enqueue failed for batch task %s", task.id
+                )
+                summary_lines.append(
+                    f"  ⚠️ `{task.id}` konnte nicht gestartet werden: {exc}"
+                )
 
         ContextStore.drop(cid)
         # Replace the picker with a batch-summary header.
@@ -378,7 +386,20 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
         # Final render — terminal states always flush.
         await update_progress_message(client, t)
 
-    ml_worker_pool.enqueue(task, _runner)
+    try:
+        ml_worker_pool.enqueue(task, _runner)
+        logger.info(
+            "ml_start_task queued single task %s for user %s",
+            task.id, ctx.user_id,
+        )
+    except Exception as exc:
+        logger.exception("enqueue failed for task %s", task.id)
+        try:
+            await callback_query.message.edit_text(
+                f"❌ Konnte Task nicht starten: `{exc}`"
+            )
+        except Exception:
+            pass
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cancel_([0-9a-f]{6,16})$"))
