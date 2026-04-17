@@ -63,8 +63,14 @@ VIRTUAL_GLOBAL_SETTINGS = "global_settings"
 VIRTUAL_PUBLIC_MODE_CONFIG = "public_mode_config"
 VIRTUAL_DOC_IDS = {VIRTUAL_GLOBAL_SETTINGS, VIRTUAL_PUBLIC_MODE_CONFIG}
 
-# All real Settings docs that the shim merges when reading a virtual doc ID.
+# All real Settings docs that the shim merges when reading a virtual doc
+# ID. The order matters — the merge iterates in this exact sequence and
+# later docs overwrite earlier ones on key collision. LEGACY_MISC_DOC_ID
+# is listed first so authoritative per-concern docs always win over
+# leftover data from older deployments (keys that used to land in
+# legacy_misc before the dotted-key routing landed).
 MERGED_GLOBAL_DOCS = (
+    LEGACY_MISC_DOC_ID,
     DOC_BRANDING,
     DOC_FORCE_SUB,
     DOC_PAYMENTS,
@@ -77,7 +83,6 @@ MERGED_GLOBAL_DOCS = (
     DOC_DUMB_CHANNELS_GLOBAL,
     DOC_FEATURE_TOGGLES,
     DOC_BLOCKED_USERS,
-    LEGACY_MISC_DOC_ID,
 )
 
 # Heavy fields that must NOT be merged into virtual-doc reads (avoid blowing
