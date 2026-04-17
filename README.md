@@ -214,14 +214,39 @@ through to a generic "unsupported source" message.
 
 Provider credentials are Fernet-encrypted at rest with `SECRETS_KEY`
 (required — the bot refuses to store plaintext). Back the key up before
-handing out logins — losing it means every user has to re-link their
+handing out logins; losing it means every user has to re-link their
 providers.
 
-Generate one with:
+**Easiest path — from inside the bot** (no CLI needed):
+
+1. `/admin → 🩺 System Health & Statuses → ☁️ Mirror-Leech Config`
+2. Tap **🎲 Generate SECRETS_KEY**. The bot posts a fresh key plus
+   copy-paste instructions for every supported host (.env, Render,
+   Railway, Koyeb, Zeabur, Heroku, Fly, Docker).
+3. Install the key per your host, restart the bot, then tap
+   **✅ Enable Mirror-Leech**.
+
+**Manual alternative** (if you prefer a one-liner on your machine):
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
+
+### Admin layout
+
+Operator panels for schema migrations, TMDb, and Mirror-Leech live
+under a single entry so the main admin menu stays compact:
+
+```
+/admin → 🩺 System Health & Statuses
+         ├─ 🩺 DB Schema Health
+         ├─ 🎬 TMDb Status
+         └─ ☁️ Mirror-Leech Config
+```
+
+The root status screens collapse into a short blockquote summary once
+everything is configured — full onboarding copy only shows up while a
+piece is still missing.
 
 ---
 
