@@ -424,7 +424,8 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
+        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu"),
+        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
     user_settings = await db.get_settings(user_id)
@@ -736,7 +737,7 @@ async def handle_subtitle_command(client, message):
     mock_cb.message = msg
     await handle_subtitle_extractor_menu(client, mock_cb)
 
-@Client.on_message(filters.command(["t", "trim"]) & filters.private, group=0)
+@Client.on_message(filters.command(["trim"]) & filters.private, group=0)
 async def handle_trim_command(client, message):
     user_id = message.from_user.id
 
@@ -888,6 +889,43 @@ async def handle_videonote_command(client, message):
     mock_cb.message = msg
     await handle_video_note_menu(client, mock_cb)
 
+@Client.on_message(filters.command(["t", "torrent"]) & filters.private, group=0)
+async def handle_torrent_command(client, message):
+    user_id = message.from_user.id
+
+    toggles = await db.get_feature_toggles()
+    allowed = toggles.get("torrent_downloader", True)
+
+    if Config.PUBLIC_MODE and not allowed:
+        user_doc = await db.get_user(user_id)
+        if user_doc and user_doc.get("is_premium"):
+            plan_name = user_doc.get("premium_plan", "standard")
+            config = await db.get_public_config()
+            if config.get("premium_system_enabled", False):
+                plan_settings = config.get(f"premium_{plan_name}", {})
+                if plan_settings.get("features", {}).get("torrent_downloader", False):
+                    allowed = True
+
+    if not allowed:
+        await message.reply_text("❌ This feature is currently disabled by the Admin.")
+        return
+
+    from tools.TorrentDownloader import handle_torrent_menu
+    await track_tool_usage(user_id, "torrent_downloader")
+
+    class MockCallbackQuery:
+        def __init__(self, message):
+            self.message = message
+            self.from_user = message.from_user
+            self.data = "torrent_downloader_menu"
+
+        async def answer(self, *args, **kwargs):
+            pass
+
+    mock_cb = MockCallbackQuery(message)
+    msg = await message.reply_text("Loading Torrent Downloader...")
+    mock_cb.message = msg
+    await handle_torrent_menu(client, mock_cb)
 
 @Client.on_message(filters.command("end") & filters.private, group=0)
 async def handle_end_command_unique(client, message):
@@ -954,7 +992,8 @@ async def handle_other_features_menu(client, callback_query):
         "media_info": ("ℹ️ Media Info", "media_info_menu"),
         "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
         "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu")
+        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu"),
+        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
     }
 
     buttons = []
@@ -982,7 +1021,6 @@ async def handle_other_features_menu(client, callback_query):
         )
     except MessageNotModified:
         pass
-
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
