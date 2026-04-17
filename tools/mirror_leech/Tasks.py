@@ -123,10 +123,19 @@ class MLWorkerPool:
     ) -> None:
         self.max_concurrent_per_user = max_concurrent_per_user
         self.max_global_concurrent = max_global_concurrent
-        self._global_sem = asyncio.Semaphore(max_global_concurrent)
+        # Lazy-initialized on first enqueue inside the running event loop.
+        # Creating Semaphores at module-import time would bind them to a
+        # loop that is not the one Pyrogram later runs on, silently stalling
+        # every `async with sem` in production.
+        self._global_sem: asyncio.Semaphore | None = None
         self._user_sems: dict[int, asyncio.Semaphore] = {}
         self._tasks: dict[str, MLTask] = {}
         self._running: dict[str, asyncio.Task] = {}
+
+    def _ensure_global_sem(self) -> asyncio.Semaphore:
+        if self._global_sem is None:
+            self._global_sem = asyncio.Semaphore(self.max_global_concurrent)
+        return self._global_sem
 
     # ----- lookup ---------------------------------------------------------
 
@@ -166,26 +175,63 @@ class MLWorkerPool:
         callable supplied by the controller (dependency injection keeps
         this module framework-agnostic)."""
         self._tasks[task.id] = task
+        logger.info(
+            "Enqueue MLTask %s: user=%s downloader=%s uploaders=%s src=%s",
+            task.id, task.user_id, task.downloader_id,
+            task.uploader_ids, task.source[:80],
+        )
+
+        global_sem = self._ensure_global_sem()
+        user_sem = self._user_sem(task.user_id)
 
         async def _wrapped():
-            async with self._global_sem, self._user_sem(task.user_id):
-                task.started_at = time.time()
-                try:
-                    await runner(task)
-                    if task.status not in ("failed", "cancelled"):
-                        task.status = "done"
-                except asyncio.CancelledError:
-                    task.status = "cancelled"
-                    raise
-                except Exception as exc:
-                    logger.exception("MLTask %s failed", task.id)
-                    task.status = "failed"
-                    task.error = str(exc)
-                finally:
-                    task.finished_at = time.time()
-                    self._running.pop(task.id, None)
+            try:
+                async with global_sem, user_sem:
+                    task.started_at = time.time()
+                    logger.info("MLTask %s acquired slots, running", task.id)
+                    try:
+                        await runner(task)
+                        if task.status not in ("failed", "cancelled"):
+                            task.status = "done"
+                    except asyncio.CancelledError:
+                        task.status = "cancelled"
+                        raise
+                    except Exception as exc:
+                        logger.exception("MLTask %s failed", task.id)
+                        task.status = "failed"
+                        task.error = str(exc)
+                    finally:
+                        task.finished_at = time.time()
+                        self._running.pop(task.id, None)
+            except asyncio.CancelledError:
+                task.status = "cancelled"
+                task.finished_at = time.time()
+                self._running.pop(task.id, None)
+                raise
+            except Exception as exc:
+                # Defense in depth: catch setup errors (semaphore acquisition,
+                # etc.) that would otherwise crash the asyncio Task silently.
+                logger.exception(
+                    "MLTask %s crashed before runner: %s", task.id, exc
+                )
+                task.status = "failed"
+                task.error = f"pipeline setup failed: {exc}"
+                task.finished_at = time.time()
+                self._running.pop(task.id, None)
 
-        self._running[task.id] = asyncio.create_task(_wrapped())
+        at = asyncio.create_task(_wrapped())
+
+        def _log_done(t: asyncio.Task) -> None:
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is not None:
+                logger.error(
+                    "MLTask %s asyncio-level exception: %r", task.id, exc
+                )
+
+        at.add_done_callback(_log_done)
+        self._running[task.id] = at
 
     def cancel(self, task_id: str) -> bool:
         task = self._tasks.get(task_id)

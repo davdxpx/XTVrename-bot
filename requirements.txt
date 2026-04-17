@@ -13,3 +13,7 @@ yt-dlp>=2025.1.15
 # Fernet for Mirror-Leech provider credential encryption (Secrets.py)
 # and the /admin → Mirror-Leech Config → Generate SECRETS_KEY button.
 cryptography>=42.0.0
+# Mirror-Leech downloaders
+aria2p>=0.12.0
+gallery-dl>=1.27.0
+feedparser>=6.0.11

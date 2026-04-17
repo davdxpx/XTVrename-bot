@@ -43,6 +43,7 @@ from tools.mirror_leech.Controller import (
     UnsupportedSourceError,
     pick_downloader,
 )
+from tools.mirror_leech.UIChrome import frame_plain as frame
 from tools.mirror_leech.uploaders import available_uploaders
 from utils.log import get_logger
 
@@ -88,15 +89,16 @@ async def _render_uploader_picker(
     configured = await _configured_uploader_ids(user_id)
 
     if not configured:
+        body = (
+            "> No destinations configured yet.\n"
+            "> Open `/settings → ☁️ Mirror-Leech` (public mode) or\n"
+            "> `/admin → ☁️ Mirror-Leech Config` (non-public) to link a\n"
+            "> provider, then run /ml again."
+        )
         await client.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
-            text=(
-                "No destinations configured yet.\n\n"
-                "Open `/settings → ☁️ Mirror-Leech` (public mode) or\n"
-                "`/admin → ☁️ Mirror-Leech Config` (non-public) to link a "
-                "provider, then run /ml again."
-            ),
+            text=frame("☁️ **Mirror-Leech — Setup Required**", body),
             reply_markup=InlineKeyboardMarkup(
                 [
                     [InlineKeyboardButton("⚙️ Open config", callback_data="ml_cfg")],
@@ -140,15 +142,16 @@ async def _render_uploader_picker(
     if len(preview) > 60:
         preview = preview[:57] + "…"
 
+    body = (
+        f"> 📥 `{dl_line}`\n"
+        f"> 🔗 `{preview}`\n"
+        f"\n"
+        f"Tap to toggle destinations, then **Start**."
+    )
     await client.edit_message_text(
         chat_id=chat_id,
         message_id=message_id,
-        text=(
-            f"☁️ **Mirror-Leech**\n\n"
-            f"📥 `{dl_line}`\n"
-            f"🔗 `{preview}`\n\n"
-            "Tap to toggle destinations, then **Start**."
-        ),
+        text=frame("☁️ **Mirror-Leech — Pick Destinations**", body),
         reply_markup=InlineKeyboardMarkup(rows),
     )
 
@@ -195,9 +198,12 @@ async def ml_command(client: Client, message: Message) -> None:
     """Entry-point for `/ml <url>` / `/mirror <url>` / `/leech <url>`."""
     if not await _feature_enabled():
         await message.reply_text(
-            "🚧 **Mirror-Leech is not enabled on this bot yet.**\n\n"
-            "An admin needs to flip `feature_toggles.mirror_leech` on from the "
-            "`/admin → Mirror-Leech Config` panel."
+            frame(
+                "🚧 **Mirror-Leech — Disabled**",
+                "> Mirror-Leech is not enabled on this bot yet.\n"
+                "> An admin needs to flip `feature_toggles.mirror_leech`\n"
+                "> on from the `/admin → Mirror-Leech Config` panel.",
+            )
         )
         return
 
@@ -230,7 +236,11 @@ async def ml_command(client: Client, message: Message) -> None:
     )
 
     prompt = await message.reply_text(
-        f"📥 Using **{dl_cls.display_name}**. Building picker…",
+        frame(
+            "⏳ **Mirror-Leech — Preparing**",
+            f"> 📥 Using **{dl_cls.display_name}**\n"
+            f"> Building destination picker…",
+        ),
         reply_markup=_cancel_kb(),
     )
     await _render_uploader_picker(
@@ -242,7 +252,12 @@ async def ml_command(client: Client, message: Message) -> None:
 async def ml_cancel_picker(client: Client, callback_query: CallbackQuery) -> None:
     """Best-effort dismiss of an in-progress picker message."""
     try:
-        await callback_query.message.edit_text("🚫 Mirror-Leech picker cancelled.")
+        await callback_query.message.edit_text(
+            frame(
+                "🚫 **Mirror-Leech — Cancelled**",
+                "> Picker dismissed. Run `/ml <url>` again when you're ready.",
+            )
+        )
     except Exception:
         pass
     await callback_query.answer()
@@ -294,8 +309,8 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
             )
             return
         summary_lines = [
-            f"🗃 Queueing **{len(sources)}** file(s) → "
-            + ", ".join(f"`{u}`" for u in ctx.selected_uploaders),
+            f"> 🗃 Queued **{len(sources)}** file(s) →",
+            "> 📤 " + ", ".join(f"`{u}`" for u in ctx.selected_uploaders),
             "",
         ]
         first_task_id: str | None = None
@@ -332,7 +347,15 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
                 )
                 await update_progress_message(client, t)
 
-            ml_worker_pool.enqueue(task, _runner)
+            try:
+                ml_worker_pool.enqueue(task, _runner)
+            except Exception as exc:
+                logger.exception(
+                    "enqueue failed for batch task %s", task.id
+                )
+                summary_lines.append(
+                    f"  ⚠️ `{task.id}` konnte nicht gestartet werden: {exc}"
+                )
 
         ContextStore.drop(cid)
         # Replace the picker with a batch-summary header.
@@ -340,7 +363,10 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
             await client.edit_message_text(
                 chat_id=callback_query.message.chat.id,
                 message_id=callback_query.message.id,
-                text="\n".join(summary_lines),
+                text=frame(
+                    "☁️ **Mirror-Leech — Batch Queued**",
+                    "\n".join(summary_lines),
+                ),
             )
         except Exception:
             pass
@@ -378,7 +404,20 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
         # Final render — terminal states always flush.
         await update_progress_message(client, t)
 
-    ml_worker_pool.enqueue(task, _runner)
+    try:
+        ml_worker_pool.enqueue(task, _runner)
+        logger.info(
+            "ml_start_task queued single task %s for user %s",
+            task.id, ctx.user_id,
+        )
+    except Exception as exc:
+        logger.exception("enqueue failed for task %s", task.id)
+        try:
+            await callback_query.message.edit_text(
+                f"❌ Konnte Task nicht starten: `{exc}`"
+            )
+        except Exception:
+            pass
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cancel_([0-9a-f]{6,16})$"))
@@ -423,9 +462,9 @@ async def _render_queue(
     from tools.mirror_leech.Tasks import ml_worker_pool
 
     tasks = ml_worker_pool.list_for_user(user_id)[:20]
+    rows: list[list[InlineKeyboardButton]] = []
     if not tasks:
-        body = "📭 **Your Mirror-Leech queue is empty.**"
-        rows: list[list[InlineKeyboardButton]] = []
+        body = "> 📭 Your Mirror-Leech queue is empty."
     else:
         icon = {
             "queued": "⏳",
@@ -435,8 +474,7 @@ async def _render_queue(
             "failed": "❌",
             "cancelled": "🚫",
         }
-        lines = ["🗂 **Your last Mirror-Leech tasks**", ""]
-        rows = []
+        lines: list[str] = []
         for t in tasks:
             lines.append(
                 f"{icon.get(t.status, '•')} `{t.id}` · {t.status} · "
@@ -454,16 +492,17 @@ async def _render_queue(
         body = "\n".join(lines)
     rows.append([InlineKeyboardButton("↻ Refresh", callback_data="ml_queue")])
 
+    text = frame("🗂 **Mirror-Leech — Your Queue**", body)
     markup = InlineKeyboardMarkup(rows)
     if message_id:
         try:
             await client.edit_message_text(
-                chat_id=chat_id, message_id=message_id, text=body, reply_markup=markup
+                chat_id=chat_id, message_id=message_id, text=text, reply_markup=markup
             )
             return
         except Exception:
             pass
-    await client.send_message(chat_id, body, reply_markup=markup)
+    await client.send_message(chat_id, text, reply_markup=markup)
 
 
 # ---------------------------------------------------------------------------
@@ -490,12 +529,13 @@ async def _render_cfg_root(
     from tools.mirror_leech import Secrets
     from tools.mirror_leech.uploaders import all_uploaders
 
-    lines = ["☁️ **Mirror-Leech — Destinations**", ""]
+    lines: list[str] = []
     if not Secrets.is_available():
         lines.append(
-            "🚨 `SECRETS_KEY` is **not configured** — the bot refuses to "
-            "store provider credentials until you set it.\n"
+            "> 🚨 `SECRETS_KEY` is **not configured** — credentials cannot\n"
+            "> be stored until you set it."
         )
+        lines.append("")
 
     rows: list[list[InlineKeyboardButton]] = []
     for cls in all_uploaders():
@@ -528,7 +568,9 @@ async def _render_cfg_root(
     rows.append([InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")])
     rows.append([InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")])
 
-    text = "\n".join(lines) + "\n\nTap a provider to link it, test it, or clear its credentials."
+    body = ("\n".join(lines) + "\n"
+            if lines else "") + "> Tap a provider to link, test, or clear."
+    text = frame("☁️ **Mirror-Leech — Destinations**", body)
     try:
         await client.edit_message_text(
             chat_id=chat_id,
@@ -545,7 +587,12 @@ async def _render_cfg_root(
 @Client.on_callback_query(filters.regex(r"^ml_cfg_close$"))
 async def ml_cfg_close(client: Client, callback_query: CallbackQuery) -> None:
     try:
-        await callback_query.message.edit_text("☁️ Mirror-Leech config closed.")
+        await callback_query.message.edit_text(
+            frame(
+                "☁️ **Mirror-Leech — Config Closed**",
+                "> Open `/ml` or `/mlqueue` whenever you're ready.",
+            )
+        )
     except Exception:
         pass
     await callback_query.answer()
@@ -601,7 +648,10 @@ async def _render_provider_screen(
         await client.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
-            text=f"❓ Unknown provider `{provider}`.",
+            text=frame(
+                "❓ **Mirror-Leech — Unknown Provider**",
+                f"> No provider matches `{provider}` on this host.",
+            ),
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("← Back", callback_data="ml_cfg")]]
             ),
@@ -618,18 +668,16 @@ async def _render_provider_screen(
     status = "✅ Linked" if configured else (
         "🚫 Unavailable on this host" if not cls.available() else "🔑 Not linked"
     )
-    body_lines = [
-        f"☁️ **{cls.display_name}**",
-        f"Status: {status}",
-    ]
+    body_lines = [f"> **Status:** {status}"]
     if hint:
         body_lines.append("")
-        body_lines.append(hint)
+        body_lines.append(f"> {hint}")
     if not secrets_ok:
         body_lines.append("")
         body_lines.append(
-            "🚨 `SECRETS_KEY` is not set — paste-to-link is disabled until an "
-            "admin configures it. Test / anonymous flows still work."
+            "> 🚨 `SECRETS_KEY` is not set — paste-to-link is disabled\n"
+            "> until an admin configures it. Test / anonymous flows\n"
+            "> still work."
         )
 
     rows: list[list[InlineKeyboardButton]] = []
@@ -656,7 +704,7 @@ async def _render_provider_screen(
             )
     rows.append([InlineKeyboardButton("← Back", callback_data="ml_cfg")])
 
-    text = "\n".join(body_lines)
+    text = frame(f"☁️ **{cls.display_name}**", "\n".join(body_lines))
     try:
         await client.edit_message_text(
             chat_id=chat_id,

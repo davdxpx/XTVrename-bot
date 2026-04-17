@@ -1,6 +1,7 @@
 # --- Imports ---
-import time
+import contextlib
 import datetime
+import time
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import Config
 from utils.log import get_logger
@@ -33,6 +34,11 @@ class Database:
             self.files = None
             self.folders = None
             self.file_groups = None
+            # MyFiles extras (audit / activity / quotas / shares)
+            self.myfiles_audit = None
+            self.myfiles_activity = None
+            self.myfiles_quotas = None
+            self.myfiles_shares = None
         else:
             try:
                 self.client = AsyncIOMotorClient(
@@ -61,6 +67,12 @@ class Database:
             self.files = self.db[_schema.FILES_COLLECTION]
             self.folders = self.db[_schema.FOLDERS_COLLECTION]
             self.file_groups = self.db[_schema.FILE_GROUPS_COLLECTION]
+            # MyFiles extras collections (created lazily on first write;
+            # indexes are established by db_migrations/myfiles_extras_v1).
+            self.myfiles_audit = self.db[_schema.MYFILES_AUDIT_COLLECTION]
+            self.myfiles_activity = self.db[_schema.MYFILES_ACTIVITY_COLLECTION]
+            self.myfiles_quotas = self.db[_schema.MYFILES_QUOTAS_COLLECTION]
+            self.myfiles_shares = self.db[_schema.MYFILES_SHARES_COLLECTION]
 
     def _invalidate_settings_cache(self, user_id=None):
         doc_id = self._get_doc_id(user_id)
@@ -1355,6 +1367,168 @@ class Database:
             if doc:
                 return doc.get("database_channels", {}).get(plan)
         return None
+
+    # ------------------------------------------------------------------
+    # MyFiles extras — audit / activity / quota / share helpers
+    # ------------------------------------------------------------------
+
+    async def audit_myfiles(
+        self,
+        actor_id: int,
+        action: str,
+        *,
+        user_id: int | None = None,
+        file_id=None,
+        folder_id=None,
+        before=None,
+        after=None,
+        meta: dict | None = None,
+    ) -> None:
+        """Append a MyFiles admin/audit event. Silent if DB offline."""
+        if self.myfiles_audit is None:
+            return
+        doc = {
+            "user_id": user_id if user_id is not None else actor_id,
+            "actor_id": actor_id,
+            "action": action,
+            "created_at": datetime.datetime.utcnow(),
+        }
+        if file_id is not None:
+            doc["file_id"] = file_id
+        if folder_id is not None:
+            doc["folder_id"] = folder_id
+        if before is not None:
+            doc["before"] = before
+        if after is not None:
+            doc["after"] = after
+        if meta:
+            doc["meta"] = meta
+        try:
+            await self.myfiles_audit.insert_one(doc)
+        except Exception as exc:
+            logger.debug("audit_myfiles insert failed: %s", exc)
+
+    async def log_myfiles_activity(
+        self,
+        user_id: int,
+        event: str,
+        *,
+        file_id=None,
+        folder_id=None,
+    ) -> None:
+        """Append a user-facing activity entry (shown in the MyFiles feed)."""
+        if self.myfiles_activity is None:
+            return
+        doc = {
+            "user_id": user_id,
+            "event": event,
+            "created_at": datetime.datetime.utcnow(),
+        }
+        if file_id is not None:
+            doc["file_id"] = file_id
+        if folder_id is not None:
+            doc["folder_id"] = folder_id
+        try:
+            await self.myfiles_activity.insert_one(doc)
+        except Exception as exc:
+            logger.debug("log_myfiles_activity insert failed: %s", exc)
+
+    async def myfiles_get_quota(self, user_id: int) -> dict:
+        """Return the quota doc for `user_id`, creating a default if missing."""
+        if self.myfiles_quotas is None:
+            return {
+                "user_id": user_id,
+                "storage_used_bytes": 0,
+                "storage_quota_bytes": 0,
+                "file_count": 0,
+                "file_count_quota": 0,
+            }
+        doc = await self.myfiles_quotas.find_one({"user_id": user_id})
+        if doc:
+            return doc
+        default = {
+            "user_id": user_id,
+            "storage_used_bytes": 0,
+            "storage_quota_bytes": 0,   # 0 means "inherit plan default"
+            "file_count": 0,
+            "file_count_quota": 0,
+            "last_recalculated_at": datetime.datetime.utcnow(),
+        }
+        with contextlib.suppress(Exception):
+            await self.myfiles_quotas.insert_one(default)
+        return default
+
+    async def myfiles_incr_quota(
+        self, user_id: int, *, bytes_delta: int = 0, file_delta: int = 0
+    ) -> None:
+        if self.myfiles_quotas is None:
+            return
+        try:
+            await self.myfiles_quotas.update_one(
+                {"user_id": user_id},
+                {
+                    "$inc": {
+                        "storage_used_bytes": int(bytes_delta),
+                        "file_count": int(file_delta),
+                    },
+                    "$setOnInsert": {
+                        "storage_quota_bytes": 0,
+                        "file_count_quota": 0,
+                    },
+                },
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.debug("myfiles_incr_quota failed: %s", exc)
+
+    async def myfiles_set_quota(
+        self,
+        user_id: int,
+        *,
+        storage_quota_bytes: int | None = None,
+        file_count_quota: int | None = None,
+    ) -> None:
+        if self.myfiles_quotas is None:
+            return
+        update: dict = {}
+        if storage_quota_bytes is not None:
+            update["storage_quota_bytes"] = int(storage_quota_bytes)
+        if file_count_quota is not None:
+            update["file_count_quota"] = int(file_count_quota)
+        if not update:
+            return
+        try:
+            await self.myfiles_quotas.update_one(
+                {"user_id": user_id}, {"$set": update}, upsert=True
+            )
+        except Exception as exc:
+            logger.debug("myfiles_set_quota failed: %s", exc)
+
+    async def myfiles_create_share(self, doc: dict) -> str | None:
+        if self.myfiles_shares is None:
+            return None
+        doc.setdefault("created_at", datetime.datetime.utcnow())
+        doc.setdefault("views", 0)
+        try:
+            res = await self.myfiles_shares.insert_one(doc)
+            return str(res.inserted_id)
+        except Exception as exc:
+            logger.debug("myfiles_create_share failed: %s", exc)
+            return None
+
+    async def myfiles_resolve_share(self, token: str) -> dict | None:
+        if self.myfiles_shares is None:
+            return None
+        return await self.myfiles_shares.find_one({"token": token})
+
+    async def myfiles_revoke_share(self, token: str) -> bool:
+        if self.myfiles_shares is None:
+            return False
+        try:
+            res = await self.myfiles_shares.delete_one({"token": token})
+            return bool(res.deleted_count)
+        except Exception:
+            return False
 
     async def update_db_channel(self, plan: str, channel_id: int):
         if self.settings is None:

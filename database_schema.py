@@ -17,6 +17,11 @@ FOLDERS_COLLECTION = "MediaStudio-folders"
 DAILY_STATS_COLLECTION = "MediaStudio-daily-stats"
 PENDING_PAYMENTS_COLLECTION = "MediaStudio-pending-payments"
 FILE_GROUPS_COLLECTION = "MediaStudio-file-groups"
+# MyFiles extras — audit/activity/quota/shares collections
+MYFILES_AUDIT_COLLECTION = "MediaStudio-myfiles-audit"
+MYFILES_ACTIVITY_COLLECTION = "MediaStudio-myfiles-activity"
+MYFILES_QUOTAS_COLLECTION = "MediaStudio-myfiles-quotas"
+MYFILES_SHARES_COLLECTION = "MediaStudio-myfiles-shares"
 
 # Legacy names in MainDB prior to the mediastudio_layout migration.
 LEGACY_COLLECTION_NAMES = {
@@ -49,6 +54,7 @@ DOC_XTV_PRO = "xtv_pro"
 DOC_YOUTUBE_COOKIES = "youtube_cookies"
 DOC_SCHEMA_MIGRATIONS = "schema_migrations"
 DOC_MIRROR_LEECH_GLOBAL = "mirror_leech_global"
+DOC_MYFILES_RETENTION = "myfiles_retention"
 LEGACY_MISC_DOC_ID = "legacy_misc"
 
 # --- Virtual doc IDs that the shim synthesises from multiple real docs ---
@@ -65,6 +71,7 @@ MERGED_GLOBAL_DOCS = (
     DOC_PREMIUM_PLANS,
     DOC_MYFILES_CONFIG,
     DOC_MYFILES_LIMITS,
+    DOC_MYFILES_RETENTION,
     DOC_EGRESS_LIMITS,
     DOC_DATABASE_CHANNELS,
     DOC_DUMB_CHANNELS_GLOBAL,
@@ -131,6 +138,12 @@ GLOBAL_KEY_TO_DOC = {
     # myfiles
     "myfiles_enabled": DOC_MYFILES_CONFIG,
     "myfiles_limits": DOC_MYFILES_LIMITS,
+    # myfiles extras — retention / quotas
+    "myfiles_trash_retention_days": DOC_MYFILES_RETENTION,
+    "myfiles_audit_retention_days": DOC_MYFILES_RETENTION,
+    "myfiles_activity_retention_days": DOC_MYFILES_RETENTION,
+    "myfiles_max_versions": DOC_MYFILES_RETENTION,
+    "myfiles_default_quotas": DOC_MYFILES_RETENTION,
     # egress / rate limits
     "daily_egress_mb": DOC_EGRESS_LIMITS,
     "daily_file_count": DOC_EGRESS_LIMITS,

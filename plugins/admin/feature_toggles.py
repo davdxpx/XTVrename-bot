@@ -147,6 +147,16 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
         ],
         [
             InlineKeyboardButton(
+                "🗂 MyFiles Features ›",
+                callback_data="admin_ftog_myfiles_menu",
+            ),
+            InlineKeyboardButton(
+                "☁️ Mirror-Leech Features ›",
+                callback_data="admin_ftog_mirrorleech_menu",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 "← Back to Settings", callback_data="admin_access_limits"
             )
         ],
@@ -160,11 +170,79 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
         pass
 
 
+# ---------------------------------------------------------------------------
+# MyFiles feature toggles sub-screen
+# ---------------------------------------------------------------------------
+
+_MYFILES_SUBFEATURES = [
+    ("myfiles_trash",    "🗑 Trash / Recycle"),
+    ("myfiles_audit",    "🧾 Audit Log"),
+    ("myfiles_tags",     "#️⃣ Tags"),
+    ("myfiles_versions", "📜 Versioning"),
+    ("myfiles_quotas",   "💾 Per-User Quotas"),
+    ("myfiles_search",   "🔎 Advanced Search"),
+    ("myfiles_sharing",  "🔗 Granular Sharing"),
+    ("myfiles_activity", "📊 Activity Feed"),
+    ("myfiles_bulk",     "📦 Bulk Operations"),
+    ("myfiles_nested",   "🪜 Nested Folders"),
+    ("myfiles_smart",    "🧠 Smart Collections"),
+]
+
+_MIRROR_LEECH_SUBFEATURES = [
+    ("mirror_leech",            "☁️ Mirror-Leech Master"),
+    ("mirror_leech_aria2",      "⚡ Aria2 Multi-Connection"),
+    ("mirror_leech_gallery_dl", "🖼 Gallery-DL / Social"),
+    ("mirror_leech_mediaplat",  "☁ Cloud-Hoster Scraper"),
+    ("mirror_leech_instant",    "🔗 Instant-Share"),
+]
+
+
+async def _render_subtoggle_screen(
+    cq: CallbackQuery,
+    title: str,
+    keys: list[tuple[str, str]],
+    back_cb: str = "admin_feature_toggles",
+) -> None:
+    toggles = await db.get_feature_toggles()
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for key, label in keys:
+        on = bool(toggles.get(key, False))
+        row.append(InlineKeyboardButton(
+            f"{'✅' if on else '❌'} {label}",
+            callback_data=f"admin_ftog_{key}",
+        ))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([InlineKeyboardButton(
+        "← Back", callback_data=back_cb,
+    )])
+    text = (
+        f"{title}\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "> Toggle a feature on or off — disabled features\n"
+        "> completely disappear from the user UI.\n"
+        "> Per-plan overrides can veto a global-on toggle\n"
+        "> inside Per-Plan Settings.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━"
+    )
+    try:
+        await cq.message.edit_text(
+            text, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except MessageNotModified:
+        pass
+
+
 @Client.on_callback_query(
     filters.regex(
         r"^(admin_access_limits$|admin_quick_toggle_(?:premium|deluxe|trial|myfiles)$"
         r"|admin_feature_toggles$|admin_gtoggle_|admin_per_plan_limits$"
-        r"|admin_global_daily_egress$)"
+        r"|admin_global_daily_egress$|admin_ftog_(?:myfiles_menu|mirrorleech_menu)$"
+        r"|admin_ftog_)"
     )
 )
 async def feature_toggles_cb(client, callback_query: CallbackQuery):
@@ -240,6 +318,55 @@ async def feature_toggles_cb(client, callback_query: CallbackQuery):
             show_alert=True,
         )
         await _render_feature_toggles(callback_query)
+        return
+
+    # --- MyFiles / Mirror-Leech sub-feature screens ---
+    if data == "admin_ftog_myfiles_menu":
+        await callback_query.answer()
+        await _render_subtoggle_screen(
+            callback_query,
+            "🗂 **MyFiles Feature Toggles**",
+            _MYFILES_SUBFEATURES,
+        )
+        return
+
+    if data == "admin_ftog_mirrorleech_menu":
+        await callback_query.answer()
+        await _render_subtoggle_screen(
+            callback_query,
+            "☁️ **Mirror-Leech Feature Toggles**",
+            _MIRROR_LEECH_SUBFEATURES,
+        )
+        return
+
+    if data.startswith("admin_ftog_"):
+        feature = data.replace("admin_ftog_", "")
+        if not feature or feature in {"myfiles_menu", "mirrorleech_menu"}:
+            return
+        toggles = await db.get_feature_toggles()
+        current_state = bool(toggles.get(feature, False))
+        new_state = not current_state
+        await db.update_feature_toggle(feature, new_state)
+        await callback_query.answer(
+            f"{'Enabled' if new_state else 'Disabled'} "
+            f"{feature.replace('_', ' ').title()}",
+            show_alert=True,
+        )
+        # Re-render whichever menu the user came from.
+        if feature.startswith("myfiles") or feature == "myfiles_enabled":
+            await _render_subtoggle_screen(
+                callback_query,
+                "🗂 **MyFiles Feature Toggles**",
+                _MYFILES_SUBFEATURES,
+            )
+        elif feature.startswith("mirror_leech"):
+            await _render_subtoggle_screen(
+                callback_query,
+                "☁️ **Mirror-Leech Feature Toggles**",
+                _MIRROR_LEECH_SUBFEATURES,
+            )
+        else:
+            await _render_feature_toggles(callback_query)
         return
 
     # --- Per-Plan Limits entry ---
