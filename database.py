@@ -34,7 +34,7 @@ class Database:
             self.files = None
             self.folders = None
             self.file_groups = None
-            # MyFiles Enterprise (v1)
+            # MyFiles extras (audit / activity / quotas / shares)
             self.myfiles_audit = None
             self.myfiles_activity = None
             self.myfiles_quotas = None
@@ -67,8 +67,8 @@ class Database:
             self.files = self.db[_schema.FILES_COLLECTION]
             self.folders = self.db[_schema.FOLDERS_COLLECTION]
             self.file_groups = self.db[_schema.FILE_GROUPS_COLLECTION]
-            # MyFiles Enterprise collections (created lazily on first write;
-            # indexes are established by db_migrations/myfiles_enterprise_v1).
+            # MyFiles extras collections (created lazily on first write;
+            # indexes are established by db_migrations/myfiles_extras_v1).
             self.myfiles_audit = self.db[_schema.MYFILES_AUDIT_COLLECTION]
             self.myfiles_activity = self.db[_schema.MYFILES_ACTIVITY_COLLECTION]
             self.myfiles_quotas = self.db[_schema.MYFILES_QUOTAS_COLLECTION]
@@ -1369,7 +1369,7 @@ class Database:
         return None
 
     # ------------------------------------------------------------------
-    # MyFiles Enterprise helpers (Phase 4 — audit / activity / quota / share)
+    # MyFiles extras — audit / activity / quota / share helpers
     # ------------------------------------------------------------------
 
     async def audit_myfiles(

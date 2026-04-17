@@ -43,7 +43,7 @@ from tools.mirror_leech.Controller import (
     UnsupportedSourceError,
     pick_downloader,
 )
-from tools.mirror_leech.UIChrome import frame
+from tools.mirror_leech.UIChrome import frame_plain as frame
 from tools.mirror_leech.uploaders import available_uploaders
 from utils.log import get_logger
 

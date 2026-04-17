@@ -21,13 +21,31 @@ BLOCK_EMPTY = "□"
 
 
 def frame(header: str, body: str, *, mode: str = "core") -> str:
-    """Wrap `body` with header, two dividers and the engine signature."""
+    """Wrap `body` with header, two dividers and the engine signature.
+
+    Reserved for messages that report actual file-processing work
+    (download, upload, convert, leech progress). Browsing / menu / config
+    screens should use `frame_plain()` instead so the signature doesn't
+    become visual noise on non-processing messages.
+    """
     return (
         f"{header}\n"
         f"{DIVIDER}\n\n"
         f"{body}\n\n"
         f"{DIVIDER}\n"
         f"{XTVEngine.get_signature(mode=mode)}"
+    )
+
+
+def frame_plain(header: str, body: str) -> str:
+    """Header + top divider + body + bottom divider, without the
+    engine signature. Use for pickers, queues, config and browsing
+    menus — any message that isn't reporting processing progress."""
+    return (
+        f"{header}\n"
+        f"{DIVIDER}\n\n"
+        f"{body}\n\n"
+        f"{DIVIDER}"
     )
 
 

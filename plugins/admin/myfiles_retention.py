@@ -2,7 +2,7 @@
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
 # Don't Remove Credit
 # --------------------------------------------------------------------------
-"""Retention & quota admin panel for the MyFiles Enterprise features.
+"""Retention & quota admin panel for MyFiles extras.
 
 Covers:
   - Trash / Audit / Activity retention in days
@@ -74,8 +74,7 @@ async def _render(cq: CallbackQuery) -> None:
         "🗂 **MyFiles — Retention & Quotas**\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         + "\n".join(body_lines)
-        + "\n\n━━━━━━━━━━━━━━━━━━━━\n"
-        "🤖 **Engine:** 𝕏TV Core v3.1"
+        + "\n\n━━━━━━━━━━━━━━━━━━━━"
     )
     import contextlib
     with contextlib.suppress(MessageNotModified):

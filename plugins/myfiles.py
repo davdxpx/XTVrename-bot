@@ -212,7 +212,7 @@ async def get_myfiles_main_menu(user_id: int):
 
     buttons.append([InlineKeyboardButton("📁 Custom Folders", callback_data="myfiles_cat_custom")])
 
-    # Enterprise entrypoints — each gated by its own feature toggle, so
+    # Extras entrypoints — each gated by its own feature toggle, so
     # rows silently vanish when admin disables the feature.
     try:
         from utils.feature_gate import feature_many as _fm
@@ -252,7 +252,7 @@ async def get_myfiles_main_menu(user_id: int):
 
     # Quota header (prepended). Disabled when feature is off for this user.
     try:
-        from plugins.myfiles_enterprise import render_quota_header
+        from plugins.myfiles_extras import render_quota_header
         q = await render_quota_header(user_id)
         if q:
             text = text.rstrip() + "\n\n" + q
@@ -343,7 +343,7 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         buttons.append([
             InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"mf_ms_sha")
         ])
-        # Enterprise bulk ops — row vanishes when the toggle is off.
+        # Bulk ops row — vanishes when the toggle is off.
         try:
             from utils.feature_gate import feature_enabled as _fe
             _bulk_on = await _fe("myfiles_bulk", user_id)
@@ -1411,8 +1411,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         state_dict = await get_myfiles_state(user_id)
         last_menu = state_dict.get("last_menu", "myfiles_main")
 
-        # Swap to the enterprise sharing configurator when the admin
-        # enables granular sharing; otherwise keep the legacy one-tap link.
+        # Swap to the granular sharing configurator when the admin
+        # enables it; otherwise keep the legacy one-tap link.
         try:
             from utils.feature_gate import feature_enabled as _fe
             _sharing_on = await _fe("myfiles_sharing", user_id)
@@ -1440,8 +1440,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             [InlineKeyboardButton("☁️ Mirror-Leech Options", callback_data=f"ml_opt_single_{file_id}")],
         ]
 
-        # Enterprise extras — each gated by feature_toggles so the row
-        # silently vanishes when the admin disables the feature.
+        # Extras — each gated by feature_toggles so the row silently
+        # vanishes when the admin disables the feature.
         try:
             from utils.feature_gate import feature_many as _fm
             ent = await _fm(

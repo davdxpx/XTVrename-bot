@@ -6,6 +6,7 @@ from tools.mirror_leech.UIChrome import (
     BLOCK_FILLED,
     BLOCK_EMPTY,
     frame,
+    frame_plain,
     progress_block,
     format_bytes,
     format_eta,
@@ -57,6 +58,16 @@ def test_frame_has_two_dividers_and_signature():
     second_divider_idx = len(lines) - 2
     assert lines[second_divider_idx] == DIVIDER
     assert "Engine" in lines[-1]
+
+
+def test_frame_plain_has_no_signature():
+    text = frame_plain("🗂 **MyFiles**", "> body")
+    # Still two dividers bracketing the body
+    assert text.count(DIVIDER) == 2
+    # But no XTVEngine line
+    assert "Engine" not in text
+    # And the last line must be the closing divider, not a signature
+    assert text.rstrip().splitlines()[-1] == DIVIDER
 
 
 def test_format_bytes_steps():

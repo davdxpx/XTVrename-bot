@@ -27,7 +27,7 @@ async def handle_start_command_unique(client, message):
         param = command_parts[1]
 
         if param.startswith("share_"):
-            # Enterprise MyFiles share token → resolve from myfiles_shares.
+            # MyFiles share token → resolve from myfiles_shares.
             from pyrogram import StopPropagation
             token = param.replace("share_", "", 1)
             try:

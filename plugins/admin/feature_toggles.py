@@ -171,7 +171,7 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
 
 
 # ---------------------------------------------------------------------------
-# MyFiles Enterprise feature toggles sub-screen (Phase 6)
+# MyFiles feature toggles sub-screen
 # ---------------------------------------------------------------------------
 
 _MYFILES_SUBFEATURES = [
@@ -227,8 +227,7 @@ async def _render_subtoggle_screen(
         "> completely disappear from the user UI.\n"
         "> Per-plan overrides can veto a global-on toggle\n"
         "> inside Per-Plan Settings.\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🤖 **Engine:** 𝕏TV Core v3.1"
+        "━━━━━━━━━━━━━━━━━━━━"
     )
     try:
         await cq.message.edit_text(

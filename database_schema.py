@@ -17,7 +17,7 @@ FOLDERS_COLLECTION = "MediaStudio-folders"
 DAILY_STATS_COLLECTION = "MediaStudio-daily-stats"
 PENDING_PAYMENTS_COLLECTION = "MediaStudio-pending-payments"
 FILE_GROUPS_COLLECTION = "MediaStudio-file-groups"
-# MyFiles Enterprise (v1) — audit/activity/quota/shares collections
+# MyFiles extras — audit/activity/quota/shares collections
 MYFILES_AUDIT_COLLECTION = "MediaStudio-myfiles-audit"
 MYFILES_ACTIVITY_COLLECTION = "MediaStudio-myfiles-activity"
 MYFILES_QUOTAS_COLLECTION = "MediaStudio-myfiles-quotas"
@@ -138,7 +138,7 @@ GLOBAL_KEY_TO_DOC = {
     # myfiles
     "myfiles_enabled": DOC_MYFILES_CONFIG,
     "myfiles_limits": DOC_MYFILES_LIMITS,
-    # myfiles enterprise retention / quotas (phase E)
+    # myfiles extras — retention / quotas
     "myfiles_trash_retention_days": DOC_MYFILES_RETENTION,
     "myfiles_audit_retention_days": DOC_MYFILES_RETENTION,
     "myfiles_activity_retention_days": DOC_MYFILES_RETENTION,

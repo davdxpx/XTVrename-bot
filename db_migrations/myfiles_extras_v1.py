@@ -2,14 +2,14 @@
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
 # Don't Remove Credit
 # --------------------------------------------------------------------------
-"""MyFiles Enterprise — schema migration v1.
+"""MyFiles extras — schema migration v1.
 
 Idempotent. Creates the new collections
 (MediaStudio-myfiles-{audit,activity,quotas,shares}) with appropriate
 indexes, back-fills quota docs for existing users, and tags each file /
-folder document with the enterprise-default fields (is_deleted=False,
-tags=[], parent_folder_id=None, ...) so the rest of the codebase can
-assume they exist.
+folder document with default metadata fields (is_deleted=False, tags=[],
+parent_folder_id=None, ...) so the rest of the codebase can assume they
+exist.
 
 Runs from main.py at boot, after the mediastudio_layout migration. Safe
 to call many times — every step checks for existing state first.
@@ -26,7 +26,7 @@ from pymongo import ASCENDING, DESCENDING
 import database_schema as _schema
 from utils.log import get_logger
 
-logger = get_logger("migrations.myfiles_enterprise_v1")
+logger = get_logger("migrations.myfiles_extras_v1")
 
 # Retention defaults (days). Admin can override via admin panel.
 _DEFAULT_RETENTION = {
@@ -195,13 +195,13 @@ async def _recompute_user_quotas(db: Any) -> None:
     logger.info("MyFiles quotas recomputed for %d users", processed)
 
 
-async def run_myfiles_enterprise_v1(db: Any, *, dry_run: bool = False) -> None:
+async def run_myfiles_extras_v1(db: Any, *, dry_run: bool = False) -> None:
     """Entry point invoked by main.py during startup."""
     if db is None or getattr(db, "db", None) is None:
-        logger.info("skip myfiles_enterprise_v1: no DB connection")
+        logger.info("skip myfiles_extras_v1: no DB connection")
         return
     if dry_run:
-        logger.info("myfiles_enterprise_v1 dry-run: would create indexes / backfill")
+        logger.info("myfiles_extras_v1 dry-run: would create indexes / backfill")
         return
 
     try:
@@ -212,10 +212,10 @@ async def run_myfiles_enterprise_v1(db: Any, *, dry_run: bool = False) -> None:
         # Mark applied so we can inspect from admin panel later.
         import contextlib
         with contextlib.suppress(Exception):
-            await db.update_setting("myfiles_enterprise_v1_applied_at",
+            await db.update_setting("myfiles_extras_v1_applied_at",
                                     datetime.datetime.utcnow().isoformat())
-        logger.info("myfiles_enterprise_v1 migration complete")
+        logger.info("myfiles_extras_v1 migration complete")
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        logger.exception("myfiles_enterprise_v1 failed: %s", exc)
+        logger.exception("myfiles_extras_v1 failed: %s", exc)

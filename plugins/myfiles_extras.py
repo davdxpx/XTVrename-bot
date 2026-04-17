@@ -2,7 +2,7 @@
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
 # Don't Remove Credit
 # --------------------------------------------------------------------------
-"""MyFiles Enterprise features.
+"""Extended MyFiles handlers.
 
 Keeps plugins/myfiles.py focused on the legacy flow and bolts on the
 Trash / Tags / Versioning / Quotas / Audit / Search / Sharing / Activity
@@ -11,8 +11,10 @@ Trash / Tags / Versioning / Quotas / Audit / Search / Sharing / Activity
 whose plan (or the bot as a whole) hasn't enabled the respective
 feature.
 
-Each screen wraps its body with the shared Rename-style chrome from
-tools.mirror_leech.UIChrome.frame so MyFiles matches the rest of the bot.
+Each screen wraps its body with the shared Rename-style two-divider
+chrome from tools.mirror_leech.UIChrome. Browsing screens use
+`frame_plain` (no signature) — the engine signature is reserved for
+messages that actually report file-processing progress.
 """
 
 from __future__ import annotations
@@ -33,11 +35,11 @@ from pyrogram.types import (
 
 from config import Config
 from database import db
-from tools.mirror_leech.UIChrome import format_bytes, frame, progress_block
+from tools.mirror_leech.UIChrome import format_bytes, frame_plain as frame, progress_block
 from utils.feature_gate import feature_enabled
 from utils.log import get_logger
 
-logger = get_logger("plugins.myfiles_enterprise")
+logger = get_logger("plugins.myfiles_extras")
 
 # Pending text-input states keyed by user id: {"kind": "tag_add"|"search"|
 # "share_pwd"|..., "file_id": str | None, "meta": dict}
@@ -416,7 +418,7 @@ async def version_restore(client: Client, cq: CallbackQuery) -> None:
 # Text-input router — shared with tag/search/share prompts below.
 # ---------------------------------------------------------------------------
 
-async def _enterprise_text_router(client: Client, message: Message) -> None:
+async def _extras_text_router(client: Client, message: Message) -> None:
     """Legacy text-router signature kept for the unified v2 router below
     to delegate to. Not a Pyrogram handler on its own anymore — the v2
     decorator is the single registered handler."""
@@ -890,11 +892,11 @@ async def _dispatch_pending_text(client: Client, message: Message, pending: dict
 # Splice the new dispatcher into the existing text router (which only
 # knows about tag_edit). We monkey-patch by replacing the handler's
 # closure target — cleanest way without duplicating the handler.
-_orig_tag_text_router = _enterprise_text_router
+_orig_tag_text_router = _extras_text_router
 
 
 @Client.on_message(filters.private & filters.text, group=6)
-async def _enterprise_text_router_v2(client: Client, message: Message) -> None:
+async def _extras_text_router_v2(client: Client, message: Message) -> None:
     user_id = message.from_user.id
     pending = _pending.get(user_id)
     if not pending:
