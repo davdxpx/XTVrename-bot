@@ -260,9 +260,9 @@ def is_admin(user_id):
 
     return user_id == Config.CEO_ID
 
-@Client.on_message(filters.command("admin") & filters.private)
-
-# --- Handlers ---
+# /admin command lives in main's plugins/admin/panel.py; this module's
+# admin_panel stays as a plain callable the bridge in plugins/admin/core.py
+# calls when the user taps "🧲 Torrent Admin".
 async def admin_panel(client, message):
     if not is_admin(message.from_user.id):
         return
@@ -300,12 +300,48 @@ from utils.logger import debug
 
 debug("✅ Loaded handler: admin_callback")
 
+_MAIN_OWNED_PREFIXES = (
+    "admin_main",
+    "admin_back",
+    "admin_db_health",
+    "admin_tmdb_status",
+    "admin_system_health",
+    "admin_force_sub_menu",
+    "admin_users_menu",
+    "admin_public_settings",
+    "admin_payments_menu",
+    "admin_access_limits",
+    "admin_dumb_channels",
+    "admin_myfiles_settings",
+    "admin_templates_menu",
+    "admin_thumb_menu",
+    "admin_general_settings_menu",
+    "admin_usage_dashboard",
+    "admin_broadcast",
+    "admin_view",
+    "admin_gtoggle_",
+)
+
+
+def _is_main_owned(data: str) -> bool:
+    if not data:
+        return False
+    for p in _MAIN_OWNED_PREFIXES:
+        if data == p or data.startswith(p + "_") or data.startswith(p):
+            return True
+    return False
+
+
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg)"
+        r"^(admin_(?!usage_dashboard|dashboard_|block_|unblock_|reset_quota_|broadcast|users_menu|user_search_start|main$|back$|db_health|tmdb_status|system_health|force_sub_menu|public_settings|payments_menu|access_limits|dumb_channels|myfiles_settings|templates_menu|thumb_menu|general_settings_menu|view|gtoggle_)|edit_template_|edit_fn_template_|prompt_admin_|prompt_public_|prompt_daily_|prompt_global_|prompt_fn_template_|prompt_template_|prompt_premium_|prompt_trial_|dumb_(?!user_)|admin_set_lang_|set_admin_workflow_|admin_pay_|prompt_pay_|set_4gb_access_|admin_prem_cur_|admin_myfiles_|prompt_myfiles_|set_unlimited_myfiles_lim_|set_daily_egress_|set_prem_egress_|prompt_prem_egress_custom_|set_admin_thumb_mode_|admin_delete_msg|set_prem_torrent_|prompt_prem_torrent_custom_|torrent_)"
     )
 )
 async def admin_callback(client, callback_query):
+    # Defence in depth: even if someone loosens the regex above, bail on
+    # callbacks that main's new plugins/admin/ package owns.
+    if _is_main_owned(callback_query.data):
+        return
     await callback_query.answer()
     user_id = callback_query.from_user.id
     if not is_admin(user_id):
