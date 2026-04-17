@@ -7,6 +7,9 @@
   <img src="./assets/banner.png" alt="𝕏TV MediaStudio™ Banner" width="100%">
 </p>
 
+⚠️ **ATTENTION:** This branch (`torrent-edition`) installs `aria2c` and contains Torrent features. **DO NOT** host on Railway, Render, or Heroku (Risk of Ban!). This version is strictly intended for your own Root Servers (VPS/Dedicated)!
+
+
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.9+-blue.svg?logo=python&logoColor=white" alt="Python"></a>
   <a href="https://docs.pyrogram.org/"><img src="https://img.shields.io/badge/Pyrogram-v2.0+-blue.svg?logo=telegram&logoColor=white" alt="Pyrogram"></a>
@@ -135,6 +138,17 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
     2. **Player-Client Fallback**: on bot-check failure the extractor automatically rotates through `default → ios → android → tv_embedded → web_embedded → mweb` before giving up.
     3. **Dedicated UI**: when YouTube still blocks the request the bot shows a clear in-chat help screen with a Retry button, an `🍪 Upload cookies` button (admins only), and cookie-status indicator — never a silent "Could not fetch info".
 
+  ### 🔹 Torrent Downloader
+*   **Multi-Provider Search Engine**: Searches **1337x**, **TorrentGalaxy**, and **LimeTorrents** concurrently and deduplicates results by info hash.
+*   **Category-Based Filtering**: Narrow searches by Movies, TV Shows, Music, Games, Software, or Anime.
+*   **Paginated Results**: Browse results 5 at a time with detailed info views (seeders, leechers, size, provider, date).
+*   **aria2 Download Management**: Downloads via aria2 RPC with a real-time progress bar, speed, ETA, and cancel button.
+*   **Plan-Based Size Limits**: Free users are limited to 2GB, Standard to 5GB, Deluxe has unlimited downloads.
+*   **Smart File Selection**: After download, select which files to process with type icons, file sizes, and sort by size/name.
+*   **Search History & Favorites**: Last 5 searches are saved for quick re-runs. Favorite torrents for instant access later.
+*   **Download History**: Track all downloads with status (completed/failed/cancelled) and statistics.
+*   **Pipeline Integration**: Selected files are automatically fed into the bot's standard processing pipeline (rename, metadata, upload).
+
 ### 🔹 Professional Metadata Injection
 *   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
 *   **Branding**: Sets e.g. "Encoded by @YourChannel" and custom audio/subtitle track titles.
@@ -200,14 +214,39 @@ through to a generic "unsupported source" message.
 
 Provider credentials are Fernet-encrypted at rest with `SECRETS_KEY`
 (required — the bot refuses to store plaintext). Back the key up before
-handing out logins — losing it means every user has to re-link their
+handing out logins; losing it means every user has to re-link their
 providers.
 
-Generate one with:
+**Easiest path — from inside the bot** (no CLI needed):
+
+1. `/admin → 🩺 System Health & Statuses → ☁️ Mirror-Leech Config`
+2. Tap **🎲 Generate SECRETS_KEY**. The bot posts a fresh key plus
+   copy-paste instructions for every supported host (.env, Render,
+   Railway, Koyeb, Zeabur, Heroku, Fly, Docker).
+3. Install the key per your host, restart the bot, then tap
+   **✅ Enable Mirror-Leech**.
+
+**Manual alternative** (if you prefer a one-liner on your machine):
 
 ```bash
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
+
+### Admin layout
+
+Operator panels for schema migrations, TMDb, and Mirror-Leech live
+under a single entry so the main admin menu stays compact:
+
+```
+/admin → 🩺 System Health & Statuses
+         ├─ 🩺 DB Schema Health
+         ├─ 🎬 TMDb Status
+         └─ ☁️ Mirror-Leech Config
+```
+
+The root status screens collapse into a short blockquote summary once
+everything is configured — full onboarding copy only shows up while a
+piece is still missing.
 
 ---
 
@@ -283,6 +322,8 @@ themselves the moment you add it — no redeploy needed for most keys.
 | `SECRETS_KEY` | ❌ | empty | Fernet key encrypting Mirror-Leech provider credentials. Required only when Mirror-Leech is enabled. |
 | `YT_COOKIES_FILE` | ❌ | `config/yt_cookies.txt` | Absolute path to a Netscape YouTube cookies file. Admins can also upload at runtime via `/ytcookies`. |
 
+> **Note:** The Torrent Downloader requires **aria2** to be installed and running as an RPC daemon on port 6800. See the Deployment Guide below for setup instructions.
+
 ---
 
 ## 🚀 𝕏TV Pro™ Setup (4GB File Support)
@@ -340,99 +381,74 @@ Welcome to the **𝕏TV MediaStudio™** deployment documentation! Because this 
 > **TL;DR** — set the 5 required env vars and click any deploy button below. `TMDB_API_KEY` is **optional**; the bot runs fine without it and shows a 🔒 notice on TMDb-dependent features until you add one. Same story for `SECRETS_KEY` (Mirror-Leech only).
 
 <details>
-<summary><b>⚡ 1-Click Cloud Deployments (PaaS)</b></summary>
-<br>
-
-Platform-as-a-Service (PaaS) providers build and run the code directly from your GitHub repository.
-
-### 1. Render (Highly Recommended - Zero Egress Costs)
-Render provides **generous unmetered bandwidth**, saving you from unexpected egress bills when processing large video files.
-
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
-
-1. **Fork** this repository to your GitHub account.
-2. Click the **Deploy to Render** button above.
-3. Connect your GitHub account and select your forked repository.
-4. Render will detect the `render.yaml` file automatically.
-5. Fill in the required **Environment Variables** (like `BOT_TOKEN`, `API_ID`, etc.). Pay special attention to `PUBLIC_MODE`.
-6. Click **Apply/Save**. Your bot will build and start as a Background Worker!
-*Note: If out-of-memory crashes occur, consider upgrading from the Free Tier.*
-
-### 2. Railway
-Railway offers lightning-fast deployments and great performance, though be mindful of monthly egress bandwidth usage.
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new)
-
-1. **Fork** this repository.
-2. Click the **Deploy on Railway** button above.
-3. Select your GitHub repository.
-4. Go to the **Variables** tab in your new Railway project and add your required configuration.
-5. Railway will automatically build the `Dockerfile` and start your bot!
-
-### 3. Koyeb
-Koyeb provides high-performance global infrastructure with a generous free tier for compute, though bandwidth is limited.
-
-[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy)
-
-1. **Fork** this repository.
-2. Click **Create Service** on Koyeb. Choose **GitHub** and select your repository.
-3. Set the **Builder** to Docker. Add your `.env` values under **Environment variables**.
-4. Click **Deploy**.
-
-### 4. Zeabur
-Zeabur makes deploying bots effortless.
-
-[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://dash.zeabur.com/templates/github)
-
-1. **Fork** this repository.
-2. Log in to Zeabur, create a **Project**, click **Add Service** -> **Git** and select your repository.
-3. Add your environment variables in the **Variables** tab.
-
-</details>
-
-<details>
 <summary><b>🖥️ VPS & Dedicated Server Deployments</b></summary>
 <br>
 
 If you need maximum control, massive storage, and the cheapest bandwidth, deploying on a Virtual Private Server (VPS) via SSH is the best route.
 
-### 1. Oracle Cloud (Always Free ARM)
-The "Always Free" Ampere A1 instance gives you 4 CPU Cores, 24GB of RAM, and **10TB of Free Egress Bandwidth** every month!
+### 1. Recommended Providers
+*   **Oracle Cloud (Always Free ARM):** 4 CPU Cores, 24GB RAM, and **10TB of Free Egress Bandwidth** per month. (Create a Canonical Ubuntu Ampere A1 instance).
+*   **Hetzner Cloud:** Incredible performance for the price. ~€4/mo gets you a dedicated IPv4 and **20TB of Bandwidth**. (Create an Ubuntu 24.04 server).
+*   **Standard VPS:** DigitalOcean, AWS EC2, Linode, etc.
 
-1. Create a Canonical Ubuntu instance (Virtual machine -> Ampere -> VM.Standard.A1.Flex).
-2. Connect via SSH: `ssh -i "path/to/key.key" ubuntu@YOUR_PUBLIC_IP`
-3. Follow the Standard Docker Deployment steps below. Our Dockerfile automatically detects and optimizes for ARM!
+---
 
-### 2. Hetzner Cloud (The Ultimate Budget VPS - 20TB Traffic)
-For around €4 a month, you get a dedicated IPv4 and a massive **20TB of Traffic (Bandwidth)** per month included.
+### 2. Step-by-Step Installation
 
-1. Create an Ubuntu 24.04 server. The cheapest Arm64 (CAX series) or x86 (CX series) is perfect.
-2. Connect via SSH: `ssh root@YOUR_SERVER_IP`
-3. Follow the Standard Docker Deployment steps below.
+**Step 1: Connect to your Server**
+Connect to your server via SSH.
+```bash
+ssh root@YOUR_SERVER_IP
+# Or if using an identity file like Oracle Cloud:
+# ssh -i "path/to/key.key" ubuntu@YOUR_SERVER_IP
+```
 
-### 3. Standard VPS (DigitalOcean, AWS EC2, etc.)
-1. **Connect** to your server via SSH.
-2. **Install Docker**:
-   ```
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install docker.io docker-compose git -y
-   sudo systemctl enable --now docker
-   ```
-3. **Download the Bot:**
-   ```
-   git clone https://github.com/davdxpx/XTV-MediaStudio.git
-   cd XTV-MediaStudio
-   ```
-4. **Configure Settings:** (Create a `.env` file and put your variables there)
-   ```
-   cp .env.example .env
-   # Edit .env using a text editor
-   ```
-5. **Run the Bot:**
-   ```
-   docker-compose up -d --build
-   ```
-*(View logs anytime using `docker-compose logs -f`)*
+**Step 2: Update your System**
+Ensure your package list is up to date.
+```bash
+sudo apt update && sudo apt upgrade -y
+```
+
+**Step 3: Install Required Packages**
+Install essential tools like `git` and `aria2` (required for the torrent engine).
+```bash
+sudo apt install git aria2 curl -y
+```
+
+**Step 4: Install Docker cleanly**
+To avoid dependency conflicts (like `containerd.io` vs `containerd`), use the official Docker installation script.
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+```
+
+**Step 5: Setup the Torrent Daemon (Aria2c)**
+Run `aria2c` in the background so the bot can communicate with it to process torrents.
+```bash
+aria2c --enable-rpc --rpc-listen-all --daemon
+```
+
+**Step 6: Download the Bot**
+Clone the repository and enter the directory.
+```bash
+git clone https://github.com/davdxpx/XTV-MediaStudio.git
+cd XTV-MediaStudio
+```
+
+**Step 7: Configure Settings**
+Copy the example configuration file and edit it to include your tokens and MongoDB URI.
+```bash
+cp .env.example .env
+nano .env
+```
+*(Save with `Ctrl+O`, `Enter`, and exit with `Ctrl+X`)*
+
+**Step 8: Build and Run**
+Start the bot using the Docker Compose plugin.
+```bash
+sudo docker compose up -d --build
+```
+*(You can view logs anytime using `sudo docker compose logs -f`)*
 
 </details>
 
@@ -524,10 +540,11 @@ admin - ⛔ Access Global Configurations (Admins Only)
 *   **/c** or **/convert**: Open the **File Converter Mega Edition** (category-based video / audio / image operations).
 *   **/w** or **/watermark**: Open the **Image Watermarker** (text or overlay image).
 *   **/s** or **/subtitle**: Open the **Subtitle Extractor** (rip subs from MKV/MP4).
-*   **/t** or **/trim**: Open the **Video Trimmer** (fast cut without re-encoding).
+*   **/trim**: Open the **Video Trimmer** (fast cut without re-encoding).
 *   **/v** or **/voice**: Open the **Voice Note Converter** (to Telegram voice-note format).
 *   **/vn** or **/videonote**: Open the **Video Note Converter** (to Telegram round-note format).
 *   **/mi** or **/mediainfo**: Open **MediaInfo** (detailed stream/codec analyzer).
+*   **/t** or **/torrent**: Open Torrent Downloader (Search, download, and process torrents)
 
 ### Admin-Only
 *   **/ytcookies**: Upload a Netscape-format `cookies.txt` to bypass YouTube's anti-bot guard. Admins only — see the [YouTube Tool section](#-youtube-tool-yt) for the full flow.
