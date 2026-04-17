@@ -120,7 +120,7 @@ async def _render_health(callback_query: CallbackQuery):
             [InlineKeyboardButton("🔁 Re-run migration (dry-run)", callback_data="admin_db_health_dry_run")],
             [InlineKeyboardButton("🗑 Drop legacy backup collections", callback_data="admin_db_health_drop_backups")],
             [InlineKeyboardButton("↻ Refresh", callback_data="admin_db_health")],
-            [InlineKeyboardButton("← Back", callback_data="admin_main")],
+            [InlineKeyboardButton("← Back", callback_data="admin_system_health")],
         ]
     )
 
