@@ -343,6 +343,18 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         buttons.append([
             InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"mf_ms_sha")
         ])
+        # Enterprise bulk ops — row vanishes when the toggle is off.
+        try:
+            from utils.feature_gate import feature_enabled as _fe
+            _bulk_on = await _fe("myfiles_bulk", user_id)
+        except Exception:
+            _bulk_on = False
+        if _bulk_on:
+            buttons.append([
+                InlineKeyboardButton("#️⃣ Tag", callback_data="mf_bulk_tag_start"),
+                InlineKeyboardButton("📌 Pin", callback_data="mf_bulk_pin"),
+                InlineKeyboardButton("📌🚫 Unpin", callback_data="mf_bulk_unpin"),
+            ])
         # Mirror-Leech batch entry — gated on feature_toggles.mirror_leech.
         # We avoid an async DB read inside this keyboard builder for latency
         # and surface the gate in the ml_opt_multi handler itself instead,

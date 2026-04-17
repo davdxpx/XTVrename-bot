@@ -908,6 +908,327 @@ async def _enterprise_text_router_v2(client: Client, message: Message) -> None:
         return
 
 
+# ---------------------------------------------------------------------------
+# Bulk Operations (Phase 5.9)
+# ---------------------------------------------------------------------------
+
+async def _selected_file_oids(user_id: int) -> list[ObjectId]:
+    """Read the multi-select list from the user's MyFiles state."""
+    try:
+        from plugins.myfiles import get_myfiles_state
+    except Exception:
+        return []
+    state = await get_myfiles_state(user_id)
+    ids: list[ObjectId] = []
+    for fid in state.get("selected_files", []) or []:
+        oid = _oid(str(fid))
+        if oid is not None:
+            ids.append(oid)
+    return ids
+
+
+@Client.on_callback_query(filters.regex(r"^mf_bulk_tag_start$"))
+async def bulk_tag_start(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_bulk", user_id):
+        await cq.answer("Bulk-Ops deaktiviert.", show_alert=True)
+        return
+    ids = await _selected_file_oids(user_id)
+    if not ids:
+        await cq.answer("Nichts ausgewählt.", show_alert=True)
+        return
+    _pending[user_id] = {"kind": "bulk_tag", "oids": [str(i) for i in ids]}
+    await cq.message.edit_text(
+        frame(
+            "#️⃣ **Bulk-Tag**",
+            f"> Setzt Tags auf **{len(ids)}** Datei(en).\n"
+            "> Syntax wie beim Einzel-Tag: `+foo -bar`.",
+        ),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Abbrechen", callback_data="myfiles_main")],
+        ]),
+    )
+    await cq.answer()
+
+
+async def _handle_bulk_tag(client: Client, message: Message, pending: dict) -> None:
+    user_id = message.from_user.id
+    if not await feature_enabled("myfiles_bulk", user_id):
+        _drop_pending(user_id)
+        return
+    oids = [ObjectId(s) for s in pending.get("oids", [])]
+    _drop_pending(user_id)
+    add: list[str] = []
+    rm: list[str] = []
+    for token in (message.text or "").split():
+        if token.startswith("+"):
+            t = _sanitize_tag(token[1:])
+            if t:
+                add.append(t)
+        elif token.startswith("-"):
+            t = _sanitize_tag(token[1:])
+            if t:
+                rm.append(t)
+    if add:
+        await db.files.update_many(
+            {"_id": {"$in": oids}, "user_id": user_id},
+            {"$addToSet": {"tags": {"$each": add[:20]}}},
+        )
+    if rm:
+        await db.files.update_many(
+            {"_id": {"$in": oids}, "user_id": user_id},
+            {"$pull": {"tags": {"$in": rm}}},
+        )
+    await db.audit_myfiles(
+        user_id, "bulk_tag", meta={"count": len(oids), "add": add, "remove": rm}
+    )
+    await message.reply_text(
+        frame(
+            "#️⃣ **Bulk-Tag abgeschlossen**",
+            f"> Geändert: **{len(oids)}** Datei(en)\n"
+            f"> +: `{', '.join(add) or '—'}`\n"
+            f"> –: `{', '.join(rm) or '—'}`",
+        )
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^mf_bulk_pin$"))
+async def bulk_pin(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_bulk", user_id):
+        await cq.answer("Bulk-Ops deaktiviert.", show_alert=True)
+        return
+    ids = await _selected_file_oids(user_id)
+    if not ids:
+        await cq.answer("Nichts ausgewählt.", show_alert=True)
+        return
+    res = await db.files.update_many(
+        {"_id": {"$in": ids}, "user_id": user_id},
+        {"$set": {"pinned": True}},
+    )
+    await db.audit_myfiles(user_id, "bulk_pin", meta={"count": res.modified_count})
+    await cq.answer(f"📌 {res.modified_count} gepinnt.", show_alert=True)
+
+
+@Client.on_callback_query(filters.regex(r"^mf_bulk_unpin$"))
+async def bulk_unpin(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_bulk", user_id):
+        await cq.answer("Bulk-Ops deaktiviert.", show_alert=True)
+        return
+    ids = await _selected_file_oids(user_id)
+    if not ids:
+        await cq.answer("Nichts ausgewählt.", show_alert=True)
+        return
+    res = await db.files.update_many(
+        {"_id": {"$in": ids}, "user_id": user_id},
+        {"$set": {"pinned": False}},
+    )
+    await cq.answer(f"📌 {res.modified_count} entpinnt.", show_alert=True)
+
+
+# ---------------------------------------------------------------------------
+# Smart Collections (Phase 5.11)
+# ---------------------------------------------------------------------------
+
+@Client.on_callback_query(filters.regex(r"^mf_smart_list$"))
+async def smart_list(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_smart", user_id):
+        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        return
+    cursor = db.folders.find({
+        "user_id": user_id,
+        "type": "smart",
+        "is_deleted": {"$ne": True},
+    }).sort("created_at", -1)
+    rows: list[list[InlineKeyboardButton]] = []
+    body_lines: list[str] = []
+    async for folder in cursor:
+        body_lines.append(
+            f"> 🧠 {folder.get('icon','')} **{folder.get('name','Smart')}** — "
+            f"`{folder.get('description','')[:40]}`"
+        )
+        rows.append([InlineKeyboardButton(
+            f"🧠 {folder.get('name','Smart')}",
+            callback_data=f"mf_smart_open_{folder['_id']}",
+        )])
+    if not body_lines:
+        body_lines = [
+            "> Noch keine Smart Collections.\n"
+            "> Tippe auf **Erstellen** um deine erste Regel anzulegen."
+        ]
+    rows.append([InlineKeyboardButton(
+        "➕ Erstellen", callback_data="mf_smart_create_start"
+    )])
+    rows.append([InlineKeyboardButton(
+        "← Zurück", callback_data="myfiles_main"
+    )])
+    await cq.message.edit_text(
+        frame("🧠 **Smart Collections**", "\n".join(body_lines)),
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+    await cq.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^mf_smart_create_start$"))
+async def smart_create_start(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_smart", user_id):
+        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        return
+    _pending[user_id] = {"kind": "smart_create"}
+    body = (
+        "> Sende zwei Zeilen:\n"
+        "> 1. **Name** der Collection\n"
+        "> 2. **Regel** — Syntax wie in der Suche\n"
+        "> (`tag:urlaub`, `size:>500mb`, `ext:mp4`, …)\n\n"
+        "> Beispiel:\n"
+        "> ```\n"
+        "> Große Videos\n"
+        "> ext:mp4 size:>500mb\n"
+        "> ```"
+    )
+    await cq.message.edit_text(
+        frame("🧠 **Neue Smart Collection**", body),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Abbrechen", callback_data="mf_smart_list")],
+        ]),
+    )
+    await cq.answer()
+
+
+async def _handle_smart_create(client: Client, message: Message, pending: dict) -> None:
+    user_id = message.from_user.id
+    if not await feature_enabled("myfiles_smart", user_id):
+        _drop_pending(user_id)
+        return
+    lines = [l.strip() for l in (message.text or "").splitlines() if l.strip()]
+    if len(lines) < 2:
+        await message.reply_text(
+            "⚠️ Bitte Name **und** Regel senden (zwei Zeilen)."
+        )
+        return
+    name, rule = lines[0][:60], lines[1][:200]
+    _drop_pending(user_id)
+    doc = {
+        "user_id": user_id,
+        "name": name,
+        "type": "smart",
+        "description": rule,
+        "smart_rule_text": rule,
+        "icon": "🧠",
+        "is_deleted": False,
+        "parent_folder_id": None,
+        "created_at": datetime.datetime.utcnow(),
+    }
+    res = await db.folders.insert_one(doc)
+    await db.audit_myfiles(
+        user_id, "smart_create",
+        folder_id=res.inserted_id, meta={"rule": rule},
+    )
+    await message.reply_text(
+        frame(
+            "🧠 **Smart Collection erstellt**",
+            f"> **Name:** `{name}`\n"
+            f"> **Regel:** `{rule}`",
+        ),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🧠 Öffnen",
+                                  callback_data=f"mf_smart_open_{res.inserted_id}")],
+            [InlineKeyboardButton("← Übersicht",
+                                  callback_data="mf_smart_list")],
+        ]),
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^mf_smart_open_([0-9a-f]{24})$"))
+async def smart_open(client: Client, cq: CallbackQuery) -> None:
+    from utils.myfiles_search import build_query
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_smart", user_id):
+        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        return
+    fid = _oid(cq.data.removeprefix("mf_smart_open_"))
+    if fid is None:
+        await cq.answer("Ungültige ID.", show_alert=True)
+        return
+    folder = await db.folders.find_one({
+        "_id": fid, "user_id": user_id, "type": "smart"
+    })
+    if not folder:
+        await cq.answer("Collection fehlt.", show_alert=True)
+        return
+    rule = folder.get("smart_rule_text") or folder.get("description", "")
+    q = build_query(rule, user_id=user_id)
+    cursor = db.files.find(q).sort("created_at", -1).limit(30)
+    rows: list[list[InlineKeyboardButton]] = []
+    body: list[str] = [f"> **Regel:** `{rule}`", ""]
+    count = 0
+    async for f in cursor:
+        count += 1
+        body.append(
+            f"> 📄 `{str(f.get('file_name',''))[:40]}`"
+        )
+        rows.append([InlineKeyboardButton(
+            f"📄 {str(f.get('file_name',''))[:30]}",
+            callback_data=f"myfiles_file_{f['_id']}",
+        )])
+    if count == 0:
+        body.append("> — Keine passenden Dateien. —")
+    rows.append([
+        InlineKeyboardButton("🔥 Löschen",
+                             callback_data=f"mf_smart_del_{fid}"),
+        InlineKeyboardButton("← Zurück",
+                             callback_data="mf_smart_list"),
+    ])
+    await cq.message.edit_text(
+        frame(
+            f"🧠 **{folder.get('name','Smart')}** ({count})",
+            "\n".join(body),
+        ),
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+    await cq.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^mf_smart_del_([0-9a-f]{24})$"))
+async def smart_delete(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_smart", user_id):
+        await cq.answer("Smart Collections deaktiviert.", show_alert=True)
+        return
+    fid = _oid(cq.data.removeprefix("mf_smart_del_"))
+    if fid is None:
+        await cq.answer("Ungültige ID.", show_alert=True)
+        return
+    await db.folders.delete_one({
+        "_id": fid, "user_id": user_id, "type": "smart"
+    })
+    await db.audit_myfiles(user_id, "smart_delete", folder_id=fid)
+    await cq.answer("🔥 Gelöscht.")
+    cq.data = "mf_smart_list"
+    await smart_list(client, cq)
+
+
+# ---------------------------------------------------------------------------
+# Extend the text dispatcher with the new input kinds.
+# ---------------------------------------------------------------------------
+
+_prev_dispatch = _dispatch_pending_text
+
+
+async def _dispatch_pending_text(client: Client, message: Message, pending: dict) -> bool:  # type: ignore[no-redef]
+    kind = pending.get("kind")
+    if kind == "bulk_tag":
+        await _handle_bulk_tag(client, message, pending)
+        return True
+    if kind == "smart_create":
+        await _handle_smart_create(client, message, pending)
+        return True
+    return await _prev_dispatch(client, message, pending)
+
+
 __all__ = [
     "render_quota_header",
 ]
