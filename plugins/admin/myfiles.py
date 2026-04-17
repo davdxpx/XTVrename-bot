@@ -54,6 +54,8 @@ async def admin_myfiles_callback(client, callback_query):
             buttons.append([InlineKeyboardButton("⚙️ Global Limits", callback_data="admin_myfiles_limits")])
 
         buttons.append([InlineKeyboardButton("🧹 DB Cleanup Tools", callback_data="admin_myfiles_cleanup")])
+        buttons.append([InlineKeyboardButton("🗂 Retention & Quotas", callback_data="admin_mf_retention")])
+        buttons.append([InlineKeyboardButton("🎛 MyFiles Feature Toggles", callback_data="admin_ftog_myfiles_menu")])
         buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
         try:
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
