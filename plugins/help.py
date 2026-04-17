@@ -9,16 +9,17 @@
 """`/help` command + every `help_*` callback page.
 
 Previously lived inside plugins/start.py (~1600 lines at the tail of
-the file) and the dedicated plugins/help_v22_guide.py. Consolidated
-into a single module so the help system can evolve without touching
-the start-command plugin.
+the file). Consolidated into a single module so the help system can
+evolve without touching the start-command plugin.
 
 Layout:
   1. `/help` command handler (handle_help_command_unique)
   2. Main callback router (handle_help_callbacks) covering every
-     legacy help topic (Quick Start, Tools, File Management, ...)
-  3. "✨ New in v2.2" submenu hub + per-topic pages
-     (help_new_v22, help_v22_<topic>)
+     help topic (Quick Start, Tools, File Management, ...)
+     • Mirror-Leech lives under All Tools → ☁️ Mirror-Leech and fans
+       out into six subpages via `help_ml_<topic>`
+     • TMDb / System Health / DB Layout live under Settings & Info
+       via `help_set_tmdb` / `help_set_health` / `help_set_dblayout`
 """
 
 from __future__ import annotations
@@ -55,7 +56,6 @@ async def handle_help_command_unique(client, message):
         "Please select a topic below to explore the guide:",
         reply_markup=InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("✨ New in v2.2", callback_data="help_new_v22")],
                 [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                 [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
                 [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
@@ -100,7 +100,6 @@ async def handle_help_callbacks(client, callback_query):
                 "Please select a topic below to explore the guide:",
                 reply_markup=InlineKeyboardMarkup(
                     [
-                        [InlineKeyboardButton("✨ New in v2.2", callback_data="help_new_v22")],
                         [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                         [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
                         [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
@@ -321,6 +320,7 @@ async def handle_help_callbacks(client, callback_query):
                         [InlineKeyboardButton("🎙️ Voice Converter", callback_data="help_tool_voice"),
                          InlineKeyboardButton("⭕ Video Note", callback_data="help_tool_videonote")],
                         [InlineKeyboardButton("▶️ YouTube Tool", callback_data="help_tool_youtube")],
+                        [InlineKeyboardButton("☁️ Mirror-Leech", callback_data="help_tool_ml")],
                         [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
                     ]
                 )
@@ -458,6 +458,36 @@ async def handle_help_callbacks(client, callback_query):
                              InlineKeyboardButton("🍪 Cookies (Admin)", callback_data="help_yt_cookies")],
                             [InlineKeyboardButton("🛡 Anti-Bot & Errors", callback_data="help_yt_errors"),
                              InlineKeyboardButton("💡 Tips", callback_data="help_yt_tips")],
+                            [InlineKeyboardButton("← Back to Tools", callback_data="help_tools")],
+                        ]
+                    ),
+                    disable_web_page_preview=True,
+                )
+            except MessageNotModified:
+                pass
+            return
+        elif tool == "ml":
+            # Mirror-Leech is big enough to warrant its own submenu —
+            # six subpages covering overview, sources, destinations,
+            # linking, MyFiles integration, and the SECRETS_KEY flow.
+            try:
+                await callback_query.message.edit_text(
+                    "**☁️ Mirror-Leech**\n\n"
+                    "> Fan any URL out to every cloud destination you've linked.\n"
+                    "━━━━━━━━━━━━━━━━━━━━\n"
+                    "Mirror-Leech takes any supported source (HTTP, yt-dlp, "
+                    "Telegram file, RSS feed) and uploads it to one or more "
+                    "configured destinations in parallel. Fused with MyFiles "
+                    "single + multi-select.\n\n"
+                    "Pick a topic below:",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [InlineKeyboardButton("🌐 Overview", callback_data="help_ml_overview")],
+                            [InlineKeyboardButton("📥 Sources", callback_data="help_ml_sources"),
+                             InlineKeyboardButton("☁️ Destinations", callback_data="help_ml_dests")],
+                            [InlineKeyboardButton("🔗 Linking a provider", callback_data="help_ml_link")],
+                            [InlineKeyboardButton("🧩 MyFiles integration", callback_data="help_ml_myfiles")],
+                            [InlineKeyboardButton("🎲 SECRETS_KEY generator", callback_data="help_ml_secrets")],
                             [InlineKeyboardButton("← Back to Tools", callback_data="help_tools")],
                         ]
                     ),
@@ -971,12 +1001,20 @@ async def handle_help_callbacks(client, callback_query):
                          InlineKeyboardButton("⚡ Quick Rename", callback_data="help_set_quick")],
                         [InlineKeyboardButton("📺 Dumb Channels", callback_data="help_set_dumb"),
                          InlineKeyboardButton("ℹ️ Bot Info", callback_data="help_set_info")],
+                        [InlineKeyboardButton("━━━━━━━━━ Admin ━━━━━━━━━", callback_data="noop_help")],
+                        [InlineKeyboardButton("🔒 TMDb (optional)", callback_data="help_set_tmdb"),
+                         InlineKeyboardButton("🩺 System Health", callback_data="help_set_health")],
+                        [InlineKeyboardButton("🗃 DB Layout Migration", callback_data="help_set_dblayout")],
                         [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
                     ]
                 )
             )
         except MessageNotModified:
             pass
+
+    elif data == "noop_help":
+        # Used as a silent placeholder for row separators in help menus.
+        pass
 
     elif data.startswith("help_set_"):
         setting = data.replace("help_set_", "")
@@ -1084,6 +1122,55 @@ async def handle_help_callbacks(client, callback_query):
                 f"**⚡ Powered by:** [𝕏TV](https://t.me/XTVglobal)\n"
                 f"**👨‍💻 Developed by:** [𝕏0L0™](https://t.me/davdxpx)\n"
                 f"© 2026 𝕏TV Network Global"
+            )
+        elif setting == "tmdb":
+            text = (
+                "**🔒 TMDb is now optional**\n\n"
+                "> Everything non-TMDb keeps working without a key.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "**Keeps working without TMDb**\n"
+                "> • General Mode renaming\n"
+                "> • File Converter, YouTube Tool, MyFiles, all other Tools\n\n"
+                "**Unlocks with a key**\n"
+                "> • Auto-match of uploads to Movie / Series\n"
+                "> • Posters on MyFiles + rename previews\n"
+                "> • Auto-route between Movie / Series dumb channels\n\n"
+                "Check `/admin → 🩺 System Health → 🎬 TMDb Status` to see "
+                "the current state and grab a free key if you want to light "
+                "it up."
+            )
+        elif setting == "health":
+            text = (
+                "**🩺 System Health & Statuses**\n\n"
+                "> One admin entry for every diagnostics page.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "Open via `/admin → 🩺 System Health & Statuses`. The "
+                "submenu gathers three operator-facing pages:\n\n"
+                "> 🩺 **DB Schema Health** — collection counts, migration "
+                "state, recent unknown-key writes\n"
+                "> 🎬 **TMDb Status** — is the key configured, what unlocks\n"
+                "> ☁️ **Mirror-Leech Config** — master toggle, provider "
+                "availability, SECRETS_KEY state\n\n"
+                "All three pages switch between compact (when configured) "
+                "and full-onboarding copy (when something is missing)."
+            )
+        elif setting == "dblayout":
+            text = (
+                "**🗃 DB layout migration**\n\n"
+                "> MediaStudio-* collections + per-concern settings.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "v2.2 renamed every MongoDB collection to the "
+                "**`MediaStudio-*`** scheme and split the monolithic "
+                "settings doc into per-concern docs (branding, payments, "
+                "premium_plans, …).\n\n"
+                "> ✅ Runs once automatically at startup\n"
+                "> 🛡 Idempotent, advisory-locked, safe to restart mid-run\n"
+                "> 💾 Every legacy collection is copied to "
+                "`<name>_backup_legacy` before the split\n\n"
+                "**Operator actions** at `/admin → 🩺 System Health → 🩺 DB "
+                "Schema Health`:\n"
+                "> • **🔁 Re-run migration (dry-run)** — plan-only, no writes\n"
+                "> • **🗑 Drop legacy backups** — reclaim disk once you're sure"
             )
         else:
             text = "Unknown setting."
@@ -1625,222 +1712,119 @@ async def handle_help_callbacks(client, callback_query):
         except MessageNotModified:
             pass
 
+    elif data.startswith("help_ml_"):
+        # Per-subtopic pages for the Mirror-Leech guide reached via
+        # All Tools → Mirror-Leech. Each page is one short screen with
+        # its own Back button to the Mirror-Leech hub.
+        topic = data.replace("help_ml_", "")
+        back_to_ml = [[InlineKeyboardButton("← Back to Mirror-Leech", callback_data="help_tool_ml")]]
+        if topic == "overview":
+            text = (
+                "**☁️ Mirror-Leech overview**\n\n"
+                "> One URL in → many destinations out.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> 🔗 Fans a single source to every linked cloud\n"
+                "> 🧩 Deep fusion with MyFiles (single + batch)\n"
+                "> 📊 `/mlqueue` tracks jobs with inline cancel\n"
+                "> 🔐 Credentials encrypted at rest (Fernet)\n\n"
+                "**Entry points**\n"
+                "> • `/ml <url>` — pick destinations, hit Start\n"
+                "> • `/settings → ☁️ Mirror-Leech` — link providers\n"
+                "> • MyFiles **☁️ Mirror-Leech Options** on any file\n\n"
+                "Admins flip the feature toggle at `/admin → 🩺 System "
+                "Health → ☁️ Mirror-Leech Config`."
+            )
+        elif topic == "sources":
+            text = (
+                "**📥 Mirror-Leech sources**\n\n"
+                "> What `/ml` accepts.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> • **Direct HTTP(S) URL** — aiohttp streaming with resume\n"
+                "> • **yt-dlp page** — any URL a yt-dlp extractor recognises "
+                "(YouTube, social video, …)\n"
+                "> • **Telegram file** — automatically used when you tap "
+                "☁️ Mirror-Leech on a MyFiles entry\n"
+                "> • **RSS feed** — first enclosure is handed to HTTP\n\n"
+                "The Controller picks the right downloader automatically — "
+                "you just paste the URL.\n\n"
+                "__Heads-up:__ peer-to-peer links aren't supported on main; "
+                "use the torrent-edition build for that."
+            )
+        elif topic == "dests":
+            text = (
+                "**☁️ Mirror-Leech destinations**\n\n"
+                "> Every uploader can be fanned to in parallel.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "> • **Google Drive** — OAuth refresh-token flow\n"
+                "> • **Rclone** — covers 70+ backends via your rclone.conf\n"
+                "> • **MEGA.nz** — email + password\n"
+                "> • **GoFile** — anonymous by default, optional token\n"
+                "> • **Pixeldrain** — anonymous by default, optional key\n"
+                "> • **Telegram** — DM fallback, userbot for >2 GB\n"
+                "> • **DDL** — one-time signed URLs served from the host\n\n"
+                "Availability depends on what's installed on the host — "
+                "unavailable providers are hidden automatically in the picker."
+            )
+        elif topic == "link":
+            text = (
+                "**🔗 Linking a provider**\n\n"
+                "> Five taps from zero to ready.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "**1.** Open `/settings → ☁️ Mirror-Leech`.\n"
+                "**2.** Tap the provider you want to link.\n"
+                "**3.** Hit **📝 Paste / update credentials**, then send the "
+                "token (or email+password, or rclone.conf) as your next "
+                "message.\n"
+                "**4.** The bot encrypts it with Fernet, deletes your paste "
+                "message, and confirms.\n"
+                "**5.** Tap **🔌 Test connection** to verify.\n\n"
+                "**Clearing a provider**\n"
+                "> Same screen → **🗑 Clear credential**. Removes every "
+                "field for that provider so you can re-link cleanly."
+            )
+        elif topic == "myfiles":
+            text = (
+                "**🧩 MyFiles integration**\n\n"
+                "> Mirror any MyFiles entry in one tap.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "Every MyFiles entry now has a **☁️ Mirror-Leech Options** "
+                "button alongside Send / Rename / Move.\n\n"
+                "**Single file**\n"
+                "> Tap the button → pick destinations → **🚀 Start**.\n\n"
+                "**Multi-select**\n"
+                "> Tick the files you want, then the bottom bar shows "
+                "`☁️ Mirror-Leech Selected (N)`. The picker queues one "
+                "MLTask per file × destination so everything runs in parallel.\n\n"
+                "Each task gets its own progress message with a cancel "
+                "button, and `/mlqueue` lists them all at once."
+            )
+        elif topic == "secrets":
+            text = (
+                "**🎲 SECRETS_KEY one-click generator**\n\n"
+                "> Needed to store provider credentials.\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                "Mirror-Leech encrypts every provider credential with Fernet. "
+                "The key lives in the `SECRETS_KEY` env var and can be "
+                "generated in-bot:\n\n"
+                "**1.** `/admin → 🩺 System Health → ☁️ Mirror-Leech Config`\n"
+                "**2.** Tap **🎲 Generate SECRETS_KEY**\n"
+                "**3.** Copy the posted key + follow the per-host install "
+                "block\n"
+                "**4.** Restart the bot → tap **✅ Enable Mirror-Leech**\n\n"
+                "__⚠️ Back the key up.__ Losing it means every user has to "
+                "re-link their providers."
+            )
+        else:
+            text = "Unknown Mirror-Leech topic."
+        try:
+            await callback_query.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(back_to_ml),
+                disable_web_page_preview=True,
+            )
+        except MessageNotModified:
+            pass
+
     elif data == "help_close":
         await callback_query.message.delete()
 
-# --- ✨ New in v2.2 submenu ------------------------------------------------
-
-# --- Hub ---------------------------------------------------------------------
-
-def _hub_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("🔒 TMDb is now optional", callback_data="help_v22_tmdb")],
-            [InlineKeyboardButton("☁️ Mirror-Leech overview", callback_data="help_v22_ml_intro")],
-            [
-                InlineKeyboardButton("📥 Sources", callback_data="help_v22_ml_sources"),
-                InlineKeyboardButton("☁️ Destinations", callback_data="help_v22_ml_dests"),
-            ],
-            [InlineKeyboardButton("🔗 Linking a provider", callback_data="help_v22_ml_link")],
-            [InlineKeyboardButton("🧩 MyFiles integration", callback_data="help_v22_ml_myfiles")],
-            [InlineKeyboardButton("🎲 SECRETS_KEY one-click", callback_data="help_v22_secrets")],
-            [InlineKeyboardButton("🩺 System Health panel", callback_data="help_v22_health")],
-            [InlineKeyboardButton("🗃 DB layout migration", callback_data="help_v22_dblayout")],
-            [InlineKeyboardButton("← Back to Guide", callback_data="help_guide")],
-        ]
-    )
-
-
-def _hub_text() -> str:
-    return (
-        "**✨ What's new in v2.2**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Bite-sized pages covering everything MyFiles 2.2 added on top of "
-        "the original bot. Tap a topic; each page is one screen of copy "
-        "with a back button.\n\n"
-        "> __Tip:__ If you're just starting out, read **☁️ Mirror-Leech "
-        "overview** first — it ties most of the other pages together."
-    )
-
-
-@Client.on_callback_query(filters.regex(r"^help_new_v22$"))
-async def help_v22_hub(client: Client, callback_query: CallbackQuery) -> None:
-    try:
-        await callback_query.message.edit_text(_hub_text(), reply_markup=_hub_keyboard())
-    except MessageNotModified:
-        pass
-    try:
-        await callback_query.answer()
-    except Exception:
-        pass
-
-
-# --- Individual pages --------------------------------------------------------
-
-_PAGES: dict[str, tuple[str, str]] = {
-    "tmdb": (
-        "🔒 TMDb is now optional",
-        "**🔒 TMDb is now optional**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "The bot runs fine without a TMDb API key — only the features "
-        "that actually need TMDb show a 🔒 badge until you add one.\n\n"
-        "**Keeps working without TMDb**\n"
-        "> • General Mode renaming\n"
-        "> • File Converter, YouTube Tool, MyFiles, all other Tools\n\n"
-        "**Unlocks with a key**\n"
-        "> • Auto-match of uploads to Movie / Series\n"
-        "> • Posters on MyFiles + rename previews\n"
-        "> • Auto-route between Movie / Series dumb channels\n\n"
-        "Check `/admin → 🩺 System Health → 🎬 TMDb Status` to see the "
-        "current state and grab a free key if you want to light it up.",
-    ),
-    "ml_intro": (
-        "☁️ Mirror-Leech overview",
-        "**☁️ Mirror-Leech overview**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Mirror-Leech takes any supported source and fans it out to every "
-        "cloud destination you've linked.\n\n"
-        "> 🔗 One URL in → many destinations out\n"
-        "> 🧩 Deep fusion with MyFiles (single + batch)\n"
-        "> 📊 `/mlqueue` tracks jobs with inline cancel\n"
-        "> 🔐 Credentials encrypted at rest (Fernet)\n\n"
-        "**Entry points**\n"
-        "> • `/ml <url>` — pick destinations, hit Start\n"
-        "> • `/settings → ☁️ Mirror-Leech` — link providers\n"
-        "> • MyFiles `☁️ Mirror-Leech Options` on any file\n\n"
-        "Admins flip the feature toggle at `/admin → 🩺 System Health "
-        "→ ☁️ Mirror-Leech Config`.",
-    ),
-    "ml_sources": (
-        "📥 Mirror-Leech sources",
-        "**📥 Mirror-Leech sources**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "What `/ml` accepts:\n\n"
-        "> • **Direct HTTP(S) URL** — aiohttp streaming with resume\n"
-        "> • **yt-dlp page** — any URL a yt-dlp extractor recognises "
-        "(YouTube, social video, etc.)\n"
-        "> • **Telegram file** — automatically used when you tap "
-        "☁️ Mirror-Leech on a MyFiles entry\n"
-        "> • **RSS feed** — first enclosure is handed to HTTP\n\n"
-        "The Controller picks the right downloader on its own — you "
-        "just paste the URL.\n\n"
-        "__Heads-up:__ peer-to-peer links aren't supported on the main "
-        "branch; use the torrent-edition build for that.",
-    ),
-    "ml_dests": (
-        "☁️ Mirror-Leech destinations",
-        "**☁️ Mirror-Leech destinations**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Every registered uploader can be fanned to in parallel:\n\n"
-        "> • **Google Drive** — OAuth refresh-token flow\n"
-        "> • **Rclone** — covers 70+ backends via your rclone.conf\n"
-        "> • **MEGA.nz** — email + password\n"
-        "> • **GoFile** — anonymous by default, optional token\n"
-        "> • **Pixeldrain** — anonymous by default, optional key\n"
-        "> • **Telegram** — DM fallback, userbot for >2 GB\n"
-        "> • **DDL** — one-time signed URLs served from the host\n\n"
-        "Availability depends on what's installed — unavailable "
-        "providers are hidden automatically in the picker.",
-    ),
-    "ml_link": (
-        "🔗 Linking a provider",
-        "**🔗 Linking a provider**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "1. Open `/settings → ☁️ Mirror-Leech`.\n"
-        "2. Tap the provider you want to link.\n"
-        "3. Hit **📝 Paste / update credentials**, then send the token "
-        "(or email+password, or rclone.conf) as your next message.\n"
-        "4. The bot encrypts it with Fernet, deletes your paste "
-        "message, and confirms.\n"
-        "5. Tap **🔌 Test connection** to verify.\n\n"
-        "**Clearing a provider**\n"
-        "> Same screen → **🗑 Clear credential**. Removes every field "
-        "for that provider so you can re-link cleanly.",
-    ),
-    "ml_myfiles": (
-        "🧩 MyFiles integration",
-        "**🧩 MyFiles integration**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Every MyFiles entry now has a **☁️ Mirror-Leech Options** "
-        "button alongside Send / Rename / Move.\n\n"
-        "**Single file**\n"
-        "> Tap the button → pick destinations → **🚀 Start**.\n\n"
-        "**Multi-select**\n"
-        "> Tick the files you want, then the bottom bar shows "
-        "`☁️ Mirror-Leech Selected (N)`. The picker queues one "
-        "MLTask per file × destination so everything runs in parallel.\n\n"
-        "Each task gets its own progress message with a cancel button, "
-        "and `/mlqueue` lists them all at once.",
-    ),
-    "secrets": (
-        "🎲 SECRETS_KEY one-click",
-        "**🎲 SECRETS_KEY one-click generator**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "Mirror-Leech encrypts every provider credential with Fernet. "
-        "The key lives in the `SECRETS_KEY` env var and can be generated "
-        "in-bot:\n\n"
-        "1. `/admin → 🩺 System Health → ☁️ Mirror-Leech Config`\n"
-        "2. Tap **🎲 Generate SECRETS_KEY**\n"
-        "3. Copy the posted key + follow the per-host install block\n"
-        "4. Restart the bot → tap **✅ Enable Mirror-Leech**\n\n"
-        "__⚠️ Back the key up.__ Losing it means every user has to "
-        "re-link their providers.",
-    ),
-    "health": (
-        "🩺 System Health panel",
-        "**🩺 System Health & Statuses**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "One admin entry gathering every operator-facing diagnostics "
-        "page. Open via `/admin → 🩺 System Health & Statuses`.\n\n"
-        "> 🩺 **DB Schema Health** — collection counts, migration state, "
-        "recent unknown-key writes\n"
-        "> 🎬 **TMDb Status** — is the key configured, what unlocks\n"
-        "> ☁️ **Mirror-Leech Config** — master toggle, provider "
-        "availability, SECRETS_KEY state\n\n"
-        "All three pages switch between compact (when configured) and "
-        "full-onboarding copy (when something is missing).",
-    ),
-    "dblayout": (
-        "🗃 DB layout migration",
-        "**🗃 DB layout migration**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "v2.2 renames every MongoDB collection to the **`MediaStudio-*`** "
-        "scheme and splits the monolithic settings doc into per-concern "
-        "docs (branding, payments, premium_plans, ...).\n\n"
-        "> ✅ Runs once automatically at startup\n"
-        "> 🛡 Idempotent, advisory-locked, safe to restart mid-run\n"
-        "> 💾 Every legacy collection is copied to `<name>_backup_legacy` "
-        "before the split\n\n"
-        "**Operator actions** at `/admin → 🩺 System Health → 🩺 DB "
-        "Schema Health`:\n"
-        "> • **🔁 Re-run migration (dry-run)** — plan-only, no writes\n"
-        "> • **🗑 Drop legacy backups** — reclaim disk once you're sure",
-    ),
-}
-
-
-def _page_keyboard(topic_id: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("← Back to New in v2.2", callback_data="help_new_v22")],
-            [InlineKeyboardButton("❌ Close", callback_data="help_close")],
-        ]
-    )
-
-
-@Client.on_callback_query(filters.regex(r"^help_v22_(tmdb|ml_intro|ml_sources|ml_dests|ml_link|ml_myfiles|secrets|health|dblayout)$"))
-async def help_v22_page(client: Client, callback_query: CallbackQuery) -> None:
-    topic_id = callback_query.data.removeprefix("help_v22_")
-    page = _PAGES.get(topic_id)
-    if not page:
-        await callback_query.answer("Unknown page.", show_alert=True)
-        return
-    _, body = page
-    try:
-        await callback_query.message.edit_text(body, reply_markup=_page_keyboard(topic_id))
-    except MessageNotModified:
-        pass
-    try:
-        await callback_query.answer()
-    except Exception:
-        pass
