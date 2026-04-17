@@ -9,6 +9,35 @@ from config import Config
 def is_public_mode():
     return Config.PUBLIC_MODE
 from utils.currency import convert_to_usd_str
+from utils.help_builder import format_egress
+
+
+def get_features_display(settings, global_toggles):
+    features = settings.get("features", {})
+    display_lines = []
+
+    # Core Perks (Static)
+    if features.get("priority_queue"):
+        display_lines.append("🚀 Priority Queue")
+    if features.get("batch_sharing"):
+        display_lines.append("🔗 Batch Sharing")
+    if features.get("xtv_pro_4gb"):
+        display_lines.append("⚡ XTV Pro 4GB Bypass")
+
+    # Media Tools (Dynamic Cascade)
+    # Only advertise if enabled in plan AND disabled globally
+    if features.get("subtitle_extractor") and not global_toggles.get("subtitle_extractor", True):
+        display_lines.append("💬 Subtitle Extractor")
+    if features.get("watermarker") and not global_toggles.get("watermarker", True):
+        display_lines.append("🎨 Image Watermarker")
+    if features.get("file_converter") and not global_toggles.get("file_converter", True):
+        display_lines.append("🔄 File Converter")
+    if features.get("audio_editor") and not global_toggles.get("audio_editor", True):
+        display_lines.append("🎵 Audio Editor")
+    if features.get("youtube_tool") and not global_toggles.get("youtube_tool", True):
+        display_lines.append("▶️ YouTube Tool")
+
+    return "\n".join(display_lines) if display_lines else "None"
 
 # --- Helpers ---
 
@@ -83,14 +112,6 @@ async def generate_premium_dashboard(user_id, client):
     std_usd = await convert_to_usd_str(standard_settings.get("price_string", "0 USD"))
     dlx_usd = await convert_to_usd_str(deluxe_settings.get("price_string", "0 USD"))
 
-    def format_egress(mb):
-        if mb >= 1048576:
-            return f"{mb / 1048576:.2f} TB"
-        elif mb >= 1024:
-            return f"{mb / 1024:.2f} GB"
-        else:
-            return f"{mb} MB"
-
     std_mb = standard_settings.get('daily_egress_mb', 0)
     std_egress = format_egress(std_mb) if std_mb > 0 else "Unlimited"
     std_files = f"{standard_settings.get('daily_file_count', 0)}" if standard_settings.get("daily_file_count", 0) > 0 else "Unlimited"
@@ -111,33 +132,6 @@ async def generate_premium_dashboard(user_id, client):
 
     global_toggles = await db.get_feature_toggles()
 
-    def get_features_display(settings):
-        features = settings.get("features", {})
-        display_lines = []
-
-        # Core Perks (Static)
-        if features.get("priority_queue"):
-            display_lines.append("🚀 Priority Queue")
-        if features.get("batch_sharing"):
-            display_lines.append("🔗 Batch Sharing")
-        if features.get("xtv_pro_4gb"):
-            display_lines.append("⚡ XTV Pro 4GB Bypass")
-
-        # Media Tools (Dynamic Cascade)
-        # Only advertise if enabled in plan AND disabled globally
-        if features.get("subtitle_extractor") and not global_toggles.get("subtitle_extractor", True):
-            display_lines.append("💬 Subtitle Extractor")
-        if features.get("watermarker") and not global_toggles.get("watermarker", True):
-            display_lines.append("🎨 Image Watermarker")
-        if features.get("file_converter") and not global_toggles.get("file_converter", True):
-            display_lines.append("🔄 File Converter")
-        if features.get("audio_editor") and not global_toggles.get("audio_editor", True):
-            display_lines.append("🎵 Audio Editor")
-        if features.get("youtube_tool") and not global_toggles.get("youtube_tool", True):
-            display_lines.append("▶️ YouTube Tool")
-
-        return "\n".join(display_lines) if display_lines else "None"
-
     text = (
         f"💎 **UPGRADE TO PREMIUM** 💎\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -154,7 +148,7 @@ async def generate_premium_dashboard(user_id, client):
         f"**Perks:**\n"
     )
 
-    std_perks = get_features_display(standard_settings)
+    std_perks = get_features_display(standard_settings, global_toggles)
     text += f"{std_perks}\n\n"
     text += f"**Price:** `{std_usd}`\n"
     text += f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -175,7 +169,7 @@ async def generate_premium_dashboard(user_id, client):
         )
 
         # Calculate diff for deluxe specific perks to avoid repeating standard
-        dlx_perks = get_features_display(deluxe_settings)
+        dlx_perks = get_features_display(deluxe_settings, global_toggles)
         std_perks_list = std_perks.split('\n')
         dlx_only_perks = [p for p in dlx_perks.split('\n') if p not in std_perks_list]
 
