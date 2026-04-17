@@ -33,6 +33,9 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from database import db
 from plugins.admin.core import get_admin_access_limits_menu, is_admin
+from utils.log import get_logger
+
+logger = get_logger("plugins.admin.feature_toggles")
 
 
 async def _render_access_limits(callback_query: CallbackQuery):
@@ -417,6 +420,10 @@ async def feature_toggles_cb(client, callback_query: CallbackQuery):
         payload = data.removeprefix("admin_ftog_")
         feature, sep, page_str = payload.partition("__p")
         if not feature:
+            # Defensive: empty feature would mean a malformed callback.
+            # Answer so the Telegram spinner stops instead of hanging.
+            await callback_query.answer("Malformed toggle callback.",
+                                        show_alert=True)
             return
         try:
             page = int(page_str) if sep else 0
@@ -425,6 +432,10 @@ async def feature_toggles_cb(client, callback_query: CallbackQuery):
         toggles = await db.get_feature_toggles()
         current_state = bool(toggles.get(feature, False))
         new_state = not current_state
+        logger.info(
+            "feature toggle flip: key=%s current=%s new=%s user=%s page=%s",
+            feature, current_state, new_state, user_id, page,
+        )
         await db.update_feature_toggle(feature, new_state)
         await callback_query.answer(
             f"{'Enabled' if new_state else 'Disabled'} "
