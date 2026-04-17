@@ -417,8 +417,10 @@ async def version_restore(client: Client, cq: CallbackQuery) -> None:
 # Text-input router — shared with tag/search/share prompts below.
 # ---------------------------------------------------------------------------
 
-@Client.on_message(filters.private & filters.text, group=6)
 async def _enterprise_text_router(client: Client, message: Message) -> None:
+    """Legacy text-router signature kept for the unified v2 router below
+    to delegate to. Not a Pyrogram handler on its own anymore — the v2
+    decorator is the single registered handler."""
     user_id = message.from_user.id
     pending = _pending.get(user_id)
     if not pending:
@@ -426,8 +428,6 @@ async def _enterprise_text_router(client: Client, message: Message) -> None:
     kind = pending.get("kind")
     if kind == "tag_edit":
         await _handle_tag_edit(client, message, pending)
-    # Phase 5.6 search + 5.7 sharing text input wire in the follow-up
-    # commits reuse the same _pending slot.
 
 
 async def _handle_tag_edit(client: Client, message: Message, pending: dict) -> None:
@@ -474,6 +474,438 @@ async def _handle_tag_edit(client: Client, message: Message, pending: dict) -> N
             f"> –: `{', '.join(rm) or '—'}`",
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# Advanced Search (Phase 5.6)
+# ---------------------------------------------------------------------------
+
+@Client.on_callback_query(filters.regex(r"^mf_search_start$"))
+async def search_start(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_search", user_id):
+        await cq.answer("Suche deaktiviert.", show_alert=True)
+        return
+    _pending[user_id] = {"kind": "search_query"}
+    body = (
+        "> Sende deine Suchanfrage. Operatoren:\n"
+        "> `tag:urlaub` `-tag:alt` `ext:mp4`\n"
+        "> `size:>500mb` `size:<1gb`\n"
+        "> `before:2026-01` `after:2025-06`\n"
+        "> Freitext → Datei-Namen (Regex ok)."
+    )
+    await cq.message.edit_text(
+        frame("🔎 **MyFiles Suche**", body),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Abbrechen", callback_data="myfiles_main")],
+        ]),
+    )
+    await cq.answer()
+
+
+async def _handle_search_query(client: Client, message: Message, pending: dict) -> None:
+    from utils.myfiles_search import build_query
+    user_id = message.from_user.id
+    if not await feature_enabled("myfiles_search", user_id):
+        _drop_pending(user_id)
+        return
+    _drop_pending(user_id)
+    q = build_query(message.text or "", user_id=user_id)
+    cursor = db.files.find(q).sort("created_at", -1).limit(20)
+    rows: list[list[InlineKeyboardButton]] = []
+    lines: list[str] = []
+    count = 0
+    async for f in cursor:
+        count += 1
+        lines.append(
+            f"> 📄 `{str(f.get('file_name',''))[:42]}` · "
+            f"`{format_bytes(float(f.get('size_bytes', 0) or 0))}`"
+        )
+        rows.append([InlineKeyboardButton(
+            f"📄 {str(f.get('file_name',''))[:30]}",
+            callback_data=f"myfiles_file_{f['_id']}",
+        )])
+    if not lines:
+        lines = ["> Keine Treffer."]
+    rows.append([InlineKeyboardButton(
+        "🔎 Neue Suche", callback_data="mf_search_start",
+    )])
+    rows.append([InlineKeyboardButton("← Zurück", callback_data="myfiles_main")])
+    await message.reply_text(
+        frame(
+            f"🔎 **Suchergebnisse** ({count})",
+            "\n".join(lines),
+        ),
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Granular Sharing (Phase 5.7)
+# ---------------------------------------------------------------------------
+
+_EXPIRY_CHOICES = [
+    ("1h", "1 Stunde",  3600),
+    ("1d", "1 Tag",     86400),
+    ("7d", "7 Tage",    7 * 86400),
+    ("30d", "30 Tage",  30 * 86400),
+    ("inf", "nie",      0),
+]
+_VIEW_CHOICES = [("1", 1), ("5", 5), ("25", 25), ("inf", 0)]
+_ACCESS_CHOICES = [("read", "👁 Lesen"), ("download", "⬇️ Download")]
+
+
+def _share_cfg_for(user_id: int, fid: str) -> dict:
+    state = _pending.get(user_id)
+    if state and state.get("kind") == "share_cfg" and state.get("file_id") == fid:
+        return state["cfg"]
+    cfg = {
+        "access": "download",
+        "expiry_key": "7d",
+        "expiry_seconds": 7 * 86400,
+        "max_views": 0,
+        "password": None,
+    }
+    _pending[user_id] = {"kind": "share_cfg", "file_id": fid, "cfg": cfg}
+    return cfg
+
+
+async def _render_share_cfg(cq: CallbackQuery, fid: str) -> None:
+    user_id = cq.from_user.id
+    cfg = _share_cfg_for(user_id, fid)
+    exp_label = next(
+        (lab for k, lab, _ in _EXPIRY_CHOICES if k == cfg["expiry_key"]),
+        cfg["expiry_key"],
+    )
+    body = (
+        f"> **Zugriff:** {'👁 Lesen' if cfg['access']=='read' else '⬇️ Download'}\n"
+        f"> **Ablauf:** {exp_label}\n"
+        f"> **Max. Zugriffe:** "
+        f"{cfg['max_views'] if cfg['max_views'] else '∞'}\n"
+        f"> **Passwort:** {'🔒 gesetzt' if cfg['password'] else '—'}"
+    )
+    rows: list[list[InlineKeyboardButton]] = []
+    rows.append([
+        InlineKeyboardButton(lab, callback_data=f"mf_shcfg_acc_{fid}_{k}")
+        for k, lab in _ACCESS_CHOICES
+    ])
+    rows.append([
+        InlineKeyboardButton(lab, callback_data=f"mf_shcfg_exp_{fid}_{k}")
+        for k, lab, _ in _EXPIRY_CHOICES
+    ])
+    rows.append([
+        InlineKeyboardButton(
+            ("∞" if v == 0 else v_lbl),
+            callback_data=f"mf_shcfg_views_{fid}_{v}",
+        )
+        for v_lbl, v in _VIEW_CHOICES
+    ])
+    rows.append([
+        InlineKeyboardButton("🔒 Passwort setzen",
+                             callback_data=f"mf_shcfg_pwd_{fid}"),
+        InlineKeyboardButton("🧹 Passwort löschen",
+                             callback_data=f"mf_shcfg_pwdclr_{fid}"),
+    ])
+    rows.append([
+        InlineKeyboardButton("✅ Link erzeugen",
+                             callback_data=f"mf_shcfg_done_{fid}"),
+        InlineKeyboardButton("← Zurück",
+                             callback_data=f"myfiles_file_{fid}"),
+    ])
+    await cq.message.edit_text(
+        frame("🔗 **Share-Link konfigurieren**", body),
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^mf_share_cfg_([0-9a-f]{24})$"))
+async def share_cfg_open(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        return
+    fid = cq.data.removeprefix("mf_share_cfg_")
+    _share_cfg_for(user_id, fid)
+    await _render_share_cfg(cq, fid)
+    await cq.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^mf_shcfg_acc_([0-9a-f]{24})_(read|download)$"))
+async def share_cfg_access(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        return
+    _, _, rest = cq.data.partition("mf_shcfg_acc_")
+    fid, _, mode = rest.rpartition("_")
+    cfg = _share_cfg_for(user_id, fid)
+    cfg["access"] = mode
+    await _render_share_cfg(cq, fid)
+    await cq.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^mf_shcfg_exp_([0-9a-f]{24})_([a-z0-9]+)$"))
+async def share_cfg_expiry(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        return
+    rest = cq.data.removeprefix("mf_shcfg_exp_")
+    fid, _, key = rest.rpartition("_")
+    secs = next((s for k, _, s in _EXPIRY_CHOICES if k == key), None)
+    if secs is None:
+        await cq.answer("Unbekannte Wahl.", show_alert=True)
+        return
+    cfg = _share_cfg_for(user_id, fid)
+    cfg["expiry_key"] = key
+    cfg["expiry_seconds"] = secs
+    await _render_share_cfg(cq, fid)
+    await cq.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^mf_shcfg_views_([0-9a-f]{24})_(\d+)$"))
+async def share_cfg_views(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        return
+    rest = cq.data.removeprefix("mf_shcfg_views_")
+    fid, _, n = rest.rpartition("_")
+    cfg = _share_cfg_for(user_id, fid)
+    cfg["max_views"] = int(n)
+    await _render_share_cfg(cq, fid)
+    await cq.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^mf_shcfg_pwd_([0-9a-f]{24})$"))
+async def share_cfg_pwd_prompt(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        return
+    fid = cq.data.removeprefix("mf_shcfg_pwd_")
+    _pending[user_id] = {
+        "kind": "share_password",
+        "file_id": fid,
+        "cfg": _share_cfg_for(user_id, fid),
+    }
+    await cq.message.edit_text(
+        frame(
+            "🔒 **Passwort setzen**",
+            "> Sende das Passwort als nächste Nachricht.\n"
+            "> Leere Nachricht oder `cancel` bricht ab.",
+        ),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Abbrechen",
+                                  callback_data=f"mf_share_cfg_{fid}")],
+        ]),
+    )
+    await cq.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^mf_shcfg_pwdclr_([0-9a-f]{24})$"))
+async def share_cfg_pwd_clear(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        return
+    fid = cq.data.removeprefix("mf_shcfg_pwdclr_")
+    cfg = _share_cfg_for(user_id, fid)
+    cfg["password"] = None
+    await _render_share_cfg(cq, fid)
+    await cq.answer("🧹 Passwort entfernt.")
+
+
+@Client.on_callback_query(filters.regex(r"^mf_shcfg_done_([0-9a-f]{24})$"))
+async def share_cfg_done(client: Client, cq: CallbackQuery) -> None:
+    import hashlib
+
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        await cq.answer("Sharing deaktiviert.", show_alert=True)
+        return
+    fid = cq.data.removeprefix("mf_shcfg_done_")
+    cfg = _share_cfg_for(user_id, fid)
+
+    token = secrets.token_urlsafe(16)
+    expires_at = None
+    if cfg.get("expiry_seconds"):
+        expires_at = datetime.datetime.utcnow() + datetime.timedelta(
+            seconds=int(cfg["expiry_seconds"])
+        )
+    pwd_hash = None
+    if cfg.get("password"):
+        pwd_hash = hashlib.sha256(
+            cfg["password"].encode("utf-8")
+        ).hexdigest()
+
+    doc = {
+        "token": token,
+        "owner_id": user_id,
+        "target_type": "file",
+        "target_ids": [fid],
+        "access_mode": cfg.get("access", "download"),
+        "max_views": int(cfg.get("max_views", 0)),
+        "views": 0,
+        "password_hash": pwd_hash,
+        "expires_at": expires_at,
+    }
+    share_id = await db.myfiles_create_share(doc)
+    if not share_id:
+        await cq.answer("Share-Link konnte nicht erzeugt werden.",
+                        show_alert=True)
+        return
+
+    _drop_pending(user_id)
+    await db.audit_myfiles(user_id, "share_create",
+                           file_id=_oid(fid),
+                           meta={"token": token,
+                                 "max_views": cfg.get("max_views", 0)})
+    await db.log_myfiles_activity(user_id, "shared", file_id=_oid(fid))
+
+    me = await client.get_me()
+    link = f"https://t.me/{me.username}?start=share_{token}"
+    body = (
+        f"> ✅ Link erzeugt\n"
+        f"> Zugriff: {'👁 Lesen' if cfg['access']=='read' else '⬇️ Download'}\n"
+        f"> Ablauf: {cfg['expiry_key']}\n"
+        f"> Max. Zugriffe: "
+        f"{cfg['max_views'] if cfg['max_views'] else '∞'}\n\n"
+        f"`{link}`"
+    )
+    await cq.message.edit_text(
+        frame("🔗 **Share-Link erzeugt**", body),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Datei",
+                                  callback_data=f"myfiles_file_{fid}")],
+        ]),
+    )
+    await cq.answer()
+
+
+async def _handle_share_password(client: Client, message: Message, pending: dict) -> None:
+    user_id = message.from_user.id
+    if not await feature_enabled("myfiles_sharing", user_id):
+        _drop_pending(user_id)
+        return
+    raw = (message.text or "").strip()
+    fid = pending.get("file_id")
+    cfg = pending.get("cfg", {})
+    if raw.lower() in {"", "cancel", "abbrechen"}:
+        _drop_pending(user_id)
+        await message.reply_text("Abgebrochen.")
+        return
+    cfg["password"] = raw[:64]
+    _pending[user_id] = {"kind": "share_cfg", "file_id": fid, "cfg": cfg}
+    await message.reply_text(
+        frame(
+            "🔒 **Passwort gesetzt**",
+            "> Kehre über die Datei zurück zum Konfigurator, um den\n"
+            "> Link zu erzeugen.",
+        ),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Weiter zum Share-Konfigurator",
+                                  callback_data=f"mf_share_cfg_{fid}")],
+        ]),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Activity Feed (Phase 5.8)
+# ---------------------------------------------------------------------------
+
+_EVENT_ICON = {
+    "viewed": "👁",
+    "downloaded": "⬇️",
+    "shared": "🔗",
+    "edited": "✏️",
+    "restored": "♻️",
+    "tagged": "#️⃣",
+    "deleted": "🗑",
+    "moved": "📂",
+}
+
+
+def _fmt_event_time(dt: datetime.datetime) -> str:
+    now = datetime.datetime.utcnow()
+    delta = now - dt
+    if delta.days >= 7:
+        return dt.strftime("%Y-%m-%d")
+    if delta.days >= 1:
+        return f"vor {delta.days} Tag(en)"
+    minutes = int(delta.total_seconds() // 60)
+    if minutes < 1:
+        return "gerade eben"
+    if minutes < 60:
+        return f"vor {minutes} min"
+    return f"vor {minutes // 60} h"
+
+
+@Client.on_callback_query(filters.regex(r"^mf_activity_list$"))
+async def activity_list(client: Client, cq: CallbackQuery) -> None:
+    user_id = cq.from_user.id
+    if not await feature_enabled("myfiles_activity", user_id):
+        await cq.answer("Aktivität deaktiviert.", show_alert=True)
+        return
+    if db.myfiles_activity is None:
+        await cq.answer("DB offline.", show_alert=True)
+        return
+    cursor = db.myfiles_activity.find({"user_id": user_id}).sort("created_at", -1).limit(50)
+    lines: list[str] = []
+    count = 0
+    async for ev in cursor:
+        count += 1
+        when = _fmt_event_time(ev.get("created_at") or datetime.datetime.utcnow())
+        icon = _EVENT_ICON.get(ev.get("event", ""), "•")
+        fid = ev.get("file_id")
+        ref = f"`{str(fid)[:10]}`" if fid else ""
+        lines.append(f"> {icon} `{ev.get('event','?')}` {ref} · {when}")
+    if not lines:
+        lines = ["> Noch keine Aktivität."]
+    await cq.message.edit_text(
+        frame(f"📊 **Aktivität** ({count})", "\n".join(lines)),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("← Zurück", callback_data="myfiles_main")],
+        ]),
+    )
+    await cq.answer()
+
+
+# ---------------------------------------------------------------------------
+# Extend the text router with the new input kinds.
+# ---------------------------------------------------------------------------
+
+async def _dispatch_pending_text(client: Client, message: Message, pending: dict) -> bool:
+    """Handle the non-tag input kinds added in this module. Returns True
+    when the message was consumed."""
+    kind = pending.get("kind")
+    if kind == "search_query":
+        await _handle_search_query(client, message, pending)
+        return True
+    if kind == "share_password":
+        await _handle_share_password(client, message, pending)
+        return True
+    return False
+
+
+# Splice the new dispatcher into the existing text router (which only
+# knows about tag_edit). We monkey-patch by replacing the handler's
+# closure target — cleanest way without duplicating the handler.
+_orig_tag_text_router = _enterprise_text_router
+
+
+@Client.on_message(filters.private & filters.text, group=6)
+async def _enterprise_text_router_v2(client: Client, message: Message) -> None:
+    user_id = message.from_user.id
+    pending = _pending.get(user_id)
+    if not pending:
+        return
+    kind = pending.get("kind")
+    if kind == "tag_edit":
+        await _handle_tag_edit(client, message, pending)
+        return
+    if await _dispatch_pending_text(client, message, pending):
+        return
 
 
 __all__ = [

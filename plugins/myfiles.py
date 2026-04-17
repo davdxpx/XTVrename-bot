@@ -1399,9 +1399,27 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         state_dict = await get_myfiles_state(user_id)
         last_menu = state_dict.get("last_menu", "myfiles_main")
 
+        # Swap to the enterprise sharing configurator when the admin
+        # enables granular sharing; otherwise keep the legacy one-tap link.
+        try:
+            from utils.feature_gate import feature_enabled as _fe
+            _sharing_on = await _fe("myfiles_sharing", user_id)
+        except Exception:
+            _sharing_on = False
+        share_btn = (
+            InlineKeyboardButton(
+                "🔗 Share konfigurieren",
+                callback_data=f"mf_share_cfg_{file_id}",
+            )
+            if _sharing_on
+            else InlineKeyboardButton(
+                "🔗 Generate Share Link",
+                callback_data=f"myfiles_share_{file_id}",
+            )
+        )
         buttons = [
             [InlineKeyboardButton("📤 Send File", callback_data=f"myfiles_send_{file_id}")],
-            [InlineKeyboardButton("🔗 Generate Share Link", callback_data=f"myfiles_share_{file_id}")],
+            [share_btn],
             [InlineKeyboardButton(perm_btn_text, callback_data=f"myfiles_toggle_perm_{file_id}")],
             [InlineKeyboardButton("✏️ Rename", callback_data=f"myfiles_rename_{file_id}"),
              InlineKeyboardButton("📂 Move", callback_data=f"myfiles_move_{file_id}")],

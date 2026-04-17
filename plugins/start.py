@@ -26,6 +26,100 @@ async def handle_start_command_unique(client, message):
     if len(command_parts) > 1:
         param = command_parts[1]
 
+        if param.startswith("share_"):
+            # Enterprise MyFiles share token → resolve from myfiles_shares.
+            from pyrogram import StopPropagation
+            token = param.replace("share_", "", 1)
+            try:
+                share = await db.myfiles_resolve_share(token)
+                if not share:
+                    await message.reply_text(
+                        "⏳ **Share-Link abgelaufen oder ungültig.**"
+                    )
+                    raise StopPropagation
+                # Expiry / view caps.
+                import datetime as _dt
+                if share.get("expires_at") and _dt.datetime.utcnow() > share["expires_at"]:
+                    await db.myfiles_revoke_share(token)
+                    await message.reply_text("⏳ **Share-Link abgelaufen.**")
+                    raise StopPropagation
+                max_views = int(share.get("max_views", 0) or 0)
+                if max_views and int(share.get("views", 0) or 0) >= max_views:
+                    await message.reply_text(
+                        "🔒 **Share-Link: Zugriffslimit erreicht.**"
+                    )
+                    raise StopPropagation
+                # Password check.
+                if share.get("password_hash"):
+                    # For password-protected links we ask for it as the next
+                    # message via a simple in-memory gate.
+                    import hashlib
+                    sent_hash = hashlib.sha256(
+                        (message.text.split(None, 2)[2:3] or [""])[0].encode()
+                    ).hexdigest() if len(message.text.split()) >= 3 else None
+                    if sent_hash != share["password_hash"]:
+                        await message.reply_text(
+                            "🔒 Dieser Link ist passwortgeschützt.\n\n"
+                            f"Öffne: `/start share_{token} <passwort>`"
+                        )
+                        raise StopPropagation
+                # Deliver.
+                from bson.objectid import ObjectId
+                from pyrogram.errors import PeerIdInvalid
+                delivered = 0
+                for fid in share.get("target_ids", []):
+                    try:
+                        oid = ObjectId(fid)
+                    except Exception:
+                        continue
+                    f = await db.files.find_one({"_id": oid})
+                    if not f or f.get("is_deleted"):
+                        continue
+                    try:
+                        await client.copy_message(
+                            chat_id=user_id,
+                            from_chat_id=f["channel_id"],
+                            message_id=f["message_id"],
+                            protect_content=(share.get("access_mode") == "read"),
+                        )
+                        delivered += 1
+                    except PeerIdInvalid:
+                        try:
+                            await client.get_chat(f["channel_id"])
+                            await client.copy_message(
+                                chat_id=user_id,
+                                from_chat_id=f["channel_id"],
+                                message_id=f["message_id"],
+                                protect_content=(share.get("access_mode") == "read"),
+                            )
+                            delivered += 1
+                        except Exception as e:
+                            logger.error(f"share: peer fallback failed: {e}")
+                    except Exception as e:
+                        logger.error(f"share: copy_message failed: {e}")
+                # Bump view count + audit.
+                try:
+                    await db.myfiles_shares.update_one(
+                        {"token": token}, {"$inc": {"views": 1}}
+                    )
+                    await db.log_myfiles_activity(
+                        share.get("owner_id"), "shared"
+                    )
+                except Exception:
+                    pass
+                await message.reply_text(
+                    f"✅ {delivered} Datei(en) ausgeliefert."
+                )
+                raise StopPropagation
+            except Exception as e:
+                if isinstance(e, StopPropagation):
+                    raise
+                logger.error(f"share_ deep link failed: {e}")
+                await message.reply_text(
+                    "❌ Share-Link konnte nicht verarbeitet werden."
+                )
+                raise StopPropagation
+
         if param.startswith("group_"):
             from pyrogram import StopPropagation
             group_id = param.replace("group_", "")
