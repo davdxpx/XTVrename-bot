@@ -1662,8 +1662,8 @@ async def handle_help_callbacks(client, callback_query):
                 "> • **RSS feed** — first enclosure is handed to HTTP\n\n"
                 "The Controller picks the right downloader automatically — "
                 "you just paste the URL.\n\n"
-                "__Heads-up:__ peer-to-peer links aren't supported on main; "
-                "use the torrent-edition build for that."
+                "__Heads-up:__ peer-to-peer links aren't supported on "
+                "this build. Contact support if you need that flow."
             )
         elif topic == "dests":
             text = (
