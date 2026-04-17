@@ -87,9 +87,9 @@ def _render_text_onboarding(enabled: bool, secrets_ok: bool) -> str:
         "> 🧩 “☁️ Mirror-Leech Options” on every MyFiles entry\n"
         "> 📊 `/mlqueue` to track + cancel running jobs\n\n"
         "**Setup steps**\n"
-        "1. Tap _Generate SECRETS_KEY_ below.\n"
+        "1. Tap the **🎲 Generate SECRETS_KEY** button below.\n"
         "2. Add the printed key to the bot's env and restart.\n"
-        "3. Come back and tap _Enable Mirror-Leech_."
+        "3. Come back and tap **✅ Enable Mirror-Leech**."
     )
 
 

@@ -98,12 +98,12 @@ async def _render_health(callback_query: CallbackQuery):
             marker = "📦" if name.startswith("MediaStudio-") else "🧳"
             lines.append(f"{marker} `{name}` — {count}")
     else:
-        lines.append("_no MediaStudio collections yet_")
+        lines.append("__no MediaStudio collections yet__")
 
     lines.append("")
     lines.append("**Recent unknown-key writes**")
     if not unknown_writes:
-        lines.append("_none — routing table is holding up ✅_")
+        lines.append("__none — routing table is holding up ✅__")
     else:
         for entry in unknown_writes[-10:]:
             lines.append(
@@ -112,7 +112,7 @@ async def _render_health(callback_query: CallbackQuery):
 
     lines.append("")
     lines.append(
-        f"_Last refreshed: {_dt.datetime.utcnow().strftime('%H:%M:%S UTC')}_"
+        f"__Last refreshed: {_dt.datetime.utcnow().strftime('%H:%M:%S UTC')}__"
     )
 
     keyboard = InlineKeyboardMarkup(

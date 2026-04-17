@@ -1,837 +1,45 @@
-# --- Imports ---
-from pyrogram.errors import MessageNotModified
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------
+"""`/help` command + every `help_*` callback page.
+
+Previously lived inside plugins/start.py (~1600 lines at the tail of
+the file) and the dedicated plugins/help_v22_guide.py. Consolidated
+into a single module so the help system can evolve without touching
+the start-command plugin.
+
+Layout:
+  1. `/help` command handler (handle_help_command_unique)
+  2. Main callback router (handle_help_callbacks) covering every
+     legacy help topic (Quick Start, Tools, File Management, ...)
+  3. "✨ New in v2.2" submenu hub + per-topic pages
+     (help_new_v22, help_v22_<topic>)
+"""
+
+from __future__ import annotations
+
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
+
 from config import Config
-from utils.log import get_logger
-from utils.state import clear_session
-
-logger = get_logger("plugins.start")
-logger.info("Loading plugins.start...")
-
 from database import db
-from utils.auth import check_force_sub
-from utils.gate import send_force_sub_gate, check_and_send_welcome
-from plugins.force_sub_handler import send_starter_setup_message
-from plugins.user_setup import perform_smart_swap_if_needed, track_tool_usage, send_user_tool_preferences_setup
+from utils.log import get_logger
+from utils.logger import debug
 
-@Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)
+logger = get_logger("plugins.help")
 
-# --- Handlers ---
-async def handle_start_command_unique(client, message):
-    user_id = message.from_user.id
-    logger.debug(f"CMD received: {message.text} from {user_id}")
 
-    command_parts = message.text.split() if message.text else []
-    if len(command_parts) > 1:
-        param = command_parts[1]
-
-        if param.startswith("group_"):
-            from pyrogram import StopPropagation
-            group_id = param.replace("group_", "")
-            from bson.objectid import ObjectId
-            try:
-                group_doc = await db.file_groups.find_one({"group_id": group_id})
-                if group_doc:
-                    # Check if link has expired
-                    import datetime as _dt
-                    expires_at = group_doc.get("expires_at")
-                    if expires_at and _dt.datetime.utcnow() > expires_at:
-                        await message.reply_text("⏳ **Link Expired**\n\nThis share link has expired and is no longer available.")
-                        raise StopPropagation
-
-                    if not Config.PUBLIC_MODE:
-                        if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
-                            await message.reply_text("❌ Access Denied.")
-                            raise StopPropagation
-                    else:
-                        config = await db.get_public_config()
-                        if not await check_force_sub(client, user_id):
-                            await send_force_sub_gate(client, message, config)
-                            raise StopPropagation
-
-                    file_ids = group_doc.get("files", [])
-                    owner_id = group_doc.get("user_id")
-
-                    owner_name = "A user"
-                    is_owner_premium = False
-                    share_display_name = True
-
-                    if owner_id:
-                        owner_doc = await db.get_user(owner_id)
-                        if owner_doc:
-                            is_owner_premium = owner_doc.get("is_premium", False)
-
-                        owner_settings = await db.get_settings(owner_id)
-                        if owner_settings and "share_display_name" in owner_settings:
-                            share_display_name = owner_settings["share_display_name"]
-                        elif is_owner_premium:
-                            # For premium users, disabled by default for privacy reasons
-                            share_display_name = False
-
-                        # privacy_hide_username overrides display name
-                        if owner_settings and owner_settings.get("privacy_hide_username", False):
-                            share_display_name = False
-
-                        if share_display_name and owner_doc:
-                            owner_name = owner_doc.get("first_name", "A user")
-
-                        protect = False
-                        if owner_settings and "hide_forward_tags" in owner_settings:
-                            protect = owner_settings["hide_forward_tags"]
-
-                    else:
-                        protect = not is_owner_premium
-
-                    await message.reply_text(f"📦 **Batch File Delivery**\n\nReceiving {len(file_ids)} files shared by: `{owner_name if share_display_name else 'Anonymous'}`")
-
-                    # We could queue this or send them slowly
-                    import asyncio
-                    from pyrogram.errors import PeerIdInvalid
-                    count = 0
-                    for fid_str in file_ids:
-                        f = await db.files.find_one({"_id": ObjectId(fid_str)})
-                        if f:
-                            try:
-                                await client.copy_message(
-                                    chat_id=user_id,
-                                    from_chat_id=f["channel_id"],
-                                    message_id=f["message_id"],
-                                    protect_content=protect
-                                )
-                                count += 1
-                                await asyncio.sleep(0.5) # Anti-flood delay
-                            except PeerIdInvalid:
-                                try:
-                                    await client.get_chat(f["channel_id"])
-                                    await client.copy_message(
-                                        chat_id=user_id,
-                                        from_chat_id=f["channel_id"],
-                                        message_id=f["message_id"],
-                                        protect_content=protect
-                                    )
-                                    count += 1
-                                    await asyncio.sleep(0.5)
-                                except Exception as inner_e:
-                                    logger.error(f"Failed to copy group file {fid_str} (Peer fallback failed): {inner_e}")
-                            except Exception as e:
-                                logger.error(f"Failed to copy group file {fid_str}: {e}")
-
-                    try:
-                        await client.send_sticker(user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                    except Exception:
-                        pass
-                    await message.reply_text(f"✅ Delivered {count} files successfully.")
-
-                    raise StopPropagation
-            except Exception as e:
-                if isinstance(e, StopPropagation):
-                    raise
-                logger.error(f"Error handling group deep link: {e}")
-                pass
-
-        if param.startswith("file_"):
-            from pyrogram import StopPropagation
-            file_id_str = param.replace("file_", "")
-            from bson.objectid import ObjectId
-            try:
-                f = await db.files.find_one({"_id": ObjectId(file_id_str)})
-                if f:
-                    if not Config.PUBLIC_MODE:
-                        if user_id != Config.CEO_ID and user_id not in Config.ADMIN_IDS:
-                            await message.reply_text("❌ Access Denied.")
-                            raise StopPropagation
-                    else:
-                        config = await db.get_public_config()
-                        if not await check_force_sub(client, user_id):
-                            await send_force_sub_gate(client, message, config)
-                            raise StopPropagation
-
-                    owner_id = f.get("user_id")
-                    owner_name = "A user"
-                    is_owner_premium = False
-                    share_display_name = True
-                    protect = False
-
-                    if owner_id:
-                        owner_doc = await db.get_user(owner_id)
-                        if owner_doc:
-                            is_owner_premium = owner_doc.get("is_premium", False)
-                            owner_name = owner_doc.get("first_name", "A user")
-
-                        owner_settings = await db.get_settings(owner_id)
-                        if owner_settings and "share_display_name" in owner_settings:
-                            share_display_name = owner_settings["share_display_name"]
-                        if owner_settings and owner_settings.get("privacy_hide_username", False):
-                            share_display_name = False
-                        if owner_settings and "hide_forward_tags" in owner_settings:
-                            protect = owner_settings["hide_forward_tags"]
-
-                    if share_display_name and owner_name != "A user":
-                        share_text = f"> **{owner_name}** has shared this file with you."
-                    else:
-                        share_text = "> A file has been shared with you."
-
-                    await message.reply_text(f"📁 **File Received**\n\n{share_text}")
-
-                    from pyrogram.errors import PeerIdInvalid
-                    try:
-                        await client.copy_message(
-                            chat_id=user_id,
-                            from_chat_id=f["channel_id"],
-                            message_id=f["message_id"],
-                            protect_content=protect
-                        )
-                    except PeerIdInvalid:
-                        try:
-                            await client.get_chat(f["channel_id"])
-                            await client.copy_message(
-                                chat_id=user_id,
-                                from_chat_id=f["channel_id"],
-                                message_id=f["message_id"],
-                                protect_content=protect
-                            )
-                        except Exception as inner_e:
-                            logger.error(f"Error serving shared file (Peer fallback failed): {inner_e}")
-                            await message.reply_text("❌ The file is currently unavailable because the database channel is not accessible.")
-                            raise StopPropagation
-
-                    await client.send_sticker(chat_id=user_id, sticker="CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-
-                    if not is_owner_premium:
-                        ad_text = (
-                            "> **Rename. Convert. Organize.**\n"
-                            "> Process your own media with 𝕏TV MediaStudio™ today!"
-                        )
-                        await message.reply_text(
-                            ad_text,
-                            reply_markup=InlineKeyboardMarkup(
-                                [[InlineKeyboardButton("🚀 Start Processing", callback_data="start_renaming")]]
-                            )
-                        )
-
-                    raise StopPropagation
-                else:
-                    await message.reply_text("❌ File not found.")
-                    raise StopPropagation
-            except StopPropagation:
-                raise
-            except Exception as e:
-                logger.error(f"Error serving shared file: {e}")
-                await message.reply_text("❌ Invalid link or file not found.")
-                raise StopPropagation
-
-        if param.startswith("pro_setup_"):
-            parts = param.split("_")
-            tunnel_id_str = parts[2]
-
-            try:
-                tunnel_id = int(tunnel_id_str)
-                user_settings = await db.get_settings(user_id)
-                user_settings["temp_pro_tunnel_id"] = tunnel_id
-                await db.settings.update_one({"_id": f"user_{user_id}"}, {"$set": {"temp_pro_tunnel_id": tunnel_id}}, upsert=True)
-                await message.reply_text("✅ Detected Pro Setup Tunnel link. Proceed to connect your Userbot using /setup_pro.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Proceed", callback_data="pro_setup_start")]]))
-                return
-            except Exception as e:
-                pass
-
-    if not Config.PUBLIC_MODE:
-        if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
-            logger.warning(f"Unauthorized access by {user_id}")
-            return
-        bot_name = "**𝕏TV MediaStudio™**"
-        community_name = "official XTV"
-    else:
-        config = await db.get_public_config()
-        if not await check_force_sub(client, user_id):
-            await send_force_sub_gate(client, message, config)
-            return
-
-        await check_and_send_welcome(client, message, config)
-
-        bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
-        community_name = config.get("community_name", "Our Community")
-
-    is_new_user = False
-    user_usage = await db.get_user_usage(user_id)
-    if not user_usage:
-        is_new_user = True
-
-    if Config.PUBLIC_MODE:
-        has_setup = await db.has_completed_setup(user_id)
-        if not has_setup:
-            await db.ensure_user(user_id=message.from_user.id, first_name=message.from_user.first_name, username=message.from_user.username, last_name=message.from_user.last_name, language_code=message.from_user.language_code, is_bot=message.from_user.is_bot)
-            await send_starter_setup_message(client, user_id, message.from_user.first_name)
-            return
-
-        has_completed_preferences = await db.get_setting("has_completed_preferences", default=False, user_id=user_id)
-        if not has_completed_preferences:
-            await send_user_tool_preferences_setup(client, user_id, message)
-            return
-
-    # Trigger smart swap check before rendering menu
-    await perform_smart_swap_if_needed(user_id)
-
-    await db.ensure_user(
-        user_id=message.from_user.id,
-        first_name=message.from_user.first_name,
-        username=message.from_user.username,
-        last_name=message.from_user.last_name,
-        language_code=message.from_user.language_code,
-        is_bot=message.from_user.is_bot
-    )
-
-    await render_start_menu(client, user_id, first_name=message.from_user.first_name, bot_name=bot_name, community_name=community_name)
-
-
-async def render_start_menu(client, user_id, message_to_edit=None, first_name="User", bot_name=None, community_name=None):
-    """Render the personalized start menu. Edits message_to_edit if provided, otherwise sends new."""
-    if not bot_name:
-        if Config.PUBLIC_MODE:
-            config = await db.get_public_config()
-            bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
-            community_name = config.get("community_name", "Our Community")
-        else:
-            bot_name = "**𝕏TV MediaStudio™**"
-            community_name = "official XTV"
-
-    toggles = await db.get_feature_toggles()
-    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True) or toggles.get("youtube_tool", True)
-
-    is_premium_user = False
-    plan_display = "Standard"
-    status_emoji = "⭐"
-    pf = {}
-
-    if Config.PUBLIC_MODE:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            is_premium_user = True
-            plan_name = user_doc.get("premium_plan", "standard")
-            plan_display = "Deluxe" if plan_name == "deluxe" else "Standard"
-            status_emoji = "💎" if plan_name == "deluxe" else "⭐"
-
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                pf = plan_settings.get("features", {})
-
-                if not show_other:
-                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True) or pf.get("youtube_tool", True):
-                        show_other = True
-
-    tool_map = {
-        "rename": ("📁 Rename / Tag Media", "start_renaming"),
-        "audio_editor": ("🎵 Audio Editor", "audio_editor_menu"),
-        "file_converter": ("🔀 File Converter", "file_converter_menu"),
-        "watermarker": ("©️ Watermarker", "watermarker_menu"),
-        "subtitle_extractor": ("📝 Subtitle Extractor", "subtitle_extractor_menu"),
-        "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
-        "media_info": ("ℹ️ Media Info", "media_info_menu"),
-        "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
-        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu"),
-        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
-    }
-
-    user_settings = await db.get_settings(user_id)
-    selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]
-
-    buttons = []
-    for tool_id in selected_tools:
-        if tool_id in tool_map:
-            is_avail = tool_id == "rename"
-            if not is_avail:
-                is_avail = toggles.get(tool_id, True)
-                if Config.PUBLIC_MODE and is_premium_user:
-                    is_avail = is_avail or pf.get(tool_id, False)
-            if is_avail:
-                buttons.append([InlineKeyboardButton(tool_map[tool_id][0], callback_data=tool_map[tool_id][1])])
-
-    all_avail_ids = ["rename"]
-    for t_id in tool_map:
-        if t_id == "rename": continue
-        if toggles.get(t_id, True) and (pf.get(t_id, True) if pf else True):
-            all_avail_ids.append(t_id)
-
-    unselected_tools = [t for t in all_avail_ids if t not in selected_tools]
-    if unselected_tools:
-        buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
-    if Config.PUBLIC_MODE and is_premium_user:
-        buttons.append([InlineKeyboardButton("💎 Premium Dashboard", callback_data="user_premium_menu")])
-    buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
-
-    if is_premium_user:
-        text = (
-            f"{status_emoji} **Welcome back, {first_name}!** {status_emoji}\n\n"
-            f"> Your **Premium {plan_display}** status is Active ✅\n\n"
-            f"I am {bot_name}, your advanced media processing engine by the {community_name}.\n\n"
-            f"**Quick Actions:**\n"
-            f"• Send me any media file to begin priority processing\n"
-            f"• Explore your premium tools in the dashboard below\n\n"
-            f"Thank you for being a valued Premium member!"
-        )
-    else:
-        text = (
-            f"{bot_name}\n\n"
-            f"Welcome to the {community_name} media processing and management bot.\n"
-            f"This bot provides professional tools to organize and modify your files.\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 **Tip:** You don't need to click anything to begin!\n"
-            f"Simply send or forward a file directly to me, and I will auto-detect the details.\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"Click below to start manually or to view the guide."
-        )
-
-    markup = InlineKeyboardMarkup(buttons)
-    if message_to_edit:
-        try:
-            await message_to_edit.edit_text(text, reply_markup=markup)
-        except MessageNotModified:
-            pass
-        except Exception:
-            await client.send_message(user_id, text, reply_markup=markup)
-    else:
-        await client.send_message(user_id, text, reply_markup=markup)
-
-@Client.on_message(filters.command(["r", "rename"]) & filters.private, group=0)
-async def handle_rename_command(client, message):
-    user_id = message.from_user.id
-    from plugins.flow import handle_start_renaming
-    await track_tool_usage(user_id, "rename")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "start_renaming"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading menu...")
-    mock_cb.message = msg
-    await handle_start_renaming(client, mock_cb)
-
-@Client.on_message(filters.command(["g", "general"]) & filters.private, group=0)
-async def handle_general_command(client, message):
-    user_id = message.from_user.id
-    from plugins.flow import handle_type_general
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "type_general"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading general mode...")
-    mock_cb.message = msg
-    await handle_type_general(client, mock_cb)
-
-@Client.on_message(filters.command(["a", "audio"]) & filters.private, group=0)
-async def handle_audio_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("audio_editor", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("audio_editor", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.AudioMetadataEditor import handle_audio_editor_menu
-    await track_tool_usage(user_id, "audio_editor")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "audio_editor_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading audio editor...")
-    mock_cb.message = msg
-    await handle_audio_editor_menu(client, mock_cb)
-
-
-@Client.on_message(filters.command(["yt", "youtube"]) & filters.private, group=0)
-async def handle_youtube_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("youtube_tool", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("youtube_tool", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.YouTubeTool import handle_youtube_tool_menu
-    await track_tool_usage(user_id, "youtube_tool")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "youtube_tool_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading YouTube tool...")
-    mock_cb.message = msg
-    await handle_youtube_tool_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["p", "personal"]) & filters.private, group=0)
-async def handle_personal_command(client, message):
-    user_id = message.from_user.id
-    from plugins.flow import handle_type_personal
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "type_personal_file"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading personal mode...")
-    mock_cb.message = msg
-    await handle_type_personal(client, mock_cb)
-
-@Client.on_message(filters.command(["c", "convert"]) & filters.private, group=0)
-async def handle_convert_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("file_converter", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("file_converter", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.FileConverter import handle_file_converter_menu
-    await track_tool_usage(user_id, "file_converter")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "file_converter_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading converter...")
-    mock_cb.message = msg
-    await handle_file_converter_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["w", "watermark"]) & filters.private, group=0)
-async def handle_watermark_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("watermarker", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("watermarker", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.ImageWatermarker import handle_watermarker_menu
-    await track_tool_usage(user_id, "watermarker")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "watermarker_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading watermarker...")
-    mock_cb.message = msg
-    await handle_watermarker_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["s", "subtitle"]) & filters.private, group=0)
-async def handle_subtitle_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("subtitle_extractor", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("subtitle_extractor", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.SubtitleExtractor import handle_subtitle_extractor_menu
-    await track_tool_usage(user_id, "subtitle_extractor")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "subtitle_extractor_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading subtitle extractor...")
-    mock_cb.message = msg
-    await handle_subtitle_extractor_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["trim"]) & filters.private, group=0)
-async def handle_trim_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("video_trimmer", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("video_trimmer", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.VideoTrimmer import handle_video_trimmer_menu
-    await track_tool_usage(user_id, "video_trimmer")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "video_trimmer_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading video trimmer...")
-    mock_cb.message = msg
-    await handle_video_trimmer_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["mi", "mediainfo"]) & filters.private, group=0)
-async def handle_mediainfo_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("media_info", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("media_info", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.MediaInfo import handle_media_info_menu
-    await track_tool_usage(user_id, "media_info")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "media_info_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading media info...")
-    mock_cb.message = msg
-    await handle_media_info_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["v", "voice"]) & filters.private, group=0)
-async def handle_voice_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("voice_converter", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("voice_converter", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.VoiceNoteConverter import handle_voice_converter_menu
-    await track_tool_usage(user_id, "voice_converter")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "voice_converter_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading voice converter...")
-    mock_cb.message = msg
-    await handle_voice_converter_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["vn", "videonote"]) & filters.private, group=0)
-async def handle_videonote_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("video_note_converter", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("video_note_converter", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.VideoNoteConverter import handle_video_note_menu
-    await track_tool_usage(user_id, "video_note_converter")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "video_note_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading video note converter...")
-    mock_cb.message = msg
-    await handle_video_note_menu(client, mock_cb)
-
-@Client.on_message(filters.command(["t", "torrent"]) & filters.private, group=0)
-async def handle_torrent_command(client, message):
-    user_id = message.from_user.id
-
-    toggles = await db.get_feature_toggles()
-    allowed = toggles.get("torrent_downloader", True)
-
-    if Config.PUBLIC_MODE and not allowed:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                if plan_settings.get("features", {}).get("torrent_downloader", False):
-                    allowed = True
-
-    if not allowed:
-        await message.reply_text("❌ This feature is currently disabled by the Admin.")
-        return
-
-    from tools.TorrentDownloader import handle_torrent_menu
-    await track_tool_usage(user_id, "torrent_downloader")
-
-    class MockCallbackQuery:
-        def __init__(self, message):
-            self.message = message
-            self.from_user = message.from_user
-            self.data = "torrent_downloader_menu"
-
-        async def answer(self, *args, **kwargs):
-            pass
-
-    mock_cb = MockCallbackQuery(message)
-    msg = await message.reply_text("Loading Torrent Downloader...")
-    mock_cb.message = msg
-    await handle_torrent_menu(client, mock_cb)
+# --- /help command ---------------------------------------------------------
 
 @Client.on_message(filters.command("help") & filters.private, group=0)
 async def handle_help_command_unique(client, message):
@@ -847,6 +55,7 @@ async def handle_help_command_unique(client, message):
         "Please select a topic below to explore the guide:",
         reply_markup=InlineKeyboardMarkup(
             [
+                [InlineKeyboardButton("✨ New in v2.2", callback_data="help_new_v22")],
                 [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                 [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
                 [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
@@ -865,100 +74,9 @@ async def handle_help_command_unique(client, message):
         ),
     )
 
-@Client.on_message(filters.command("end") & filters.private, group=0)
-async def handle_end_command_unique(client, message):
-    user_id = message.from_user.id
-    logger.debug(f"CMD received: {message.text} from {user_id}")
-    clear_session(user_id)
-    toggles = await db.get_feature_toggles()
-    show_other = toggles.get("audio_editor", True) or toggles.get("file_converter", True) or toggles.get("watermarker", True) or toggles.get("subtitle_extractor", True) or toggles.get("youtube_tool", True)
+# --- Main callback router --------------------------------------------------
 
-    pf = {}
-    if Config.PUBLIC_MODE:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                pf = plan_settings.get("features", {})
-                if not show_other:
-                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True) or pf.get("youtube_tool", True):
-                        show_other = True
-
-    buttons = [
-        [InlineKeyboardButton("🎬 Start Renaming Manually", callback_data="start_renaming")]
-    ]
-    if show_other:
-        buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
-    buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
-
-    await message.reply_text(
-        "**Current Task Cancelled** ❌\n\n"
-        "Your progress has been cleared.\n"
-        "You can simply send me a file anytime to start over, or use the buttons below.",
-        reply_markup=InlineKeyboardMarkup(buttons),
-    )
-
-
-@Client.on_callback_query(filters.regex(r"^other_features_menu$"))
-async def handle_other_features_menu(client, callback_query):
-    await callback_query.answer()
-    toggles = await db.get_feature_toggles()
-    user_id = callback_query.from_user.id
-
-    pf = {}
-    if Config.PUBLIC_MODE:
-        user_doc = await db.get_user(user_id)
-        if user_doc and user_doc.get("is_premium"):
-            plan_name = user_doc.get("premium_plan", "standard")
-            config = await db.get_public_config()
-            if config.get("premium_system_enabled", False):
-                plan_settings = config.get(f"premium_{plan_name}", {})
-                pf = plan_settings.get("features", {})
-
-    user_settings = await db.get_settings(user_id)
-    selected_tools = user_settings.get("start_menu_tools", ["rename"]) if user_settings else ["rename"]
-
-    tool_map = {
-        "rename": ("📁 Rename / Tag Media", "start_renaming"),
-        "audio_editor": ("🎵 Audio Editor", "audio_editor_menu"),
-        "file_converter": ("🔀 File Converter", "file_converter_menu"),
-        "watermarker": ("©️ Watermarker", "watermarker_menu"),
-        "subtitle_extractor": ("📝 Subtitle Extractor", "subtitle_extractor_menu"),
-        "video_trimmer": ("✂️ Video Trimmer", "video_trimmer_menu"),
-        "media_info": ("ℹ️ Media Info", "media_info_menu"),
-        "voice_converter": ("🎙️ Voice Converter", "voice_converter_menu"),
-        "video_note_converter": ("⭕ Video Note Converter", "video_note_menu"),
-        "youtube_tool": ("▶️ YouTube Tool", "youtube_tool_menu"),
-        "torrent_downloader": ("🧲 Torrent Downloader", "torrent_downloader_menu"),
-    }
-
-    buttons = []
-
-    # Render unselected tools in Other Features
-    for t_id in tool_map:
-        if t_id in selected_tools: continue # These are on the main page
-
-        is_avail = t_id == "rename"
-        if not is_avail:
-            is_avail = toggles.get(t_id, True) and (pf.get(t_id, True) if pf else True)
-
-        if is_avail:
-            buttons.append([InlineKeyboardButton(tool_map[t_id][0], callback_data=tool_map[t_id][1])])
-
-
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="help_close")])
-
-    try:
-        await callback_query.message.edit_text(
-            "✨ **Media Tools**\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "> Select a tool from the list below:",
-            reply_markup=InlineKeyboardMarkup(buttons),
-        )
-    except MessageNotModified:
-        pass
+debug("✅ Loaded handler: help_callback")
 
 @Client.on_callback_query(filters.regex(r"^help_"))
 async def handle_help_callbacks(client, callback_query):
@@ -982,6 +100,7 @@ async def handle_help_callbacks(client, callback_query):
                 "Please select a topic below to explore the guide:",
                 reply_markup=InlineKeyboardMarkup(
                     [
+                        [InlineKeyboardButton("✨ New in v2.2", callback_data="help_new_v22")],
                         [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
                         [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
                         [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
@@ -1149,12 +268,11 @@ async def handle_help_callbacks(client, callback_query):
                 "• `/convert` or `/c` — Convert file formats\n"
                 "• `/watermark` or `/w` — Add image watermark\n"
                 "• `/subtitle` or `/s` — Extract subtitles\n"
-                "• `/trim` — Trim/cut video by timestamp\n"
+                "• `/trim` or `/t` — Trim/cut video by timestamp\n"
                 "• `/mediainfo` or `/mi` — Show detailed media file info\n"
                 "• `/voice` or `/v` — Convert audio to voice note\n"
                 "• `/videonote` or `/vn` — Convert video to round note\n"
                 "• `/youtube` or `/yt` — Download from YouTube (video / audio / thumb / subs)"
-                "• `/torrent` or `/t` — Search & download torrents"
             )
         elif cmd == "files":
             text = (
@@ -1290,7 +408,7 @@ async def handle_help_callbacks(client, callback_query):
                 "Trims a video between a start and end timestamp using stream copy (no re-encoding).\n\n"
                 "• Send a video, then provide start and end times.\n"
                 "• **Format:** `HH:MM:SS` or `MM:SS`\n"
-                "• **Shortcut:** `/trim`."
+                "• **Shortcut:** `/t` or `/trim`."
             )
         elif tool == "mediainfo":
             text = (
@@ -2510,11 +1628,219 @@ async def handle_help_callbacks(client, callback_query):
     elif data == "help_close":
         await callback_query.message.delete()
 
-# --------------------------------------------------------------------------
-# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
-# Don't Remove Credit
-# Telegram Channel @XTVbots
-# Developed for the 𝕏TV Network @XTVglobal
-# Backup Channel @XTVhome
-# Contact on Telegram @davdxpx
-# --------------------------------------------------------------------------
+# --- ✨ New in v2.2 submenu ------------------------------------------------
+
+# --- Hub ---------------------------------------------------------------------
+
+def _hub_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🔒 TMDb is now optional", callback_data="help_v22_tmdb")],
+            [InlineKeyboardButton("☁️ Mirror-Leech overview", callback_data="help_v22_ml_intro")],
+            [
+                InlineKeyboardButton("📥 Sources", callback_data="help_v22_ml_sources"),
+                InlineKeyboardButton("☁️ Destinations", callback_data="help_v22_ml_dests"),
+            ],
+            [InlineKeyboardButton("🔗 Linking a provider", callback_data="help_v22_ml_link")],
+            [InlineKeyboardButton("🧩 MyFiles integration", callback_data="help_v22_ml_myfiles")],
+            [InlineKeyboardButton("🎲 SECRETS_KEY one-click", callback_data="help_v22_secrets")],
+            [InlineKeyboardButton("🩺 System Health panel", callback_data="help_v22_health")],
+            [InlineKeyboardButton("🗃 DB layout migration", callback_data="help_v22_dblayout")],
+            [InlineKeyboardButton("← Back to Guide", callback_data="help_guide")],
+        ]
+    )
+
+
+def _hub_text() -> str:
+    return (
+        "**✨ What's new in v2.2**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Bite-sized pages covering everything MyFiles 2.2 added on top of "
+        "the original bot. Tap a topic; each page is one screen of copy "
+        "with a back button.\n\n"
+        "> __Tip:__ If you're just starting out, read **☁️ Mirror-Leech "
+        "overview** first — it ties most of the other pages together."
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^help_new_v22$"))
+async def help_v22_hub(client: Client, callback_query: CallbackQuery) -> None:
+    try:
+        await callback_query.message.edit_text(_hub_text(), reply_markup=_hub_keyboard())
+    except MessageNotModified:
+        pass
+    try:
+        await callback_query.answer()
+    except Exception:
+        pass
+
+
+# --- Individual pages --------------------------------------------------------
+
+_PAGES: dict[str, tuple[str, str]] = {
+    "tmdb": (
+        "🔒 TMDb is now optional",
+        "**🔒 TMDb is now optional**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "The bot runs fine without a TMDb API key — only the features "
+        "that actually need TMDb show a 🔒 badge until you add one.\n\n"
+        "**Keeps working without TMDb**\n"
+        "> • General Mode renaming\n"
+        "> • File Converter, YouTube Tool, MyFiles, all other Tools\n\n"
+        "**Unlocks with a key**\n"
+        "> • Auto-match of uploads to Movie / Series\n"
+        "> • Posters on MyFiles + rename previews\n"
+        "> • Auto-route between Movie / Series dumb channels\n\n"
+        "Check `/admin → 🩺 System Health → 🎬 TMDb Status` to see the "
+        "current state and grab a free key if you want to light it up.",
+    ),
+    "ml_intro": (
+        "☁️ Mirror-Leech overview",
+        "**☁️ Mirror-Leech overview**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Mirror-Leech takes any supported source and fans it out to every "
+        "cloud destination you've linked.\n\n"
+        "> 🔗 One URL in → many destinations out\n"
+        "> 🧩 Deep fusion with MyFiles (single + batch)\n"
+        "> 📊 `/mlqueue` tracks jobs with inline cancel\n"
+        "> 🔐 Credentials encrypted at rest (Fernet)\n\n"
+        "**Entry points**\n"
+        "> • `/ml <url>` — pick destinations, hit Start\n"
+        "> • `/settings → ☁️ Mirror-Leech` — link providers\n"
+        "> • MyFiles `☁️ Mirror-Leech Options` on any file\n\n"
+        "Admins flip the feature toggle at `/admin → 🩺 System Health "
+        "→ ☁️ Mirror-Leech Config`.",
+    ),
+    "ml_sources": (
+        "📥 Mirror-Leech sources",
+        "**📥 Mirror-Leech sources**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "What `/ml` accepts:\n\n"
+        "> • **Direct HTTP(S) URL** — aiohttp streaming with resume\n"
+        "> • **yt-dlp page** — any URL a yt-dlp extractor recognises "
+        "(YouTube, social video, etc.)\n"
+        "> • **Telegram file** — automatically used when you tap "
+        "☁️ Mirror-Leech on a MyFiles entry\n"
+        "> • **RSS feed** — first enclosure is handed to HTTP\n\n"
+        "The Controller picks the right downloader on its own — you "
+        "just paste the URL.\n\n"
+        "__Heads-up:__ peer-to-peer links aren't supported on the main "
+        "branch; use the torrent-edition build for that.",
+    ),
+    "ml_dests": (
+        "☁️ Mirror-Leech destinations",
+        "**☁️ Mirror-Leech destinations**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Every registered uploader can be fanned to in parallel:\n\n"
+        "> • **Google Drive** — OAuth refresh-token flow\n"
+        "> • **Rclone** — covers 70+ backends via your rclone.conf\n"
+        "> • **MEGA.nz** — email + password\n"
+        "> • **GoFile** — anonymous by default, optional token\n"
+        "> • **Pixeldrain** — anonymous by default, optional key\n"
+        "> • **Telegram** — DM fallback, userbot for >2 GB\n"
+        "> • **DDL** — one-time signed URLs served from the host\n\n"
+        "Availability depends on what's installed — unavailable "
+        "providers are hidden automatically in the picker.",
+    ),
+    "ml_link": (
+        "🔗 Linking a provider",
+        "**🔗 Linking a provider**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "1. Open `/settings → ☁️ Mirror-Leech`.\n"
+        "2. Tap the provider you want to link.\n"
+        "3. Hit **📝 Paste / update credentials**, then send the token "
+        "(or email+password, or rclone.conf) as your next message.\n"
+        "4. The bot encrypts it with Fernet, deletes your paste "
+        "message, and confirms.\n"
+        "5. Tap **🔌 Test connection** to verify.\n\n"
+        "**Clearing a provider**\n"
+        "> Same screen → **🗑 Clear credential**. Removes every field "
+        "for that provider so you can re-link cleanly.",
+    ),
+    "ml_myfiles": (
+        "🧩 MyFiles integration",
+        "**🧩 MyFiles integration**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Every MyFiles entry now has a **☁️ Mirror-Leech Options** "
+        "button alongside Send / Rename / Move.\n\n"
+        "**Single file**\n"
+        "> Tap the button → pick destinations → **🚀 Start**.\n\n"
+        "**Multi-select**\n"
+        "> Tick the files you want, then the bottom bar shows "
+        "`☁️ Mirror-Leech Selected (N)`. The picker queues one "
+        "MLTask per file × destination so everything runs in parallel.\n\n"
+        "Each task gets its own progress message with a cancel button, "
+        "and `/mlqueue` lists them all at once.",
+    ),
+    "secrets": (
+        "🎲 SECRETS_KEY one-click",
+        "**🎲 SECRETS_KEY one-click generator**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Mirror-Leech encrypts every provider credential with Fernet. "
+        "The key lives in the `SECRETS_KEY` env var and can be generated "
+        "in-bot:\n\n"
+        "1. `/admin → 🩺 System Health → ☁️ Mirror-Leech Config`\n"
+        "2. Tap **🎲 Generate SECRETS_KEY**\n"
+        "3. Copy the posted key + follow the per-host install block\n"
+        "4. Restart the bot → tap **✅ Enable Mirror-Leech**\n\n"
+        "__⚠️ Back the key up.__ Losing it means every user has to "
+        "re-link their providers.",
+    ),
+    "health": (
+        "🩺 System Health panel",
+        "**🩺 System Health & Statuses**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "One admin entry gathering every operator-facing diagnostics "
+        "page. Open via `/admin → 🩺 System Health & Statuses`.\n\n"
+        "> 🩺 **DB Schema Health** — collection counts, migration state, "
+        "recent unknown-key writes\n"
+        "> 🎬 **TMDb Status** — is the key configured, what unlocks\n"
+        "> ☁️ **Mirror-Leech Config** — master toggle, provider "
+        "availability, SECRETS_KEY state\n\n"
+        "All three pages switch between compact (when configured) and "
+        "full-onboarding copy (when something is missing).",
+    ),
+    "dblayout": (
+        "🗃 DB layout migration",
+        "**🗃 DB layout migration**\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "v2.2 renames every MongoDB collection to the **`MediaStudio-*`** "
+        "scheme and splits the monolithic settings doc into per-concern "
+        "docs (branding, payments, premium_plans, ...).\n\n"
+        "> ✅ Runs once automatically at startup\n"
+        "> 🛡 Idempotent, advisory-locked, safe to restart mid-run\n"
+        "> 💾 Every legacy collection is copied to `<name>_backup_legacy` "
+        "before the split\n\n"
+        "**Operator actions** at `/admin → 🩺 System Health → 🩺 DB "
+        "Schema Health`:\n"
+        "> • **🔁 Re-run migration (dry-run)** — plan-only, no writes\n"
+        "> • **🗑 Drop legacy backups** — reclaim disk once you're sure",
+    ),
+}
+
+
+def _page_keyboard(topic_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("← Back to New in v2.2", callback_data="help_new_v22")],
+            [InlineKeyboardButton("❌ Close", callback_data="help_close")],
+        ]
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^help_v22_(tmdb|ml_intro|ml_sources|ml_dests|ml_link|ml_myfiles|secrets|health|dblayout)$"))
+async def help_v22_page(client: Client, callback_query: CallbackQuery) -> None:
+    topic_id = callback_query.data.removeprefix("help_v22_")
+    page = _PAGES.get(topic_id)
+    if not page:
+        await callback_query.answer("Unknown page.", show_alert=True)
+        return
+    _, body = page
+    try:
+        await callback_query.message.edit_text(body, reply_markup=_page_keyboard(topic_id))
+    except MessageNotModified:
+        pass
+    try:
+        await callback_query.answer()
+    except Exception:
+        pass
