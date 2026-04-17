@@ -28,11 +28,14 @@ def _safe_import(mod: str) -> None:
 
 
 # Downloaders
-_safe_import("tools.mirror_leech.downloaders.HTTPDownloader")
-_safe_import("tools.mirror_leech.downloaders.YTDLPDownloader")
-_safe_import("tools.mirror_leech.downloaders.TelegramDownloader")
-_safe_import("tools.mirror_leech.downloaders.RSSDownloader")
-# torrent-edition only: wraps the aria2 daemon started by the Dockerfile.
+_safe_import("tools.mirror_leech.downloaders.TelegramDownloader")      
+_safe_import("tools.mirror_leech.downloaders.InstantShareDownloader")  
+_safe_import("tools.mirror_leech.downloaders.MediaPlatformDownloader") 
+_safe_import("tools.mirror_leech.downloaders.GalleryDLDownloader")    
+_safe_import("tools.mirror_leech.downloaders.YTDLPDownloader")         
+_safe_import("tools.mirror_leech.downloaders.RSSDownloader")           
+_safe_import("tools.mirror_leech.downloaders.Aria2Downloader")        
+_safe_import("tools.mirror_leech.downloaders.HTTPDownloader") 
 _safe_import("tools.mirror_leech.downloaders.MLTorrentDownloader")
 
 # Uploaders

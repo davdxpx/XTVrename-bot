@@ -151,6 +151,19 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"Error creating indexes: {e}")
 
+    # --- MyFiles extras v1 migration (idempotent) ---
+    # Creates audit / activity / quotas / shares collections + indexes,
+    # backfills is_deleted/tags/parent_folder_id defaults, and recomputes
+    # user quotas. Safe to run on every boot.
+    try:
+        from database import db
+        from db_migrations.myfiles_extras_v1 import run_myfiles_extras_v1
+
+        logger.info("Running DB migration: myfiles_extras_v1 ...")
+        app.loop.run_until_complete(run_myfiles_extras_v1(db))
+    except Exception as e:
+        logger.warning(f"myfiles_extras_v1 migration issue: {e}")
+
     # --- Restore YouTube cookies from DB (survives container redeploys) ---
     try:
         from tools.YouTubeTool import restore_youtube_cookies_from_db

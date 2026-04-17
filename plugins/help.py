@@ -34,6 +34,22 @@ from pyrogram.types import (
 
 from config import Config
 from database import db
+from utils.help_builder import (
+    CHILD_TO_HUB,
+    DISABLED_TOOL_ALERT,
+    PREMIUM_SUB_BUILDERS,
+    SUBPAGE_PREFIX_TO_TOOL,
+    TOOL_BY_CALLBACK,
+    build_help_context,
+    build_main_menu,
+    build_premium_landing,
+    build_quotas,
+    build_tool_child,
+    build_tool_hub,
+    build_tools_menu,
+    is_callback_tool_available,
+    is_tool_available,
+)
 from utils.log import get_logger
 from utils.logger import debug
 
@@ -47,32 +63,9 @@ async def handle_help_command_unique(client, message):
     user_id = message.from_user.id
     logger.debug(f"CMD received: {message.text} from {user_id}")
 
-    await message.reply_text(
-        "**📖 MediaStudio Guide**\n\n"
-        "> Welcome to your complete reference manual.\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "Whether you are organizing a massive media library of popular series and movies, "
-        "or just want to process and manage your **personal media** and files, I can help!\n\n"
-        "Please select a topic below to explore the guide:",
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
-                [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
-                [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
-                 InlineKeyboardButton("🤖 Auto-Detect", callback_data="help_auto_detect")],
-                [InlineKeyboardButton("📄 Personal & General", callback_data="help_general"),
-                 InlineKeyboardButton("🏷️ Templates", callback_data="help_templates")],
-                [InlineKeyboardButton("📺 Dumb Channels", callback_data="help_dumb_channels"),
-                 InlineKeyboardButton("🔗 Bot Commands", callback_data="help_commands")],
-                [InlineKeyboardButton("⚙️ Settings & Info", callback_data="help_settings")],
-                [InlineKeyboardButton("🎞️ Formats & Codecs", callback_data="help_formats"),
-                 InlineKeyboardButton("📈 Quotas & Limits", callback_data="help_quotas")],
-                [InlineKeyboardButton("💎 Premium Plans", callback_data="help_premium")],
-                [InlineKeyboardButton("🔧 Troubleshooting", callback_data="help_troubleshooting")],
-                [InlineKeyboardButton("❌ Close", callback_data="help_close")],
-            ]
-        ),
-    )
+    ctx = await build_help_context(user_id)
+    text, markup = build_main_menu(ctx)
+    await message.reply_text(text, reply_markup=markup)
 
 # --- Main callback router --------------------------------------------------
 
@@ -80,45 +73,62 @@ debug("✅ Loaded handler: help_callback")
 
 @Client.on_callback_query(filters.regex(r"^help_"))
 async def handle_help_callbacks(client, callback_query):
-    await callback_query.answer()
     user_id = callback_query.from_user.id
     data = callback_query.data
     debug(f"Help callback received: {data} from {user_id}")
+
+    # Early short-circuit for close — no state load needed.
+    if data == "help_close":
+        await callback_query.answer()
+        await callback_query.message.delete()
+        return
+
+    # Build admin-state context once per render.
+    ctx = await build_help_context(user_id)
+
+    # Disabled-tool guard for every tool hub + child page.
+    tool_entry = TOOL_BY_CALLBACK.get(data)
+    if tool_entry is not None and not is_tool_available(tool_entry.toggle_key, ctx):
+        await callback_query.answer(DISABLED_TOOL_ALERT, show_alert=True)
+        return
+    tool_key_for_child = None
+    for prefix, key in SUBPAGE_PREFIX_TO_TOOL.items():
+        if data.startswith(prefix):
+            tool_key_for_child = key
+            break
+    if tool_key_for_child is not None and not is_tool_available(tool_key_for_child, ctx):
+        await callback_query.answer(DISABLED_TOOL_ALERT, show_alert=True)
+        return
+
+    await callback_query.answer()
 
     back_button = [
         [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
     ]
 
     if data == "help_guide":
+        text, markup = build_main_menu(ctx)
         try:
-            await callback_query.message.edit_text(
-                "**📖 MediaStudio Guide**\n\n"
-                "> Welcome to your complete reference manual.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "Whether you are organizing a massive media library of popular series and movies, "
-                "or just want to process and manage your **personal media** and files, I can help!\n\n"
-                "Please select a topic below to explore the guide:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [InlineKeyboardButton("🚀 Quick Start", callback_data="help_quickstart")],
-                        [InlineKeyboardButton("🛠 All Tools & Features", callback_data="help_tools")],
-                        [InlineKeyboardButton("📁 File Management", callback_data="help_file_management"),
-                         InlineKeyboardButton("🤖 Auto-Detect", callback_data="help_auto_detect")],
-                        [InlineKeyboardButton("📄 Personal & General", callback_data="help_general"),
-                         InlineKeyboardButton("🏷️ Templates", callback_data="help_templates")],
-                        [InlineKeyboardButton("📺 Dumb Channels", callback_data="help_dumb_channels"),
-                         InlineKeyboardButton("🔗 Bot Commands", callback_data="help_commands")],
-                        [InlineKeyboardButton("⚙️ Settings & Info", callback_data="help_settings")],
-                        [InlineKeyboardButton("🎞️ Formats & Codecs", callback_data="help_formats"),
-                         InlineKeyboardButton("📈 Quotas & Limits", callback_data="help_quotas")],
-                        [InlineKeyboardButton("💎 Premium Plans", callback_data="help_premium")],
-                        [InlineKeyboardButton("🔧 Troubleshooting", callback_data="help_troubleshooting")],
-                        [InlineKeyboardButton("❌ Close", callback_data="help_close")],
-                    ]
-                ),
-            )
+            await callback_query.message.edit_text(text, reply_markup=markup)
         except MessageNotModified:
             pass
+
+    elif data in PREMIUM_SUB_BUILDERS:
+        builder = PREMIUM_SUB_BUILDERS[data]
+        text, markup = builder(ctx)
+        try:
+            await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+        except MessageNotModified:
+            pass
+
+    elif data in CHILD_TO_HUB:
+        result = build_tool_child(data)
+        if result is not None:
+            text, markup = result
+            try:
+                await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+            except MessageNotModified:
+                pass
 
     elif data == "help_dumb_channels":
         try:
@@ -302,60 +312,19 @@ async def handle_help_callbacks(client, callback_query):
             pass
 
     elif data == "help_tools":
+        text, markup = build_tools_menu(ctx)
         try:
-            await callback_query.message.edit_text(
-                "**🛠 All Tools & Features**\n\n"
-                "> A complete suite of media processing tools.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "Here is an overview of everything I can do. Click on any tool below to learn more about how to use it, what it does, and any shortcuts available.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [InlineKeyboardButton("📁 Rename & Tag Media", callback_data="help_tool_rename")],
-                        [InlineKeyboardButton("🎵 Audio Editor", callback_data="help_tool_audio"),
-                         InlineKeyboardButton("🔀 File Converter", callback_data="help_tool_convert")],
-                        [InlineKeyboardButton("© Image Watermarker", callback_data="help_tool_watermark"),
-                         InlineKeyboardButton("📝 Subtitle Extractor", callback_data="help_tool_subtitle")],
-                        [InlineKeyboardButton("✂️ Video Trimmer", callback_data="help_tool_trimmer"),
-                         InlineKeyboardButton("ℹ️ Media Info", callback_data="help_tool_mediainfo")],
-                        [InlineKeyboardButton("🎙️ Voice Converter", callback_data="help_tool_voice"),
-                         InlineKeyboardButton("⭕ Video Note", callback_data="help_tool_videonote")],
-                        [InlineKeyboardButton("▶️ YouTube Tool", callback_data="help_tool_youtube")],
-                        [InlineKeyboardButton("☁️ Mirror-Leech", callback_data="help_tool_ml")],
-                        [InlineKeyboardButton("← Back to Help Menu", callback_data="help_guide")]
-                    ]
-                )
-            )
+            await callback_query.message.edit_text(text, reply_markup=markup)
         except MessageNotModified:
             pass
 
     elif data.startswith("help_tool_"):
-        tool = data.split("_")[-1]
         back_to_tools = [[InlineKeyboardButton("← Back to Tools", callback_data="help_tools")]]
 
-        if tool == "rename":
-            text = (
-                "**📁 Rename & Tag Media**\n\n"
-                "> The core feature of the bot.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**How to Use:**\n"
-                "Simply send any file to the bot. It will automatically scan the name and look up metadata.\n\n"
-                "• **Auto-Detect:** Finds Series, Episode, Year, and Movie Posters.\n"
-                "• **Custom Name:** Bypasses auto-detect for a custom filename.\n"
-                "• **Shortcuts:** `/r` or `/rename`."
-            )
-        elif tool == "audio":
-            text = (
-                "**🎵 Audio Metadata Editor**\n\n"
-                "> Perfect for your music collection.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Allows you to modify the ID3 tags of MP3, FLAC, and other audio files.\n\n"
-                "• You can change the Title, Artist, Album, and embedded Cover Art.\n"
-                "• **Shortcut:** `/a` or `/audio`."
-            )
-        elif tool == "convert":
-            # File Converter has its own submenu — render it via the dedicated
-            # router below so users don't drown in one massive wall of text.
+        # File Converter, YouTube, and Mirror-Leech keep their existing
+        # static sub-menus (help_fc_*, help_yt_*, help_ml_*). Everything
+        # else is rendered from utils/help_builder.TOOL_GUIDES.
+        if data == "help_tool_convert":
             try:
                 await callback_query.message.edit_text(
                     "**🔀 File Converter — Mega Edition**\n\n"
@@ -380,65 +349,8 @@ async def handle_help_callbacks(client, callback_query):
             except MessageNotModified:
                 pass
             return
-        elif tool == "watermark":
-            text = (
-                "**© Image Watermarker**\n\n"
-                "> Brand your media.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Adds a custom image watermark (like a logo) to your videos or images.\n\n"
-                "• You can set the position and size.\n"
-                "• **Shortcut:** `/w` or `/watermark`."
-            )
-        elif tool == "subtitle":
-            text = (
-                "**📝 Subtitle Extractor**\n\n"
-                "> Pull subs from MKV files.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Extracts embedded subtitle tracks from video files and gives them to you as `.srt` or `.ass` files.\n\n"
-                "• **Shortcut:** `/s` or `/subtitle`."
-            )
-        elif tool == "trimmer":
-            text = (
-                "**✂️ Video Trimmer**\n\n"
-                "> Cut videos by timestamp.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Trims a video between a start and end timestamp using stream copy (no re-encoding).\n\n"
-                "• Send a video, then provide start and end times.\n"
-                "• **Format:** `HH:MM:SS` or `MM:SS`\n"
-                "• **Shortcut:** `/t` or `/trim`."
-            )
-        elif tool == "mediainfo":
-            text = (
-                "**ℹ️ Media Info**\n\n"
-                "> Inspect any media file.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Shows detailed technical information about a media file: codecs, resolution, bitrate, duration, and all streams.\n\n"
-                "• **Shortcut:** `/mi` or `/mediainfo`."
-            )
-        elif tool == "voice":
-            text = (
-                "**🎙️ Voice Note Converter**\n\n"
-                "> Turn audio into voice notes.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Converts any audio file to Telegram voice note format (OGG Opus).\n\n"
-                "• Send an audio file and it will be converted and sent as a voice message.\n"
-                "• **Shortcut:** `/v` or `/voice`."
-            )
-        elif tool == "videonote":
-            text = (
-                "**⭕ Video Note Converter**\n\n"
-                "> Create round video messages.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "**What it does:**\n"
-                "Converts a video into a Telegram round video note. The video is cropped to square, scaled to 384px, and limited to 60 seconds.\n\n"
-                "• **Shortcut:** `/vn` or `/videonote`."
-            )
-        elif tool == "youtube":
+
+        if data == "help_tool_youtube":
             try:
                 await callback_query.message.edit_text(
                     "**▶️ YouTube Tool**\n\n"
@@ -466,10 +378,8 @@ async def handle_help_callbacks(client, callback_query):
             except MessageNotModified:
                 pass
             return
-        elif tool == "ml":
-            # Mirror-Leech is big enough to warrant its own submenu —
-            # six subpages covering overview, sources, destinations,
-            # linking, MyFiles integration, and the SECRETS_KEY flow.
+
+        if data == "help_tool_ml":
             try:
                 await callback_query.message.edit_text(
                     "**☁️ Mirror-Leech**\n\n"
@@ -496,16 +406,29 @@ async def handle_help_callbacks(client, callback_query):
             except MessageNotModified:
                 pass
             return
-        else:
+
+        # Delegate the eight flat tools to their expanded guides.
+        result = build_tool_hub(data, ctx)
+        if result is None:
             text = (
                 "**🛠 Tool Info**\n\n"
                 "Sorry, no detailed guide is available for this tool yet."
             )
+            try:
+                await callback_query.message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(back_to_tools),
+                    disable_web_page_preview=True,
+                )
+            except MessageNotModified:
+                pass
+            return
 
+        text, markup = result
         try:
             await callback_query.message.edit_text(
                 text,
-                reply_markup=InlineKeyboardMarkup(back_to_tools),
+                reply_markup=markup,
                 disable_web_page_preview=True,
             )
         except MessageNotModified:
@@ -594,36 +517,28 @@ async def handle_help_callbacks(client, callback_query):
             pass
 
     elif data == "help_quotas":
+        text, markup = build_quotas(ctx)
         try:
-            await callback_query.message.edit_text(
-                "**📈 Quotas & Limits**\n\n"
-                "> Fair usage system.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "To keep the bot fast and stable, daily limits are applied. These reset every 24 hours.\n\n"
-                "• **Daily Files:** The maximum number of files you can process per day.\n"
-                "• **Daily Egress:** The maximum total bandwidth (in MB or GB) you can process per day.\n"
-                "• **MyFiles Expiry:** Temporary files are deleted from your storage locker after a set number of days to free up space.\n\n"
-                "Check your profile or use `/myfiles` to view your current usage.",
-                reply_markup=InlineKeyboardMarkup(back_button),
-            )
+            await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
         except MessageNotModified:
             pass
 
     elif data == "help_premium":
+        text, markup = build_premium_landing(ctx)
         try:
-            await callback_query.message.edit_text(
-                "**💎 Premium Plans**\n\n"
-                "> Upgrade your experience.\n"
-                "━━━━━━━━━━━━━━━━━━━━\n"
-                "Premium users unlock a completely different tier of processing power.\n\n"
-                "**Benefits:**\n"
-                "• **Priority Queue:** Skip the wait times when the bot is under heavy load.\n"
-                "• **Bigger Limits:** Huge increases to Daily Egress and Daily File limits.\n"
-                "• **Permanent Storage:** Store significantly more files in your `/myfiles` locker forever.\n"
-                "• **Access to Heavy Tools:** Exclusive access to CPU-intensive tools like the Subtitle Extractor or Video Converter (if restricted by the Admin).\n\n"
-                "Use the Premium Dashboard on the `/start` menu to view available plans.",
-                reply_markup=InlineKeyboardMarkup(back_button),
-            )
+            await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
+        except MessageNotModified:
+            pass
+
+    elif data in PREMIUM_SUB_BUILDERS:
+        builder = PREMIUM_SUB_BUILDERS[data]
+        result = builder(ctx)
+        if result is None:
+            await callback_query.answer("This section is currently unavailable.", show_alert=True)
+            return
+        text, markup = result
+        try:
+            await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
         except MessageNotModified:
             pass
 
@@ -1747,8 +1662,8 @@ async def handle_help_callbacks(client, callback_query):
                 "> • **RSS feed** — first enclosure is handed to HTTP\n\n"
                 "The Controller picks the right downloader automatically — "
                 "you just paste the URL.\n\n"
-                "__Heads-up:__ peer-to-peer links aren't supported on main; "
-                "use the torrent-edition build for that."
+                "__Heads-up:__ peer-to-peer links aren't supported on "
+                "this build. Contact support if you need that flow."
             )
         elif topic == "dests":
             text = (
@@ -1824,7 +1739,4 @@ async def handle_help_callbacks(client, callback_query):
             )
         except MessageNotModified:
             pass
-
-    elif data == "help_close":
-        await callback_query.message.delete()
 

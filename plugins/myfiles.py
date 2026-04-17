@@ -211,7 +211,53 @@ async def get_myfiles_main_menu(user_id: int):
         buttons.append([InlineKeyboardButton("🎵 Music", callback_data="myfiles_cat_music")])
 
     buttons.append([InlineKeyboardButton("📁 Custom Folders", callback_data="myfiles_cat_custom")])
+
+    # Extras entrypoints — each gated by its own feature toggle, so
+    # rows silently vanish when admin disables the feature.
+    try:
+        from utils.feature_gate import feature_many as _fm
+        ent = await _fm(
+            [
+                "myfiles_trash",
+                "myfiles_tags",
+                "myfiles_search",
+                "myfiles_activity",
+                "myfiles_smart",
+            ],
+            user_id,
+        )
+    except Exception:
+        ent = {}
+
+    ent_row: list[InlineKeyboardButton] = []
+    if ent.get("myfiles_search"):
+        ent_row.append(InlineKeyboardButton("🔎 Suche", callback_data="mf_search_start"))
+    if ent.get("myfiles_tags"):
+        ent_row.append(InlineKeyboardButton("#️⃣ Tags", callback_data="mf_tag_list"))
+    if ent_row:
+        buttons.append(ent_row)
+
+    ent_row2: list[InlineKeyboardButton] = []
+    if ent.get("myfiles_trash"):
+        ent_row2.append(InlineKeyboardButton("🗑 Papierkorb", callback_data="mf_trash_list"))
+    if ent.get("myfiles_activity"):
+        ent_row2.append(InlineKeyboardButton("📊 Aktivität", callback_data="mf_activity_list"))
+    if ent_row2:
+        buttons.append(ent_row2)
+
+    if ent.get("myfiles_smart"):
+        buttons.append([InlineKeyboardButton("🧠 Smart Collections", callback_data="mf_smart_list")])
+
     buttons.append([InlineKeyboardButton("⚙️ Settings", callback_data="myfiles_settings")])
+
+    # Quota header (prepended). Disabled when feature is off for this user.
+    try:
+        from plugins.myfiles_extras import render_quota_header
+        q = await render_quota_header(user_id)
+        if q:
+            text = text.rstrip() + "\n\n" + q
+    except Exception:
+        pass
 
     return text, InlineKeyboardMarkup(buttons)
 
@@ -297,6 +343,18 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         buttons.append([
             InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"mf_ms_sha")
         ])
+        # Bulk ops row — vanishes when the toggle is off.
+        try:
+            from utils.feature_gate import feature_enabled as _fe
+            _bulk_on = await _fe("myfiles_bulk", user_id)
+        except Exception:
+            _bulk_on = False
+        if _bulk_on:
+            buttons.append([
+                InlineKeyboardButton("#️⃣ Tag", callback_data="mf_bulk_tag_start"),
+                InlineKeyboardButton("📌 Pin", callback_data="mf_bulk_pin"),
+                InlineKeyboardButton("📌🚫 Unpin", callback_data="mf_bulk_unpin"),
+            ])
         # Mirror-Leech batch entry — gated on feature_toggles.mirror_leech.
         # We avoid an async DB read inside this keyboard builder for latency
         # and surface the gate in the ml_opt_multi handler itself instead,
@@ -1353,18 +1411,62 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         state_dict = await get_myfiles_state(user_id)
         last_menu = state_dict.get("last_menu", "myfiles_main")
 
+        # Swap to the granular sharing configurator when the admin
+        # enables it; otherwise keep the legacy one-tap link.
+        try:
+            from utils.feature_gate import feature_enabled as _fe
+            _sharing_on = await _fe("myfiles_sharing", user_id)
+        except Exception:
+            _sharing_on = False
+        share_btn = (
+            InlineKeyboardButton(
+                "🔗 Share konfigurieren",
+                callback_data=f"mf_share_cfg_{file_id}",
+            )
+            if _sharing_on
+            else InlineKeyboardButton(
+                "🔗 Generate Share Link",
+                callback_data=f"myfiles_share_{file_id}",
+            )
+        )
         buttons = [
             [InlineKeyboardButton("📤 Send File", callback_data=f"myfiles_send_{file_id}")],
-            [InlineKeyboardButton("🔗 Generate Share Link", callback_data=f"myfiles_share_{file_id}")],
+            [share_btn],
             [InlineKeyboardButton(perm_btn_text, callback_data=f"myfiles_toggle_perm_{file_id}")],
             [InlineKeyboardButton("✏️ Rename", callback_data=f"myfiles_rename_{file_id}"),
              InlineKeyboardButton("📂 Move", callback_data=f"myfiles_move_{file_id}")],
             # Mirror-Leech single-file entry. Feature toggle enforcement
             # lives inside ml_opt_single so this button can stay latency-free.
             [InlineKeyboardButton("☁️ Mirror-Leech Options", callback_data=f"ml_opt_single_{file_id}")],
-            [InlineKeyboardButton("🗑️ Delete File", callback_data=f"myfiles_delfile_{file_id}")],
-            [InlineKeyboardButton("← Back", callback_data=last_menu)]
         ]
+
+        # Extras — each gated by feature_toggles so the row silently
+        # vanishes when the admin disables the feature.
+        try:
+            from utils.feature_gate import feature_many as _fm
+            ent = await _fm(
+                ["myfiles_tags", "myfiles_versions"], user_id
+            )
+        except Exception:
+            ent = {}
+        extras = []
+        if ent.get("myfiles_tags"):
+            extras.append(
+                InlineKeyboardButton("#️⃣ Tags", callback_data=f"mf_tag_start_{file_id}")
+            )
+        if ent.get("myfiles_versions"):
+            extras.append(
+                InlineKeyboardButton("📜 Versionen", callback_data=f"mf_ver_list_{file_id}")
+            )
+        if extras:
+            buttons.append(extras)
+
+        buttons.append(
+            [InlineKeyboardButton("🗑️ Delete File", callback_data=f"myfiles_delfile_{file_id}")]
+        )
+        buttons.append(
+            [InlineKeyboardButton("← Back", callback_data=last_menu)]
+        )
 
         reply_markup = InlineKeyboardMarkup(buttons)
 
@@ -1529,9 +1631,42 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         f = await db.files.find_one({"_id": ObjectId(file_id)})
         if f:
-            await db.files.delete_one({"_id": ObjectId(file_id)})
-
-        await callback_query.answer("File deleted.", show_alert=True)
+            # Soft-delete when Trash feature is on → keep in recycle bin.
+            try:
+                from utils.feature_gate import feature_enabled as _fe
+                trash_on = await _fe("myfiles_trash", user_id)
+            except Exception:
+                trash_on = False
+            if trash_on:
+                await db.files.update_one(
+                    {"_id": ObjectId(file_id)},
+                    {"$set": {
+                        "is_deleted": True,
+                        "deleted_at": datetime.datetime.utcnow(),
+                    }},
+                )
+                try:
+                    await db.audit_myfiles(user_id, "delete", file_id=ObjectId(file_id))
+                    await db.log_myfiles_activity(user_id, "deleted", file_id=ObjectId(file_id))
+                except Exception:
+                    pass
+                await callback_query.answer(
+                    "In Papierkorb verschoben.", show_alert=True
+                )
+            else:
+                await db.files.delete_one({"_id": ObjectId(file_id)})
+                try:
+                    await db.myfiles_incr_quota(
+                        user_id,
+                        bytes_delta=-int(f.get("size_bytes", 0) or 0),
+                        file_delta=-1,
+                    )
+                    await db.audit_myfiles(user_id, "purge", file_id=ObjectId(file_id))
+                except Exception:
+                    pass
+                await callback_query.answer("File deleted.", show_alert=True)
+        else:
+            await callback_query.answer("File deleted.", show_alert=True)
         # Go back
         state_dict = await get_myfiles_state(user_id)
         callback_query.data = state_dict.get("last_menu", "myfiles_main")
