@@ -165,12 +165,11 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
     )
     keyboard.append(
         [
-            InlineKeyboardButton("🩺 DB Schema Health", callback_data="admin_db_health"),
-            InlineKeyboardButton("🎬 TMDb Status", callback_data="admin_tmdb_status"),
+            InlineKeyboardButton(
+                "🩺 System Health & Statuses",
+                callback_data="admin_system_health",
+            )
         ]
-    )
-    keyboard.append(
-        [InlineKeyboardButton("☁️ Mirror-Leech Config", callback_data="ml_admin")]
     )
 
     return InlineKeyboardMarkup(keyboard)
