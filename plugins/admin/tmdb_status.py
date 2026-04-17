@@ -51,7 +51,7 @@ def _keyboard() -> InlineKeyboardMarkup:
         [
             [InlineKeyboardButton("📖 Get a free TMDb key", url=TMDB_DOCS_URL)],
             [InlineKeyboardButton("↻ Refresh", callback_data="admin_tmdb_status")],
-            [InlineKeyboardButton("← Back", callback_data="admin_back")],
+            [InlineKeyboardButton("← Back", callback_data="admin_main")],
         ]
     )
 

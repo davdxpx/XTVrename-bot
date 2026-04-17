@@ -81,7 +81,7 @@ async def _render(callback_query: CallbackQuery) -> None:
     rows = [
         [InlineKeyboardButton(toggle_label, callback_data="ml_admin_toggle")],
         [InlineKeyboardButton("↻ Refresh", callback_data="ml_admin")],
-        [InlineKeyboardButton("← Back", callback_data="admin_back")],
+        [InlineKeyboardButton("← Back", callback_data="admin_main")],
     ]
     try:
         await callback_query.message.edit_text(
