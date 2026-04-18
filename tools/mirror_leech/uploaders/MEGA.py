@@ -11,11 +11,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from utils.log import get_logger
-
-from tools.mirror_leech.uploaders import Uploader, register_uploader
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
+from tools.mirror_leech.uploaders import Uploader, register_uploader
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.mega")
 

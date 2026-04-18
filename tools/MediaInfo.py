@@ -1,10 +1,13 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
-from plugins.user_setup import track_tool_usage
+import contextlib
+
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.state import set_state, get_state, get_data, clear_session
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from plugins.user_setup import track_tool_usage
 from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state
 
 logger = get_logger("tools.MediaInfo")
 
@@ -17,7 +20,7 @@ async def handle_media_info_menu(client, callback_query):
     clear_session(user_id)
     set_state(user_id, "awaiting_mediainfo_file")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "ℹ️ **Media Info**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -28,8 +31,6 @@ async def handle_media_info_menu(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 # === Functions ===
 def format_media_info(probe_data: dict, file_name: str) -> str:

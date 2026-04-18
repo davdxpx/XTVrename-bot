@@ -19,6 +19,8 @@ Text-input flows (`awaiting_public_*`) are registered with the shared
 ``text_dispatcher`` and routed here at runtime.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -73,13 +75,11 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
     # --- Public Settings menu ---
     if data == "admin_public_settings":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🌐 **Public Mode Settings**\n\nSelect a setting to edit:",
                 reply_markup=get_admin_public_settings_menu(),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- View config ---
@@ -95,7 +95,7 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
         text += f"**Force-Sub Channel:** {config.get('force_sub_channel', 'Not set')}\n"
         text += f"**Daily Egress Limit:** {config.get('daily_egress_mb', 0)} MB\n"
         text += f"**Daily File Limit:** {config.get('daily_file_count', 0)} files\n"
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(
@@ -109,8 +109,6 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Bot name / Community / Support display ---
@@ -120,7 +118,7 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
             return
         config = await db.get_public_config()
         current_val = config.get("bot_name", "Not set")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"🤖 **Edit Bot Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
                 reply_markup=InlineKeyboardMarkup(
@@ -139,8 +137,6 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_public_community_name":
@@ -149,7 +145,7 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
             return
         config = await db.get_public_config()
         current_val = config.get("community_name", "Not set")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"👥 **Edit Community Name**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
                 reply_markup=InlineKeyboardMarkup(
@@ -169,8 +165,6 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_public_support_contact":
@@ -179,7 +173,7 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
             return
         config = await db.get_public_config()
         current_val = config.get("support_contact", "Not set")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"🔗 **Edit Support Contact**\n\nCurrent: `{current_val}`\n\nClick below to change it.",
                 reply_markup=InlineKeyboardMarkup(
@@ -199,8 +193,6 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Prompt text-input setup ---
@@ -221,7 +213,7 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
         else:
             text = "Send the new value:"
         cancel_btn = "admin_public_settings"
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(
@@ -234,8 +226,6 @@ async def public_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
 
@@ -354,4 +344,5 @@ async def handle_text(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_public_", handle_text)

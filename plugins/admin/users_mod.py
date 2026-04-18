@@ -25,6 +25,8 @@ Note: the text dispatcher here uses `utils.state` (own dict), not the
 `admin_sessions` dict used by the shared ``text_dispatcher``.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -207,7 +209,7 @@ debug("✅ Loaded handler: admin_prompt_lookup_cb")
 )
 async def admin_prompt_lookup_cb(client: Client, callback_query: CallbackQuery):
     await callback_query.answer()
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🔍 **User Lookup**\n\n"
             "Please send the user's Telegram ID (e.g., 123456789) to view their profile.",
@@ -221,8 +223,6 @@ async def admin_prompt_lookup_cb(client: Client, callback_query: CallbackQuery):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
     from utils.state import set_state
 
     set_state(callback_query.from_user.id, "awaiting_user_lookup")
@@ -233,7 +233,7 @@ async def admin_prompt_lookup_cb(client: Client, callback_query: CallbackQuery):
     filters.text & filters.private & filters.user(Config.CEO_ID), group=1
 )
 async def admin_handle_user_lookup_text(client: Client, message: Message):
-    from utils.state import get_state, clear_session
+    from utils.state import clear_session, get_state
 
     state = get_state(message.from_user.id)
 

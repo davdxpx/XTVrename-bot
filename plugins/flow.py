@@ -1,22 +1,25 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
-from plugins.user_setup import track_tool_usage
-from pyrogram import Client, filters, StopPropagation, ContinuePropagation
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from utils.tmdb import tmdb
-from utils.auth import auth_filter
-from utils.state import set_state, get_state, update_data, get_data, clear_session, mark_for_db_persist
-from plugins.process import process_file
-from utils.detect import analyze_filename, auto_match_tmdb, template_key_for
-from utils.tasks import spawn as _spawn_task
-from config import Config
-from utils.log import get_logger
 import asyncio
-import re
-from bson.objectid import ObjectId
 import datetime
-import os
 import math
+import os
+import re
+
+from bson.objectid import ObjectId
+from pyrogram import Client, ContinuePropagation, StopPropagation, filters
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
+from config import Config
+from plugins.process import process_file
+from plugins.user_setup import track_tool_usage
+from tools.AudioMetadataEditor import render_audio_menu
+from utils.auth import auth_filter
+from utils.detect import analyze_filename, auto_match_tmdb, template_key_for
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, mark_for_db_persist, set_state, update_data
+from utils.tasks import spawn as _spawn_task
+from utils.tmdb import tmdb
 
 logger = get_logger("plugins.flow")
 logger.info("Loading plugins.flow...")
@@ -34,6 +37,7 @@ _processing_callbacks = {}
 _expiry_warnings = {}
 
 import time as _time
+
 
 def _touch_file_session(msg_id):
     """Track when a file_session entry was last accessed."""
@@ -67,7 +71,10 @@ def _on_session_expired(user_id):
         task.cancel()
     batch_status_msgs.pop(user_id, None)
 
+import contextlib
+
 from utils.state import register_expire_callback
+
 register_expire_callback(_on_session_expired)
 
 async def _persist_session_to_db(user_id: int):
@@ -116,13 +123,11 @@ async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 33
         state = get_state(user_id)
         if not state:
             # Session was already ended by user action
-            try:
+            with contextlib.suppress(Exception):
                 await warning_msg.edit_text(
                     "✅ Your session was already ended.",
                     reply_markup=None
                 )
-            except Exception:
-                pass
             _expiry_warnings.pop(user_id, None)
             return
 
@@ -131,7 +136,7 @@ async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 33
         await _clear_persisted_session(user_id)
         _expiry_warnings.pop(user_id, None)
 
-        try:
+        with contextlib.suppress(Exception):
             await warning_msg.edit_text(
                 "❌ **Session Expired**\n\n"
                 "Your renaming session has been cancelled due to inactivity.\n"
@@ -140,8 +145,6 @@ async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 33
                     [InlineKeyboardButton("🔄 Start New Session", callback_data="force_start_renaming")]
                 ])
             )
-        except Exception:
-            pass
 
     except asyncio.CancelledError:
         _expiry_warnings.pop(user_id, None)
@@ -191,15 +194,13 @@ async def handle_start_renaming(client, callback_query):
     await callback_query.answer()
 
     if cb_data == "cancel_override":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "Keeping your current session. You can continue where you left off.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel Session", callback_data="cancel_rename")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     existing_state = get_state(user_id)
@@ -215,7 +216,7 @@ async def handle_start_renaming(client, callback_query):
             "awaiting_general_file": "uploading a file",
         }
         label = state_labels.get(existing_state, existing_state)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"**Active Session Detected**\n\n"
                 f"You have an active session: **{label}**.\n"
@@ -226,8 +227,6 @@ async def handle_start_renaming(client, callback_query):
                     [InlineKeyboardButton("← Keep Current", callback_data="cancel_override")],
                 ]),
             )
-        except MessageNotModified:
-            pass
         return
 
     logger.debug(f"Start renaming flow for {user_id}")
@@ -236,7 +235,7 @@ async def handle_start_renaming(client, callback_query):
     set_state(user_id, "awaiting_type")
     _start_expiry_timer(client, user_id)
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "**Select Media Type**\n\n" "What are you renaming today?",
             reply_markup=InlineKeyboardMarkup(
@@ -274,8 +273,6 @@ async def handle_start_renaming(client, callback_query):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^type_general$"))
 async def handle_type_general(client, callback_query):
@@ -288,7 +285,7 @@ async def handle_type_general(client, callback_query):
 
     set_state(user_id, "awaiting_general_file")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "📄 **General Mode**\n\n"
             "Please **send me the file** you want to rename.\n"
@@ -297,8 +294,6 @@ async def handle_type_general(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^type_personal_(video|photo|file)$"))
 async def handle_type_personal(client, callback_query):
@@ -320,7 +315,7 @@ async def handle_type_personal(client, callback_query):
     else:
         label = "File"
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"✍️ **Personal {label} Details**\n\n"
             "Please enter the name you want to use for this file.\n"
@@ -330,8 +325,6 @@ async def handle_type_personal(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^type_(movie|series)$"))
 async def handle_type_selection(client, callback_query):
@@ -343,7 +336,7 @@ async def handle_type_selection(client, callback_query):
     update_data(user_id, "type", media_type)
     set_state(user_id, f"awaiting_search_{media_type}")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"🔍 **Search {media_type.capitalize()}**\n\n"
             f"Please enter the name of the {media_type} (e.g. 'Zootopia' or 'The Rookie').",
@@ -351,13 +344,11 @@ async def handle_type_selection(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^type_subtitles$"))
 async def handle_type_subtitles(client, callback_query):
     await callback_query.answer()
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "**Select Subtitle Type**\n\n" "Is this for a Movie or a Series?",
             reply_markup=InlineKeyboardMarkup(
@@ -374,8 +365,6 @@ async def handle_type_subtitles(client, callback_query):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^type_sub_(movie|series)$"))
 async def handle_subtitle_type_selection(client, callback_query):
@@ -388,7 +377,7 @@ async def handle_subtitle_type_selection(client, callback_query):
     update_data(user_id, "is_subtitle", True)
     set_state(user_id, f"awaiting_search_{media_type}")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"🔍 **Search {media_type.capitalize()} (Subtitles)**\n\n"
             f"Please enter the name of the {media_type}.",
@@ -396,8 +385,6 @@ async def handle_subtitle_type_selection(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 # === Helper Functions ===
 async def manual_title_handler(client, message):
@@ -468,14 +455,12 @@ async def search_handler(client, message, media_type):
             results = await tmdb.search_tv(query, language=lang)
     except Exception as e:
         logger.error(f"TMDb search failed: {e}")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await msg.edit_text(f"❌ Search Error: {e}")
-        except MessageNotModified:
-            pass
         return
 
     if not results:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await msg.edit_text(
                 "❌ **No results found.**\n\n"
                 "This could be a personal file, home video, or a regional/unknown series not listed on TMDb.\n"
@@ -495,8 +480,6 @@ async def search_handler(client, message, media_type):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     buttons = []
@@ -512,23 +495,20 @@ async def search_handler(client, message, media_type):
 
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await msg.edit_text(
             f"**Select {media_type.capitalize()}**\n\n"
             f"Found {len(results)} results for '{query}':",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=5)
 async def handle_text_input(client, message):
     user_id = message.from_user.id
 
-    if not Config.PUBLIC_MODE:
-        if not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
-            from pyrogram import ContinuePropagation
-            raise ContinuePropagation
+    if not Config.PUBLIC_MODE and not (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS):
+        from pyrogram import ContinuePropagation
+        raise ContinuePropagation
 
     state = get_state(user_id)
     logger.debug(f"Text input from {user_id}: {message.text} | State: {state}")
@@ -553,16 +533,12 @@ async def handle_text_input(client, message):
             query_filter = {"user_id": user_id, "type": "custom"} if Config.PUBLIC_MODE else {"type": "custom"}
             count = await db.folders.count_documents(query_filter)
             if count >= folder_limit:
-                try:
+                with contextlib.suppress(Exception):
                     await message.delete()
-                except Exception:
-                    pass
                 msg_id = get_data(user_id).get("dest_msg_id")
                 if msg_id:
-                    try:
+                    with contextlib.suppress(Exception):
                         await client.edit_message_text(message.chat.id, msg_id, f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
-                    except Exception:
-                        pass
                 else:
                     await message.reply_text(f"❌ You have reached your custom folder limit ({folder_limit}).", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Options", callback_data="sel_dest_page_1")]]))
                 set_state(user_id, "awaiting_destination_selection")
@@ -577,10 +553,8 @@ async def handle_text_input(client, message):
             "created_at": datetime.datetime.utcnow()
         })
 
-        try:
+        with contextlib.suppress(Exception):
             await message.delete()
-        except Exception:
-            pass
 
         msg_id = get_data(user_id).get("dest_msg_id")
 
@@ -588,10 +562,8 @@ async def handle_text_input(client, message):
         update_data(user_id, "dest_folder", str(folder_id))
 
         if msg_id:
-            try:
+            with contextlib.suppress(Exception):
                 await client.edit_message_text(message.chat.id, msg_id, f"✅ Folder **{folder_name}** created successfully and selected!")
-            except Exception:
-                pass
 
             # Wait briefly then show dumb channel selection
             import asyncio
@@ -660,15 +632,11 @@ async def handle_text_input(client, message):
         async def delayed_cleanup():
             import asyncio
             await asyncio.sleep(1)
-            try:
+            with contextlib.suppress(Exception):
                 await message.delete()
-            except Exception:
-                pass
             if prompt_msg_id:
-                try:
+                with contextlib.suppress(Exception):
                     await client.delete_messages(chat_id=user_id, message_ids=prompt_msg_id)
-                except Exception:
-                    pass
         import asyncio
         asyncio.create_task(delayed_cleanup())
 
@@ -798,10 +766,10 @@ async def handle_text_input(client, message):
             except Exception as e:
                 await msg.edit_text(f"Error: {e}")
                 from pyrogram import StopPropagation
-                raise StopPropagation
+                raise StopPropagation from e
 
             if not results:
-                try:
+                with contextlib.suppress(MessageNotModified):
                     await msg.edit_text(
                         "No results found.",
                         reply_markup=InlineKeyboardMarkup(
@@ -814,8 +782,6 @@ async def handle_text_input(client, message):
                             ]
                         ),
                     )
-                except MessageNotModified:
-                    pass
                 from pyrogram import StopPropagation
                 raise StopPropagation
 
@@ -833,13 +799,11 @@ async def handle_text_input(client, message):
                 [InlineKeyboardButton("Cancel", callback_data=f"back_confirm_{msg_id}")]
             )
 
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     f"Select correct {mtype}:",
                     reply_markup=InlineKeyboardMarkup(buttons),
                 )
-            except MessageNotModified:
-                pass
             from pyrogram import StopPropagation
             raise StopPropagation
 
@@ -854,7 +818,7 @@ async def handle_manual_entry(client, callback_query):
     media_type = get_data(user_id).get("type", "movie")
 
     set_state(user_id, "awaiting_manual_title")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"✍️ **Manual Entry ({media_type.capitalize()})**\n\n"
             "Please enter the exact title and year you want to use.\n"
@@ -864,8 +828,6 @@ async def handle_manual_entry(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^send_as_(photo|document)$"))
 async def handle_send_as_preference(client, callback_query):
@@ -949,10 +911,8 @@ async def process_ready_file(client, user_id, message_obj, session_data):
             )
             data["file_message"] = msg
             if getattr(message_obj, "delete", None):
-                try:
+                with contextlib.suppress(Exception):
                     await message_obj.delete()
-                except Exception:
-                    pass
             reply_msg = await client.send_message(user_id, "Processing file...")
             from plugins.process import process_file
             _spawn_task(
@@ -1030,10 +990,8 @@ async def prompt_destination_folder(client, user_id, message_obj, is_edit=False,
     reply_markup = InlineKeyboardMarkup(buttons)
 
     if is_edit:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await message_obj.edit_text(text, reply_markup=reply_markup)
-        except MessageNotModified:
-            pass
     else:
         await client.send_message(user_id, text, reply_markup=reply_markup)
 
@@ -1057,10 +1015,8 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False, page=
             [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
         )
         if is_edit:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await message_obj.edit_text(text, reply_markup=reply_markup)
-            except MessageNotModified:
-                pass
             from pyrogram import StopPropagation
             raise StopPropagation
         else:
@@ -1110,12 +1066,10 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False, page=
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")])
 
     if is_edit:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await message_obj.edit_text(
                 text, reply_markup=InlineKeyboardMarkup(buttons)
             )
-        except MessageNotModified:
-            pass
     else:
         await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -1137,13 +1091,11 @@ async def handle_dest_selection(client, callback_query):
     if action == "create":
         set_state(user_id, "awaiting_dest_folder_name")
         update_data(user_id, "dest_msg_id", callback_query.message.id)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📁 **Create New Folder**\n\nPlease enter a name for the new folder:",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]])
             )
-        except MessageNotModified:
-            pass
         return
 
     dest = None
@@ -1187,10 +1139,9 @@ async def handle_dumb_selection(client, callback_query):
 
     has_file = session_data and session_data.get("file_message_id")
 
-    if session_data.get("type") == "general":
-        if has_file:
-            await process_ready_file(client, user_id, callback_query.message, session_data)
-            return
+    if session_data.get("type") == "general" and has_file:
+        await process_ready_file(client, user_id, callback_query.message, session_data)
+        return
 
     if has_file:
         await process_ready_file(client, user_id, callback_query.message, session_data)
@@ -1198,15 +1149,13 @@ async def handle_dumb_selection(client, callback_query):
 
     set_state(user_id, "awaiting_file_upload")
     asyncio.create_task(_persist_session_to_db(user_id))
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            f"✅ **Ready!**\n\n" f"Now, **send me the file(s)** you want to rename.",
+            "✅ **Ready!**\n\n" "Now, **send me the file(s)** you want to rename.",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 async def initiate_language_selection(client, user_id, message_obj):
 
@@ -1234,12 +1183,10 @@ async def initiate_language_selection(client, user_id, message_obj):
             user_id, text, reply_markup=InlineKeyboardMarkup(buttons)
         )
     elif hasattr(message_obj, "edit_text"):
-        try:
+        with contextlib.suppress(MessageNotModified):
             await message_obj.edit_text(
                 text, reply_markup=InlineKeyboardMarkup(buttons)
             )
-        except MessageNotModified:
-            pass
     else:
         await client.send_message(user_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -1251,7 +1198,7 @@ async def handle_language_callback(client, callback_query):
 
     if data == "custom":
         set_state(user_id, "awaiting_language_custom")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "✍️ **Enter Custom Language Code**\n\n"
                 "Please type the language code (e.g. `por`, `hin`, `jpn`, `pt-br`):",
@@ -1259,8 +1206,6 @@ async def handle_language_callback(client, callback_query):
                     [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     update_data(user_id, "language", data)
@@ -1280,7 +1225,7 @@ async def handle_gen_send_as(client, callback_query):
 
     file_name = get_data(user_id).get("original_name", "unknown")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"📄 **File:** `{file_name}`\n\n"
             f"**Output Format:** `{pref.capitalize()}`\n\n"
@@ -1296,10 +1241,9 @@ async def handle_gen_send_as(client, callback_query):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 from pyrogram.types import ForceReply
+
 
 @Client.on_callback_query(filters.regex(r"^gen_prompt_rename$"))
 async def handle_gen_prompt_rename(client, callback_query):
@@ -1311,10 +1255,8 @@ async def handle_gen_prompt_rename(client, callback_query):
     file_msg_id = session_data.get("file_message_id")
     file_chat_id = session_data.get("file_chat_id")
 
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.message.delete()
-    except Exception:
-        pass
 
     orig_name = session_data.get("original_name", "Unknown File")
     text = (
@@ -1391,15 +1333,13 @@ async def handle_cancel(client, callback_query):
         buttons.append([InlineKeyboardButton("✨ Other Features", callback_data="other_features_menu")])
     buttons.append([InlineKeyboardButton("📖 Help & Guide", callback_data="help_guide")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "**Current Task Cancelled** ❌\n\n"
             "Your progress has been cleared.\n"
             "You can simply send me a file anytime to start over, or use the buttons below.",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
-    except MessageNotModified:
-        pass
 
 async def process_batch(client, user_id):
     if user_id not in batch_sessions:
@@ -1445,15 +1385,17 @@ async def process_batch(client, user_id):
         else:
             await update_confirmation_message(client, msg.id, user_id)
 
-from utils.auth import check_force_sub
-from database import db
-from utils.queue_manager import queue_manager
-import uuid
-from utils.gate import send_force_sub_gate, check_and_send_welcome
-from utils.archive import is_archive, check_password_protected, extract_archive
-from utils.progress import progress_for_pyrogram
-import time
 import random
+import time
+import uuid
+
+from database import db
+from utils.archive import check_password_protected, extract_archive, is_archive
+from utils.auth import check_force_sub
+from utils.gate import check_and_send_welcome, send_force_sub_gate
+from utils.progress import progress_for_pyrogram
+from utils.queue_manager import queue_manager
+
 
 @Client.on_message(
     (filters.document | filters.video | filters.photo | filters.audio | filters.voice)
@@ -1714,7 +1656,7 @@ async def handle_file_upload(client, message):
             await message.reply_text("Please send a timestamp like `00:01:30` or `1:30`.")
             return
 
-        from tools.VideoTrimmer import validate_timestamp, normalize_timestamp
+        from tools.VideoTrimmer import normalize_timestamp, validate_timestamp
         ts = message.text.strip()
         if not validate_timestamp(ts):
             await message.reply_text(
@@ -1745,7 +1687,7 @@ async def handle_file_upload(client, message):
             await message.reply_text("Please send a timestamp like `00:05:00` or `5:00`.")
             return
 
-        from tools.VideoTrimmer import validate_timestamp, normalize_timestamp
+        from tools.VideoTrimmer import normalize_timestamp, validate_timestamp
         ts = message.text.strip()
         if not validate_timestamp(ts):
             await message.reply_text(
@@ -1824,7 +1766,6 @@ async def handle_file_upload(client, message):
         )
 
         try:
-            import os
             input_path = os.path.join(Config.DOWNLOAD_DIR, f"{user_id}_{message.id}_probe_input")
             downloaded = await client.download_media(message, file_name=input_path)
             if downloaded and os.path.exists(downloaded):
@@ -1839,10 +1780,8 @@ async def handle_file_upload(client, message):
                          [InlineKeyboardButton("❌ Close", callback_data="help_close")]]
                     ),
                 )
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(downloaded)
-                except Exception:
-                    pass
             else:
                 await status_msg.edit_text("❌ Failed to download file for analysis.")
         except Exception as e:
@@ -2080,7 +2019,7 @@ async def handle_file_upload(client, message):
                 "awaiting_language_custom": "entering a language code",
             }
             label = state_labels.get(state, "a different step")
-            warning = await message.reply_text(
+            await message.reply_text(
                 f"You're currently **{label}**.\n"
                 "Please complete that step first, or cancel to start over.",
                 reply_markup=InlineKeyboardMarkup([
@@ -2276,10 +2215,8 @@ async def handle_archive_upload(client, message, user_id, file_name, state):
 
     except Exception as e:
         logger.error(f"Archive processing error: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await msg.edit_text(f"❌ Error processing archive: {e}")
-        except Exception:
-            pass
 
 @Client.on_message(filters.text & filters.private & ~filters.regex(r"^/"), group=4)
 async def handle_password_input(client, message):
@@ -2310,13 +2247,11 @@ async def handle_password_input(client, message):
         if extract_ok is False and attempts < max_attempts:
             update_data(user_id, "archive_password_attempts", attempts)
             remaining = max_attempts - attempts
-            try:
+            with contextlib.suppress(Exception):
                 await message.reply_text(
                     f"❌ **Wrong password** or archive is corrupted.\n"
                     f"You have **{remaining}** attempt(s) left — send the password again or press Cancel."
                 )
-            except Exception:
-                pass
             raise StopPropagation
 
         # Either success, or too many wrong attempts — clean up session either way.
@@ -2325,12 +2260,10 @@ async def handle_password_input(client, message):
         update_data(user_id, "archive_state", None)
         update_data(user_id, "archive_password_attempts", 0)
         if extract_ok is False:
-            try:
+            with contextlib.suppress(Exception):
                 await message.reply_text(
                     "🚫 Too many failed attempts. Cancelling this archive."
                 )
-            except Exception:
-                pass
             clear_session(user_id)
         else:
             set_state(user_id, orig_state)
@@ -2347,20 +2280,18 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
 
     if not success:
         # Don't delete the archive here: caller may want to retry the password.
-        try:
+        with contextlib.suppress(Exception):
             await msg.edit_text(
                 "❌ **Extraction Failed!**\n\n"
                 "The archive might be corrupted or the password was incorrect. "
                 "Send the password again to retry, or press Cancel."
             )
-        except Exception:
-            pass
         return False
 
     valid_exts = [".mkv", ".mp4", ".avi", ".mov", ".webm", ".jpg", ".jpeg", ".png", ".webp", ".srt", ".ass", ".vtt", ".mp3", ".flac", ".m4a", ".wav"]
     extracted_files = []
 
-    for root, dirs, files in os.walk(extract_dir):
+    for root, _dirs, files in os.walk(extract_dir):
         for file in files:
             ext = os.path.splitext(file)[1].lower()
             if ext in valid_exts:
@@ -2378,12 +2309,12 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
 
     import shutil
     import uuid
-    from utils.queue_manager import queue_manager
+
     from plugins.process import process_file
+    from utils.queue_manager import queue_manager
 
     for file_path in extracted_files:
         file_name = os.path.basename(file_path)
-        file_size = os.path.getsize(file_path)
 
         metadata = analyze_filename(file_name)
         lang = await db.get_preferred_language(user_id)
@@ -2459,7 +2390,6 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         display_name = f"S{season:02d}{format_episode_str(episode)}" if is_series else f"{quality}"
 
         from pyrogram.types import Message
-        import random
         class DummyMessage:
             def __init__(self, original_msg):
                 self.id = original_msg.id + random.randint(1000, 999999)
@@ -2755,15 +2685,13 @@ async def update_auto_detected_message(client, msg_id, user_id):
 
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await client.edit_message_text(
             chat_id=user_id,
             message_id=msg_id,
             text=text,
             reply_markup=InlineKeyboardMarkup(buttons),
         )
-    except MessageNotModified:
-        pass
 
 async def update_confirmation_message(client, msg_id, user_id):
     if msg_id not in file_sessions:
@@ -2844,15 +2772,13 @@ async def update_confirmation_message(client, msg_id, user_id):
         [InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")]
     )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await client.edit_message_text(
             chat_id=user_id,
             message_id=msg_id,
             text=text,
             reply_markup=InlineKeyboardMarkup(buttons),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^confirm_(\d+)$"))
 async def handle_confirm(client, callback_query):
@@ -2889,7 +2815,7 @@ async def handle_quality_menu(client, callback_query):
     await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "Select Quality:",
             reply_markup=InlineKeyboardMarkup(
@@ -2918,8 +2844,6 @@ async def handle_quality_menu(client, callback_query):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^set_qual_(\d+)_(.+)$"))
 async def handle_set_quality(client, callback_query):
@@ -2964,7 +2888,7 @@ async def handle_ep_change_prompt(client, callback_query):
     except FloodWait as e:
         logger.warning(f"FloodWait in handle_ep_change_prompt: sleeping for {e.value}s")
         await asyncio.sleep(e.value + 1)
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.message.edit_text(
                 "**Enter Episode Number:**\n" "Send a number (e.g. 5)",
                 reply_markup=InlineKeyboardMarkup(
@@ -2977,8 +2901,6 @@ async def handle_ep_change_prompt(client, callback_query):
                     ]
                 ),
             )
-        except Exception:
-            pass
     except Exception:
         pass
 
@@ -3008,7 +2930,7 @@ async def handle_season_change_prompt(client, callback_query):
     except FloodWait as e:
         logger.warning(f"FloodWait in handle_season_change_prompt: sleeping for {e.value}s")
         await asyncio.sleep(e.value + 1)
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.message.edit_text(
                 "**Enter Season Number:**\n" "Send a number (e.g. 2)",
                 reply_markup=InlineKeyboardMarkup(
@@ -3021,8 +2943,6 @@ async def handle_season_change_prompt(client, callback_query):
                     ]
                 ),
             )
-        except Exception:
-            pass
     except Exception as e:
         logger.warning(f"handle_season_change_prompt edit failed: {e}")
 
@@ -3088,7 +3008,7 @@ async def handle_change_tmdb_init(client, callback_query):
     fs = file_sessions[msg_id]
     mtype = fs["type"]
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"🔍 **Search {mtype.capitalize()}**\n\n" "Please enter the correct name:",
             reply_markup=InlineKeyboardMarkup(
@@ -3101,15 +3021,13 @@ async def handle_change_tmdb_init(client, callback_query):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^change_se_(\d+)$"))
 async def handle_change_se_menu(client, callback_query):
     await callback_query.answer()
     msg_id = int(callback_query.data.split("_")[2])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "Select what to change:",
             reply_markup=InlineKeyboardMarkup(
@@ -3130,8 +3048,6 @@ async def handle_change_se_menu(client, callback_query):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^correct_tmdb_(\d+)_(\d+)$"))
 async def handle_correct_tmdb_selection(client, callback_query):
@@ -3207,14 +3123,12 @@ async def handle_change_codec(client, callback_query):
 
     buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "📼 **Select Codec:**\nChoose a codec for the template. "
             "Pick **None** to lock — auto-fill won't overwrite it.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^set_codec_") & auth_filter)
 async def handle_set_codec(client, callback_query):
@@ -3264,14 +3178,12 @@ async def handle_change_audio(client, callback_query):
     buttons.append([InlineKeyboardButton(none_text, callback_data=f"set_audio_none_{msg_id}")])
     buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🔊 **Select Audio:**\nChoose an audio tag for the template. "
             "Pick **None** to lock — auto-fill won't overwrite it even if Dual/Multi streams are detected.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^set_audio_") & auth_filter)
 async def handle_set_audio(client, callback_query):
@@ -3324,14 +3236,12 @@ async def handle_change_specials(client, callback_query):
     ])
     buttons.append([InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed). "
             "Use **🚫 None (lock)** to prevent auto-fill from populating this field.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^toggle_spc_") & auth_filter)
 async def handle_toggle_specials(client, callback_query):
@@ -3375,14 +3285,12 @@ async def handle_toggle_specials(client, callback_query):
     ])
     buttons.append([InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed). "
             "Use **🚫 None (lock)** to prevent auto-fill from populating this field.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^clear_spc_") & auth_filter)
 async def handle_clear_specials(client, callback_query):
@@ -3415,7 +3323,7 @@ async def edit_system_filename_template(client, callback_query):
     user_id = callback_query.from_user.id
 
     set_state(user_id, "awaiting_system_filename")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "⚙️ **System Filename Template**\n\n"
             "How should the bot save files internally to your MyFiles database?\n"
@@ -3433,8 +3341,6 @@ async def edit_system_filename_template(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             )
         )
-    except MessageNotModified:
-        pass
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

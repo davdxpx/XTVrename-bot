@@ -1,7 +1,8 @@
 # --- Imports ---
-import os
 import asyncio
+import contextlib
 import logging
+import os
 
 logger = logging.getLogger("utils.archive")
 
@@ -17,7 +18,7 @@ async def check_password_protected(archive_path: str) -> bool:
     try:
 
         process = await asyncio.create_subprocess_exec(
-            "7z", "t", f"-pDUMMYPASSWORD123!@#", archive_path,
+            "7z", "t", "-pDUMMYPASSWORD123!@#", archive_path,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
@@ -25,23 +26,21 @@ async def check_password_protected(archive_path: str) -> bool:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60.0)
             output = (stdout.decode() + stderr.decode()).lower()
 
-            if "wrong password" in output or "cannot open encrypted archive" in output or "data error in encrypted file" in output or "enter password" in output:
-                return True
-
-            return False
+            return (
+                "wrong password" in output
+                or "cannot open encrypted archive" in output
+                or "data error in encrypted file" in output
+                or "enter password" in output
+            )
         except asyncio.TimeoutError:
             logger.warning("7z password check timed out, killing...")
-            try:
+            with contextlib.suppress(Exception):
                 process.kill()
-            except Exception:
-                pass
             return False
         except asyncio.CancelledError:
             logger.warning("7z password check cancelled, killing...")
-            try:
+            with contextlib.suppress(Exception):
                 process.kill()
-            except Exception:
-                pass
             raise
     except Exception as e:
         logger.error(f"Error checking archive password status: {e}")
@@ -72,17 +71,13 @@ async def extract_archive(archive_path: str, dest_dir: str, password: str = None
                 return False
         except asyncio.TimeoutError:
             logger.warning("7z extraction timed out, killing...")
-            try:
+            with contextlib.suppress(Exception):
                 process.kill()
-            except Exception:
-                pass
             return False
         except asyncio.CancelledError:
             logger.warning("7z extraction cancelled, killing...")
-            try:
+            with contextlib.suppress(Exception):
                 process.kill()
-            except Exception:
-                pass
             raise
 
     except Exception as e:

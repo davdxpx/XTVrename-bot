@@ -1,19 +1,21 @@
 # --- Imports ---
-from pyrogram import Client, filters, StopPropagation
+import contextlib
+
+from pyrogram import Client, StopPropagation, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 from database import db
-from utils.state import set_state, get_state, get_data, update_data, clear_session
-from utils.log import get_logger
 from utils.dumb_channel import (
+    ValidationResult,
+    ValidationStatus,
+    already_configured,
     resolve_channel,
     validate_bot_admin,
-    already_configured,
-    ValidationStatus,
-    ValidationResult,
 )
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 logger = get_logger("plugins.dumb_channel")
 
@@ -178,10 +180,8 @@ async def handle_dcv2_input(client, message):
     # Cancel token.
     if raw_text.lower() in ("cancel", "disable", "abort", "stop"):
         set_state(user_id, None)
-        try:
+        with contextlib.suppress(Exception):
             await message.delete()
-        except Exception:
-            pass
         if wizard_msg_id:
             await _safe_edit(
                 client, user_id, wizard_msg_id,
@@ -191,10 +191,8 @@ async def handle_dcv2_input(client, message):
         raise StopPropagation
 
     # Delete the user's input message to keep the chat tidy.
-    try:
+    with contextlib.suppress(Exception):
         await message.delete()
-    except Exception:
-        pass
 
     # Step 2a: resolving the channel reference.
     if wizard_msg_id:

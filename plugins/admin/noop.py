@@ -12,12 +12,12 @@ indicators) that must answer the callback query so Telegram doesn't keep
 showing a loading spinner.
 """
 
+import contextlib
+
 from pyrogram import Client, filters
 
 
 @Client.on_callback_query(filters.regex("^noop$"))
 async def noop_cb(client, callback_query):
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.answer()
-    except Exception:
-        pass

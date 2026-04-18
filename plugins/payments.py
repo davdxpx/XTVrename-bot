@@ -1,5 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.raw.types import LabeledPrice
+
 from config import Config
 from database import db
 from utils.log import get_logger
@@ -9,9 +10,12 @@ logger = get_logger("plugins.payments")
 def is_public_mode():
     return Config.PUBLIC_MODE
 
-import uuid
+import contextlib
 import re
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import uuid
+
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 
 @Client.on_callback_query(filters.regex(r"^buy_premium_dur_(standard|deluxe)$"))
 async def handle_buy_premium_dur(client, callback_query):
@@ -151,9 +155,12 @@ async def handle_buy_manual(client, callback_query):
         btc = pm.get("crypto_btc")
         eth = pm.get("crypto_eth")
         dest = ""
-        if usdt: dest += f"\n• USDT: `{usdt}`"
-        if btc: dest += f"\n• BTC: `{btc}`"
-        if eth: dest += f"\n• ETH: `{eth}`"
+        if usdt:
+            dest += f"\n• USDT: `{usdt}`"
+        if btc:
+            dest += f"\n• BTC: `{btc}`"
+        if eth:
+            dest += f"\n• ETH: `{eth}`"
     elif method == "upi":
         dest = f"`{pm.get('upi_id', '')}`"
 
@@ -215,14 +222,12 @@ async def handle_paid_manual(client, callback_query):
 
     await callback_query.answer("Admins have been notified. Please wait for approval.", show_alert=True)
 
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.message.edit_text(
             "✅ **Payment Submitted for Review**\n\n"
             f"Your Payment ID `{payment_id}` has been sent to the admins.\n"
             "Your account will be upgraded automatically once the transaction is verified."
         )
-    except Exception:
-        pass
 
     admin_ids = [Config.CEO_ID] + getattr(Config, "ADMIN_IDS", [])
 
@@ -238,10 +243,8 @@ async def handle_paid_manual(client, callback_query):
     )
 
     for aid in admin_ids:
-        try:
+        with contextlib.suppress(Exception):
             await client.send_message(aid, notification_text)
-        except Exception:
-            pass
 
 @Client.on_callback_query(filters.regex(r"^buy_stars_(standard|deluxe)_(\d+)$"))
 async def handle_buy_stars(client, callback_query):
@@ -279,7 +282,7 @@ async def handle_buy_stars(client, callback_query):
 
     try:
         from pyrogram.raw.functions.messages import SendMedia
-        from pyrogram.raw.types import InputMediaInvoice, Invoice, InputPeerUser, DataJSON
+        from pyrogram.raw.types import DataJSON, InputMediaInvoice, InputPeerUser, Invoice
 
         peer = await client.resolve_peer(user_id)
 
@@ -305,7 +308,6 @@ async def handle_buy_stars(client, callback_query):
             provider_data=DataJSON(data="{}")
         )
 
-        from pyrogram.raw.functions.messages import SendMedia
         await client.invoke(
             SendMedia(
                 peer=peer,
@@ -317,7 +319,7 @@ async def handle_buy_stars(client, callback_query):
         await callback_query.answer()
     except Exception as e:
         logger.error(f"Failed to send invoice: {e}")
-        await callback_query.answer(f"❌ Error generating invoice.", show_alert=True)
+        await callback_query.answer("❌ Error generating invoice.", show_alert=True)
 
 @Client.on_raw_update(group=-2)
 async def raw_update_handler(client, update, users, chats):
@@ -342,7 +344,7 @@ async def raw_successful_payment_handler(client, update, users, chats):
     if not is_public_mode():
         return
 
-    from pyrogram.raw.types import UpdateNewMessage, MessageService, MessageActionPaymentSentMe
+    from pyrogram.raw.types import MessageActionPaymentSentMe, MessageService, UpdateNewMessage
 
     if isinstance(update, UpdateNewMessage):
         message = update.message

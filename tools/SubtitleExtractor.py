@@ -1,13 +1,16 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
-from plugins.user_setup import track_tool_usage
-from pyrogram import Client, filters, StopPropagation
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.state import set_state, get_state, get_data, update_data, clear_session
-from utils.log import get_logger
 import asyncio
+import contextlib
 import logging
+
+from pyrogram import Client, StopPropagation, filters
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from plugins.user_setup import track_tool_usage
 from utils.ffmpeg_tools import execute_ffmpeg
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 logger = get_logger("tools.SubtitleExtractor")
 
@@ -20,7 +23,7 @@ async def handle_subtitle_extractor_menu(client, callback_query):
     clear_session(user_id)
     set_state(user_id, "awaiting_extract_subtitles")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "📝 **Subtitle Extractor**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -31,8 +34,6 @@ async def handle_subtitle_extractor_menu(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_message((filters.video | filters.document) & filters.private, group=1)
 async def handle_subtitle_extractor_upload(client, message):

@@ -25,9 +25,8 @@ import collections
 import time
 from typing import Any
 
-from utils.log import get_logger
-
 import database_schema as schema
+from utils.log import get_logger
 
 logger = get_logger("database.shim")
 
@@ -42,7 +41,7 @@ def _extract_set_fields(update: dict) -> dict:
     for the caller to forward verbatim."""
     if not isinstance(update, dict):
         return {}
-    if any(k.startswith("$") for k in update.keys()):
+    if any(k.startswith("$") for k in update):
         return dict(update.get("$set", {}))
     return dict(update)
 

@@ -34,6 +34,7 @@ Idempotent. Safe to call every boot. No-op when:
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from config import Config
@@ -96,7 +97,7 @@ async def run_consolidate_nonpublic_settings(db: Any) -> int:
         doc_id = doc.get("_id")
         logger.info(
             f"Consolidating {doc_id} → global_settings "
-            f"(keys: {sorted(k for k in doc.keys() if k != '_id')})"
+            f"(keys: {sorted(k for k in doc if k != '_id')})"
         )
         before_keys = set(global_doc.keys())
         _deep_merge(global_doc, doc)
@@ -132,10 +133,8 @@ async def run_consolidate_nonpublic_settings(db: Any) -> int:
             logger.warning(f"Could not remove {doc_id}: {e}")
 
     # Invalidate any in-memory cache so the next reader sees the merged doc.
-    try:
+    with contextlib.suppress(Exception):
         db._invalidate_settings_cache()
-    except Exception:
-        pass
 
     logger.info(
         f"Non-public consolidation done: merged {len(user_docs)} user doc(s), "

@@ -1,27 +1,29 @@
 # --- Imports ---
-import os
-import time
 import asyncio
-import re
-import random
-import string
+import contextlib
 import logging
+import math
+import os
+import random
+import re
 import shutil
-import aiohttp
-from typing import Optional, Dict, Tuple, Any
+import string
+import time
+from typing import Any, Dict, Optional, Tuple
 
-from pyrogram.errors import MessageNotModified
+import aiohttp
 from pyrogram import Client
 from pyrogram.enums import ChatType
+from pyrogram.errors import MessageNotModified
 from pyrogram.types import Message
+
 from config import Config
 from database import db
-from utils.ffmpeg_tools import generate_ffmpeg_command, execute_ffmpeg, probe_file
+from utils.detect import apply_autofill, probe_audio_streams
+from utils.ffmpeg_tools import execute_ffmpeg, generate_ffmpeg_command, probe_file
 from utils.progress import progress_for_pyrogram
-import math
-from utils.XTVengine import XTVEngine
 from utils.queue_manager import queue_manager
-from utils.detect import probe_audio_streams, apply_autofill
+from utils.XTVengine import XTVEngine
 
 logger = logging.getLogger("TaskProcessor")
 
@@ -179,82 +181,83 @@ class TaskProcessor:
                 queue_manager.update_status(batch_id, item_id, "failed")
         finally:
             await self._cleanup()
-            if batch_id and queue_manager.is_batch_complete(batch_id):
-                if not getattr(queue_manager.batches.get(batch_id), "summary_sent", False):
-                    try:
-                        usage = await db.get_user_usage(self.user_id)
-                        config = await db.get_public_config()
-                        daily_egress_mb_limit = config.get("daily_egress_mb", 0)
-                        daily_file_count_limit = config.get("daily_file_count", 0)
-                        global_limit_mb = await db.get_global_daily_egress_limit()
+            if (
+                batch_id
+                and queue_manager.is_batch_complete(batch_id)
+                and not getattr(queue_manager.batches.get(batch_id), "summary_sent", False)
+            ):
+                try:
+                    usage = await db.get_user_usage(self.user_id)
+                    config = await db.get_public_config()
+                    daily_egress_mb_limit = config.get("daily_egress_mb", 0)
+                    daily_file_count_limit = config.get("daily_file_count", 0)
+                    global_limit_mb = await db.get_global_daily_egress_limit()
 
-                        now = time.time()
-                        user_doc = await db.get_user(self.user_id)
-                        is_premium = False
-                        if user_doc:
-                            exp = user_doc.get("premium_expiry")
-                            if user_doc.get("is_premium") and (exp is None or exp > now):
-                                is_premium = True
+                    now = time.time()
+                    user_doc = await db.get_user(self.user_id)
+                    is_premium = False
+                    if user_doc:
+                        exp = user_doc.get("premium_expiry")
+                        if user_doc.get("is_premium") and (exp is None or exp > now):
+                            is_premium = True
 
-                        premium_system_enabled = config.get("premium_system_enabled", False)
+                    premium_system_enabled = config.get("premium_system_enabled", False)
 
-                        if is_premium and premium_system_enabled:
-                            daily_egress_mb_limit = config.get("premium_daily_egress_mb", 0)
+                    if is_premium and premium_system_enabled:
+                        daily_egress_mb_limit = config.get("premium_daily_egress_mb", 0)
 
-                        user_files = usage.get("file_count", 0)
-                        user_egress_mb = usage.get("egress_mb", 0.0)
-                        global_usage_mb = await db.get_global_usage_today()
+                    user_files = usage.get("file_count", 0)
+                    user_egress_mb = usage.get("egress_mb", 0.0)
+                    global_usage_mb = await db.get_global_usage_today()
 
-                        if self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS:
-                            if global_limit_mb > 0:
-                                limit_str = f"{global_limit_mb} MB"
-                                if global_limit_mb >= 1024:
-                                    limit_str = f"{global_limit_mb / 1024:.2f} GB"
+                    if self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS:
+                        if global_limit_mb > 0:
+                            limit_str = f"{global_limit_mb} MB"
+                            if global_limit_mb >= 1024:
+                                limit_str = f"{global_limit_mb / 1024:.2f} GB"
+                            used_str = f"{global_usage_mb:.2f} MB"
+                            if global_usage_mb >= 1024:
+                                used_str = f"{global_usage_mb / 1024:.2f} GB"
+                            usage_text = f"Today: {user_files} files processed · {used_str} used of {limit_str} (Global Limit)"
+                        else:
+                            usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (Unlimited)"
+                    else:
+                        if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0 and global_limit_mb <= 0:
+                            usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (No limits set)"
+                        else:
+                            limit_to_show = daily_egress_mb_limit
+                            show_global = False
+                            if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
+                                limit_to_show = global_limit_mb
+                                show_global = True
+
+                            if limit_to_show > 0:
+                                limit_str = f"{limit_to_show} MB"
+                                if limit_to_show >= 1024:
+                                    limit_str = f"{limit_to_show / 1024:.2f} GB"
+                            else:
+                                limit_str = "Unlimited"
+
+                            if show_global:
                                 used_str = f"{global_usage_mb:.2f} MB"
                                 if global_usage_mb >= 1024:
                                     used_str = f"{global_usage_mb / 1024:.2f} GB"
-                                usage_text = f"Today: {user_files} files processed · {used_str} used of {limit_str} (Global Limit)"
                             else:
-                                usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (Unlimited)"
-                        else:
-                            if daily_egress_mb_limit <= 0 and daily_file_count_limit <= 0 and global_limit_mb <= 0:
-                                usage_text = f"Today: {user_files} files · {user_egress_mb:.2f} MB used (No limits set)"
-                            else:
-                                limit_to_show = daily_egress_mb_limit
-                                show_global = False
-                                if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
-                                    limit_to_show = global_limit_mb
-                                    show_global = True
+                                used_str = f"{user_egress_mb:.2f} MB"
+                                if user_egress_mb >= 1024:
+                                    used_str = f"{user_egress_mb / 1024:.2f} GB"
 
-                                if limit_to_show > 0:
-                                    limit_str = f"{limit_to_show} MB"
-                                    if limit_to_show >= 1024:
-                                        limit_str = f"{limit_to_show / 1024:.2f} GB"
-                                else:
-                                    limit_str = "Unlimited"
+                            limit_type = " (Global Limit)" if show_global else ""
+                            usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}{limit_type}"
 
-                                if show_global:
-                                    used_str = f"{global_usage_mb:.2f} MB"
-                                    if global_usage_mb >= 1024:
-                                        used_str = f"{global_usage_mb / 1024:.2f} GB"
-                                else:
-                                    used_str = f"{user_egress_mb:.2f} MB"
-                                    if user_egress_mb >= 1024:
-                                        used_str = f"{user_egress_mb / 1024:.2f} GB"
-
-                                limit_type = " (Global Limit)" if show_global else ""
-                                usage_text = f"Today: {user_files} files · {used_str} used of {limit_str}{limit_type}"
-
-                        summary_msg = queue_manager.get_batch_summary(batch_id, usage_text)
-                        await self.client.send_message(self.user_id, summary_msg)
-                        try:
-                            await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                        except Exception:
-                            pass
-                        if queue_manager.batches.get(batch_id):
-                            setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
-                    except Exception as e:
-                        logger.warning(f"Failed to send early batch completion msg: {e}")
+                    summary_msg = queue_manager.get_batch_summary(batch_id, usage_text)
+                    await self.client.send_message(self.user_id, summary_msg)
+                    with contextlib.suppress(Exception):
+                        await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+                    if queue_manager.batches.get(batch_id):
+                        queue_manager.batches.get(batch_id).summary_sent = True
+                except Exception as e:
+                    logger.warning(f"Failed to send early batch completion msg: {e}")
 
     async def _initialize(self) -> bool:
         from pyrogram.errors import FloodWait
@@ -268,12 +271,10 @@ class TaskProcessor:
             except FloodWait as e:
                 logger.warning(f"FloodWait in _initialize: sleeping for {e.value}s")
                 await asyncio.sleep(e.value + 1)
-                try:
+                with contextlib.suppress(Exception):
                     await self.message.edit_text(
                         "❌ **System Error**\n\n`ffmpeg` binary not found. Contact administrator."
                     )
-                except Exception:
-                    pass
             except Exception:
                 pass
             return False
@@ -291,7 +292,7 @@ class TaskProcessor:
         except FloodWait as e:
             logger.warning(f"FloodWait in _initialize: sleeping for {e.value}s")
             await asyncio.sleep(e.value + 1)
-            try:
+            with contextlib.suppress(Exception):
                 self.status_msg = await self.message.edit_text(
                     "⏳ **Initializing Task...**\n"
                     "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -299,8 +300,6 @@ class TaskProcessor:
                     "\n━━━━━━━━━━━━━━━━━━━━\n"
                     f"{XTVEngine.get_signature(mode=self.mode)}"
                 )
-            except Exception:
-                pass
         except Exception:
             pass
 
@@ -334,9 +333,8 @@ class TaskProcessor:
             if orig_ext:
                 ext = orig_ext
 
-        if self.is_subtitle:
-            if not ext or ext not in [".srt", ".ass", ".vtt"]:
-                ext = ".srt"
+        if self.is_subtitle and (not ext or ext not in [".srt", ".ass", ".vtt"]):
+            ext = ".srt"
 
         if self.message.photo:
             ext = ".jpg"
@@ -498,10 +496,8 @@ class TaskProcessor:
             except Exception as e:
                 logger.error(f"Download attempt {attempt} failed: {e}")
                 if os.path.exists(self.input_path):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.remove(self.input_path)
-                    except OSError:
-                        pass
                 if attempt < max_retries:
                     await asyncio.sleep(5)
                     continue
@@ -542,14 +538,13 @@ class TaskProcessor:
                     await asyncio.to_thread(write_thumb)
                 elif thumb_mode == "auto" and self.poster_url:
                     try:
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(self.poster_url) as resp:
-                                if resp.status == 200:
-                                    data = await resp.read()
-                                    def write_poster():
-                                        with open(self.thumb_path, "wb") as f:
-                                            f.write(data)
-                                    await asyncio.to_thread(write_poster)
+                        async with aiohttp.ClientSession() as session, session.get(self.poster_url) as resp:
+                            if resp.status == 200:
+                                data = await resp.read()
+                                def write_poster():
+                                    with open(self.thumb_path, "wb") as f:
+                                        f.write(data)
+                                await asyncio.to_thread(write_poster)
                     except Exception as e:
                         logger.warning(f"Failed to download poster: {e}")
                 else:
@@ -604,18 +599,21 @@ class TaskProcessor:
             extracted_specials = []
             if self.original_name:
                 orig_name_upper = self.original_name.upper()
-                specials_keywords = ["BLURAY", "BLUERAY", "BDRIP", "WEB-DL", "WEBRIP", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT"]
-                for kw in specials_keywords:
+                specials_map = {
+                    "WEB-DL": "WEB-DL",
+                    "WEBRIP": "WEBRip",
+                    "HDR": "HDR",
+                    "REMUX": "REMUX",
+                    "PROPER": "PROPER",
+                    "REPACK": "REPACK",
+                    "UNCUT": "UNCUT",
+                    "BDRIP": "BDRip",
+                    "BLURAY": "BluRay",
+                    "BLUERAY": "BluRay",
+                }
+                for kw, label in specials_map.items():
                     if kw in orig_name_upper:
-                        if kw == "WEB-DL": extracted_specials.append("WEB-DL")
-                        elif kw == "WEBRIP": extracted_specials.append("WEBRip")
-                        elif kw == "HDR": extracted_specials.append("HDR")
-                        elif kw == "REMUX": extracted_specials.append("REMUX")
-                        elif kw == "PROPER": extracted_specials.append("PROPER")
-                        elif kw == "REPACK": extracted_specials.append("REPACK")
-                        elif kw == "UNCUT": extracted_specials.append("UNCUT")
-                        elif kw == "BDRIP": extracted_specials.append("BDRip")
-                        else: extracted_specials.append("BluRay")
+                        extracted_specials.append(label)
                 extracted_specials = list(dict.fromkeys(extracted_specials))
 
         if "codec" in self.data:
@@ -624,12 +622,10 @@ class TaskProcessor:
             extracted_codec = []
             if self.original_name:
                 orig_name_upper = self.original_name.upper()
-                codec_keywords = ["X264", "X265", "HEVC"]
-                for kw in codec_keywords:
+                codec_map = {"X264": "x264", "X265": "x265", "HEVC": "HEVC"}
+                for kw, label in codec_map.items():
                     if kw in orig_name_upper:
-                        if kw == "X264": extracted_codec.append("x264")
-                        elif kw == "X265": extracted_codec.append("x265")
-                        elif kw == "HEVC": extracted_codec.append("HEVC")
+                        extracted_codec.append(label)
 
         if "audio" in self.data:
             extracted_audio = [self.data["audio"]] if self.data["audio"] else []
@@ -637,21 +633,21 @@ class TaskProcessor:
             extracted_audio = []
             if self.original_name:
                 orig_name_upper = self.original_name.upper()
-                audio_keywords = ["DUAL", "DL", "DUBBED", "MULTI", "MICDUB", "LINEDUB", "DTS", "AC3", "ATMOS"]
-                for kw in audio_keywords:
-                    if kw == "DL":
-                        if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
-                            extracted_audio.append("DL")
-                    else:
-                        if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
-                            if kw == "DUAL": extracted_audio.append("DUAL")
-                            elif kw == "DUBBED": extracted_audio.append("Dubbed")
-                            elif kw == "MULTI": extracted_audio.append("Multi")
-                            elif kw == "MICDUB": extracted_audio.append("MicDub")
-                            elif kw == "LINEDUB": extracted_audio.append("LineDub")
-                            elif kw == "DTS": extracted_audio.append("DTS")
-                            elif kw == "AC3": extracted_audio.append("AC3")
-                            elif kw == "ATMOS": extracted_audio.append("Atmos")
+                audio_map = {
+                    "DUAL": "DUAL",
+                    "DUBBED": "Dubbed",
+                    "MULTI": "Multi",
+                    "MICDUB": "MicDub",
+                    "LINEDUB": "LineDub",
+                    "DTS": "DTS",
+                    "AC3": "AC3",
+                    "ATMOS": "Atmos",
+                }
+                if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
+                    extracted_audio.append("DL")
+                for kw, label in audio_map.items():
+                    if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
+                        extracted_audio.append(label)
 
         specials_str = pref_sep.join(extracted_specials)
         codec_str = pref_sep.join(extracted_codec)
@@ -874,8 +870,10 @@ class TaskProcessor:
                     current_time = int(h) * 3600 + int(m) * 60 + float(s)
 
                     percentage = (current_time / total_duration) * 100
-                    if percentage > 100: percentage = 100
-                    if percentage < 0: percentage = 0
+                    if percentage > 100:
+                        percentage = 100
+                    if percentage < 0:
+                        percentage = 0
 
                     filled_blocks = int(percentage / 10)
                     empty_blocks = 10 - filled_blocks
@@ -1078,12 +1076,12 @@ class TaskProcessor:
             )
             return False
 
-        if self.media_type == "extract_subtitles":
-
-            if not os.path.exists(self.output_path) or os.path.getsize(self.output_path) == 0:
-                logger.error("Subtitle extraction failed: no subtitles found in stream.")
-                await self._update_status("❌ **Extraction Failed**\n\nNo subtitles were found in this video.")
-                return False
+        if self.media_type == "extract_subtitles" and (
+            not os.path.exists(self.output_path) or os.path.getsize(self.output_path) == 0
+        ):
+            logger.error("Subtitle extraction failed: no subtitles found in stream.")
+            await self._update_status("❌ **Extraction Failed**\n\nNo subtitles were found in this video.")
+            return False
 
         return True
 
@@ -1122,9 +1120,7 @@ class TaskProcessor:
         for upload_attempt in range(max_upload_retries):
             try:
                 if is_tunneling:
-                    try:
-                        pass
-                    except Exception:
+                    with contextlib.suppress(Exception):
                         pass
 
                 thumb = (
@@ -1499,10 +1495,8 @@ class TaskProcessor:
                     skip_myfiles = True
                 elif dest_folder and dest_folder != "root":
                     from bson.objectid import ObjectId
-                    try:
+                    with contextlib.suppress(Exception):
                         folder_id = ObjectId(dest_folder)
-                    except Exception:
-                        pass
 
                 if (not dest_folder or dest_folder == "auto") and not skip_myfiles:
                     if self.tmdb_id:
@@ -1621,70 +1615,69 @@ class TaskProcessor:
                 else:
                     queue_manager.update_status(batch_id, item_id, "done_user")
 
-                if queue_manager.is_batch_complete(batch_id):
-                    if not getattr(queue_manager.batches.get(batch_id), "summary_sent", False):
-                        try:
-                            deep_link = None
+                if queue_manager.is_batch_complete(batch_id) and not getattr(
+                    queue_manager.batches.get(batch_id), "summary_sent", False
+                ):
+                    try:
+                        deep_link = None
 
-                            # Gather all successfully processed file IDs from the queue
-                            batch_obj = queue_manager.batches.get(batch_id)
-                            if batch_obj:
-                                success_ids = [getattr(i, "db_file_id", None) for i in batch_obj.items.values() if i.status in ["done", "done_dumb", "done_user"] and getattr(i, "db_file_id", None)]
+                        # Gather all successfully processed file IDs from the queue
+                        batch_obj = queue_manager.batches.get(batch_id)
+                        if batch_obj:
+                            success_ids = [getattr(i, "db_file_id", None) for i in batch_obj.items.values() if i.status in ["done", "done_dumb", "done_user"] and getattr(i, "db_file_id", None)]
 
-                                if success_ids:
-                                    import uuid
-                                    config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
-                                    user_doc = await db.get_user(self.user_id)
-                                    is_premium = user_doc.get("is_premium", False) if user_doc else False
-                                    plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
+                            if success_ids:
+                                import uuid
+                                config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
+                                user_doc = await db.get_user(self.user_id)
+                                is_premium = user_doc.get("is_premium", False) if user_doc else False
+                                plan = user_doc.get("premium_plan", "standard") if is_premium else "free"
 
-                                    plan_features = config.get(f"premium_{plan}", {}).get("features", {})
-                                    batch_sharing_enabled = plan_features.get("batch_sharing", False)
-                                    has_batch_pro = self.data.get("has_batch_pro", False)
-                                    is_global_admin = (self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS)
+                                plan_features = config.get(f"premium_{plan}", {}).get("features", {})
+                                batch_sharing_enabled = plan_features.get("batch_sharing", False)
+                                has_batch_pro = self.data.get("has_batch_pro", False)
+                                is_global_admin = (self.user_id == Config.CEO_ID or self.user_id in Config.ADMIN_IDS)
 
-                                    if (batch_sharing_enabled and has_batch_pro) or is_global_admin or plan == "global":
-                                        user_settings = await db.get_settings(self.user_id)
-                                        use_anon = user_settings.get("link_anonymity", False) if user_settings else False
+                                if (batch_sharing_enabled and has_batch_pro) or is_global_admin or plan == "global":
+                                    user_settings = await db.get_settings(self.user_id)
+                                    use_anon = user_settings.get("link_anonymity", False) if user_settings else False
 
-                                        if use_anon:
-                                            group_id = f"{uuid.uuid4().hex[:16]}"
-                                        else:
-                                            group_id = f"{self.user_id}_{int(datetime.datetime.utcnow().timestamp())}"
+                                    if use_anon:
+                                        group_id = f"{uuid.uuid4().hex[:16]}"
+                                    else:
+                                        group_id = f"{self.user_id}_{int(datetime.datetime.utcnow().timestamp())}"
 
-                                        group_doc = {
-                                            "group_id": group_id,
-                                            "user_id": self.user_id,
-                                            "files": success_ids,
-                                            "created_at": datetime.datetime.utcnow()
-                                        }
+                                    group_doc = {
+                                        "group_id": group_id,
+                                        "user_id": self.user_id,
+                                        "files": success_ids,
+                                        "created_at": datetime.datetime.utcnow()
+                                    }
 
-                                        # Add expiry if auto-expire links is enabled
-                                        auto_expire = user_settings.get("privacy_auto_expire_links", False) if user_settings else False
-                                        if auto_expire:
-                                            dur = user_settings.get("privacy_link_expiry_duration", "24h") if user_settings else "24h"
-                                            dur_map = {"1h": 1, "6h": 6, "24h": 24, "7d": 168, "30d": 720}
-                                            hours = dur_map.get(dur, 24)
-                                            group_doc["expires_at"] = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
+                                    # Add expiry if auto-expire links is enabled
+                                    auto_expire = user_settings.get("privacy_auto_expire_links", False) if user_settings else False
+                                    if auto_expire:
+                                        dur = user_settings.get("privacy_link_expiry_duration", "24h") if user_settings else "24h"
+                                        dur_map = {"1h": 1, "6h": 6, "24h": 24, "7d": 168, "30d": 720}
+                                        hours = dur_map.get(dur, 24)
+                                        group_doc["expires_at"] = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
 
-                                        await db.file_groups.insert_one(group_doc)
+                                    await db.file_groups.insert_one(group_doc)
 
-                                        bot_me = await self.client.get_me()
-                                        bot_username = bot_me.username
-                                        deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
+                                    bot_me = await self.client.get_me()
+                                    bot_username = bot_me.username
+                                    deep_link = f"https://t.me/{bot_username}?start=group_{group_id}"
 
-                            summary_msg = queue_manager.get_batch_summary(batch_id, usage_text, deep_link)
-                            await self.client.send_message(
-                                self.user_id, summary_msg, disable_web_page_preview=True
-                            )
-                            try:
-                                await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                            except Exception:
-                                pass
-                            if queue_manager.batches.get(batch_id):
-                                setattr(queue_manager.batches.get(batch_id), "summary_sent", True)
-                        except Exception as e:
-                            logger.warning(f"Failed to send batch completion msg: {e}")
+                        summary_msg = queue_manager.get_batch_summary(batch_id, usage_text, deep_link)
+                        await self.client.send_message(
+                            self.user_id, summary_msg, disable_web_page_preview=True
+                        )
+                        with contextlib.suppress(Exception):
+                            await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
+                        if queue_manager.batches.get(batch_id):
+                            queue_manager.batches.get(batch_id).summary_sent = True
+                    except Exception as e:
+                        logger.warning(f"Failed to send batch completion msg: {e}")
 
                 if dumb_channel:
                     wait_start = time.time()
@@ -1722,10 +1715,8 @@ class TaskProcessor:
                         await asyncio.sleep(5)
 
                     if wait_msg:
-                        try:
+                        with contextlib.suppress(Exception):
                             await wait_msg.delete()
-                        except Exception:
-                            pass
 
                     try:
                         from pyrogram.errors import PeerIdInvalid
@@ -1769,10 +1760,8 @@ class TaskProcessor:
                     await self.client.send_message(
                         self.user_id, f"✅ **Processing Complete!**\n\n📊 **Usage:** {usage_text.replace('Today: ', '')}"
                     )
-                    try:
+                    with contextlib.suppress(Exception):
                         await self.client.send_sticker(self.user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                    except Exception:
-                        pass
                 except Exception as e:
                     logger.warning(f"Failed to send single completion msg: {e}")
 
@@ -1847,7 +1836,7 @@ class TaskProcessor:
         if terminal:
             self._terminal_status = True
         markup = self._cancel_markup()
-        for attempt in range(3):
+        for _attempt in range(3):
             try:
                 if self.status_msg:
                     if markup is not None:
@@ -1876,21 +1865,18 @@ class TaskProcessor:
                     logger.warning(f"Failed to remove temp file {path}: {e}")
 
         if self.mode == "pro" and self.tunnel_id:
-            try:
+            with contextlib.suppress(Exception):
                 await self.active_client.delete_channel(self.tunnel_id)
-            except Exception:
-                pass
 
         if self.data.get("extract_dir") and self.data.get("batch_id"):
             extract_dir = self.data.get("extract_dir")
             batch_id = self.data.get("batch_id")
 
-            if queue_manager.is_batch_complete(batch_id):
-                if os.path.exists(extract_dir):
-                    try:
-                        shutil.rmtree(extract_dir, ignore_errors=True)
-                    except Exception as e:
-                        logger.warning(f"Failed to remove extraction directory {extract_dir}: {e}")
+            if queue_manager.is_batch_complete(batch_id) and os.path.exists(extract_dir):
+                try:
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                except Exception as e:
+                    logger.warning(f"Failed to remove extraction directory {extract_dir}: {e}")
 
         if not getattr(self, "processing_successful", False):
             try:
@@ -1942,34 +1928,28 @@ async def process_file(client, message, data):
         )
     except Exception as e:
         logger.exception(f"ensure_user failed for {user_id}: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await message.edit_text(
                 "❌ **Database Error**\n\n"
                 "Could not initialize your session. Please try again in a moment.\n"
                 "If this persists, notify an admin."
             )
-        except Exception:
-            pass
         return
 
     processor = TaskProcessor(client, message, data)
     try:
         await processor.run()
     except asyncio.CancelledError:
-        try:
+        with contextlib.suppress(Exception):
             await message.edit_text("⛔️ **Task Cancelled** by user.")
-        except Exception:
-            pass
         raise
     except Exception as e:
         logger.exception(f"process_file uncaught for user={user_id}: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await message.edit_text(
                 f"❌ **Unexpected Error**\n\n`{type(e).__name__}: {e}`\n\n"
                 "The task was aborted. Your quota has been released."
             )
-        except Exception:
-            pass
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

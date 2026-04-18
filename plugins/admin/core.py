@@ -16,7 +16,9 @@ Rule: this module MUST NOT import from any `plugins.admin.<domain>` module
 (to keep the package free of import cycles).
 """
 
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import contextlib
+
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 from database import db
@@ -39,10 +41,8 @@ def is_admin(user_id):
 # --- Message edit helper -----------------------------------------------------
 async def edit_or_reply(client, message, msg_id, text, reply_markup=None):
     # Try to edit the original bot prompt to reduce spam
-    try:
+    with contextlib.suppress(Exception):
         await message.delete()  # delete user's input
-    except Exception:
-        pass
 
     if msg_id:
         try:

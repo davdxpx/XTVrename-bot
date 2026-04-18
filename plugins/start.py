@@ -1,7 +1,8 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
 from config import Config
 from utils.log import get_logger
 from utils.state import clear_session
@@ -9,11 +10,14 @@ from utils.state import clear_session
 logger = get_logger("plugins.start")
 logger.info("Loading plugins.start...")
 
+import contextlib
+
 from database import db
-from utils.auth import check_force_sub
-from utils.gate import send_force_sub_gate, check_and_send_welcome
 from plugins.force_sub_handler import send_starter_setup_message
-from plugins.user_setup import perform_smart_swap_if_needed, track_tool_usage, send_user_tool_preferences_setup
+from plugins.user_setup import perform_smart_swap_if_needed, send_user_tool_preferences_setup, track_tool_usage
+from utils.auth import check_force_sub
+from utils.gate import check_and_send_welcome, send_force_sub_gate
+
 
 @Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)
 
@@ -127,7 +131,7 @@ async def handle_start_command_unique(client, message):
                 await message.reply_text(
                     "Could not process this share link."
                 )
-                raise StopPropagation
+                raise StopPropagation from e
 
         if param.startswith("group_"):
             from pyrogram import StopPropagation
@@ -190,6 +194,7 @@ async def handle_start_command_unique(client, message):
 
                     # We could queue this or send them slowly
                     import asyncio
+
                     from pyrogram.errors import PeerIdInvalid
                     count = 0
                     for fid_str in file_ids:
@@ -220,10 +225,8 @@ async def handle_start_command_unique(client, message):
                             except Exception as e:
                                 logger.error(f"Failed to copy group file {fid_str}: {e}")
 
-                    try:
+                    with contextlib.suppress(Exception):
                         await client.send_sticker(user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-                    except Exception:
-                        pass
                     await message.reply_text(f"✅ Delivered {count} files successfully.")
 
                     raise StopPropagation
@@ -297,7 +300,7 @@ async def handle_start_command_unique(client, message):
                         except Exception as inner_e:
                             logger.error(f"Error serving shared file (Peer fallback failed): {inner_e}")
                             await message.reply_text("❌ The file is currently unavailable because the database channel is not accessible.")
-                            raise StopPropagation
+                            raise StopPropagation from inner_e
 
                     await client.send_sticker(chat_id=user_id, sticker="CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
 
@@ -322,7 +325,7 @@ async def handle_start_command_unique(client, message):
             except Exception as e:
                 logger.error(f"Error serving shared file: {e}")
                 await message.reply_text("❌ Invalid link or file not found.")
-                raise StopPropagation
+                raise StopPropagation from e
 
         if param.startswith("pro_setup_"):
             parts = param.split("_")
@@ -335,7 +338,7 @@ async def handle_start_command_unique(client, message):
                 await db.settings.update_one({"_id": f"user_{user_id}"}, {"$set": {"temp_pro_tunnel_id": tunnel_id}}, upsert=True)
                 await message.reply_text("✅ Detected Pro Setup Tunnel link. Proceed to connect your Userbot using /setup_pro.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Proceed", callback_data="pro_setup_start")]]))
                 return
-            except Exception as e:
+            except Exception:
                 pass
 
     if not Config.PUBLIC_MODE:
@@ -355,10 +358,7 @@ async def handle_start_command_unique(client, message):
         bot_name = f"**{config.get('bot_name', '𝕏TV MediaStudio™')}**"
         community_name = config.get("community_name", "Our Community")
 
-    is_new_user = False
-    user_usage = await db.get_user_usage(user_id)
-    if not user_usage:
-        is_new_user = True
+    await db.get_user_usage(user_id)
 
     if Config.PUBLIC_MODE:
         has_setup = await db.has_completed_setup(user_id)
@@ -419,9 +419,14 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
                 plan_settings = config.get(f"premium_{plan_name}", {})
                 pf = plan_settings.get("features", {})
 
-                if not show_other:
-                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True) or pf.get("youtube_tool", True):
-                        show_other = True
+                if not show_other and (
+                    pf.get("audio_editor", True)
+                    or pf.get("file_converter", True)
+                    or pf.get("watermarker", True)
+                    or pf.get("subtitle_extractor", True)
+                    or pf.get("youtube_tool", True)
+                ):
+                    show_other = True
 
     tool_map = {
         "rename": ("📁 Rename / Tag Media", "start_renaming"),
@@ -452,7 +457,8 @@ async def render_start_menu(client, user_id, message_to_edit=None, first_name="U
 
     all_avail_ids = ["rename"]
     for t_id in tool_map:
-        if t_id == "rename": continue
+        if t_id == "rename":
+            continue
         if toggles.get(t_id, True) and (pf.get(t_id, True) if pf else True):
             all_avail_ids.append(t_id)
 
@@ -518,7 +524,6 @@ async def handle_rename_command(client, message):
 
 @Client.on_message(filters.command(["g", "general"]) & filters.private, group=0)
 async def handle_general_command(client, message):
-    user_id = message.from_user.id
     from plugins.flow import handle_type_general
 
     class MockCallbackQuery:
@@ -614,7 +619,6 @@ async def handle_youtube_command(client, message):
 
 @Client.on_message(filters.command(["p", "personal"]) & filters.private, group=0)
 async def handle_personal_command(client, message):
-    user_id = message.from_user.id
     from plugins.flow import handle_type_personal
 
     class MockCallbackQuery:
@@ -915,9 +919,14 @@ async def handle_end_command_unique(client, message):
             if config.get("premium_system_enabled", False):
                 plan_settings = config.get(f"premium_{plan_name}", {})
                 pf = plan_settings.get("features", {})
-                if not show_other:
-                    if pf.get("audio_editor", True) or pf.get("file_converter", True) or pf.get("watermarker", True) or pf.get("subtitle_extractor", True) or pf.get("youtube_tool", True):
-                        show_other = True
+                if not show_other and (
+                    pf.get("audio_editor", True)
+                    or pf.get("file_converter", True)
+                    or pf.get("watermarker", True)
+                    or pf.get("subtitle_extractor", True)
+                    or pf.get("youtube_tool", True)
+                ):
+                    show_other = True
 
     buttons = [
         [InlineKeyboardButton("🎬 Start Renaming Manually", callback_data="start_renaming")]
@@ -970,7 +979,8 @@ async def handle_other_features_menu(client, callback_query):
 
     # Render unselected tools in Other Features
     for t_id in tool_map:
-        if t_id in selected_tools: continue # These are on the main page
+        if t_id in selected_tools:
+            continue  # These are on the main page
 
         is_avail = t_id == "rename"
         if not is_avail:
@@ -982,15 +992,13 @@ async def handle_other_features_menu(client, callback_query):
 
     buttons.append([InlineKeyboardButton("❌ Close", callback_data="help_close")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "✨ **Media Tools**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "> Select a tool from the list below:",
             reply_markup=InlineKeyboardMarkup(buttons),
         )
-    except MessageNotModified:
-        pass
 
 
 # --------------------------------------------------------------------------

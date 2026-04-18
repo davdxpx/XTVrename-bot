@@ -8,6 +8,7 @@ failing or hammering the API with 401s.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from config import Config
@@ -64,10 +65,8 @@ async def ensure_tmdb(
     markup = tmdb_docs_keyboard()
 
     if isinstance(target, CallbackQuery):
-        try:
+        with contextlib.suppress(Exception):
             await target.answer()
-        except Exception:
-            pass
         try:
             await target.message.reply_text(text, reply_markup=markup)
         except Exception:

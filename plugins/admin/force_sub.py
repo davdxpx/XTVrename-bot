@@ -17,6 +17,8 @@ Text-input flows (`awaiting_fs_*`) are registered with the shared
 ``text_dispatcher`` and handled here via ``handle_text``.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -86,10 +88,8 @@ async def get_force_sub_menu_content():
 async def _render_force_sub_menu(callback_query: CallbackQuery):
     """Build and display the force-sub settings menu."""
     text, markup = await get_force_sub_menu_content()
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=markup)
-    except MessageNotModified:
-        pass
 
 
 async def _render_manage_channels(callback_query: CallbackQuery):
@@ -124,13 +124,11 @@ async def _render_manage_channels(callback_query: CallbackQuery):
         [InlineKeyboardButton("← Back to Force-Sub Settings", callback_data="admin_force_sub_menu")]
     )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "📋 **Manage Channels**\n\nSelect a channel to remove:",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(
@@ -158,7 +156,7 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_fs_add_channel",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📢 **Add Force-Sub Channel**\n\n"
                 "⏳ **I am waiting...**\n\n"
@@ -170,8 +168,6 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_force_sub_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Toggle ---
@@ -242,7 +238,7 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_fs_banner",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🖼 **Send me a photo** to use as the Force-Sub gate banner.\n\n"
                 "Send /cancel to keep the current one.",
@@ -250,8 +246,6 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_force_sub_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Remove banner ---
@@ -281,15 +275,13 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_fs_msg",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_force_sub_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Reset message ---
@@ -302,7 +294,7 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
     # --- Edit button ---
     if data == "admin_fs_edit_btn":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🔘 **Edit Button**\n\nSelect what to edit:",
                 reply_markup=InlineKeyboardMarkup(
@@ -321,8 +313,6 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_fs_btn_label":
@@ -330,15 +320,13 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_fs_btn_label",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🔘 **Edit Button Label**\n\nSend the new label text (without emoji):",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_fs_edit_btn")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_fs_btn_emoji":
@@ -346,15 +334,13 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_fs_btn_emoji",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "😀 **Edit Button Emoji**\n\nSend a single emoji character:",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_fs_edit_btn")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_fs_btn_reset":
@@ -375,7 +361,7 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
             "force_sub_welcome_text",
             "✅ Welcome aboard! You're all set. Send your file and let's go.",
         )
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"🎉 **Edit Welcome Message**\n\nCurrent:\n`{current_msg}`\n\n"
                 "Send the new welcome message text:",
@@ -383,8 +369,6 @@ async def force_sub_cb(client, callback_query: CallbackQuery):
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_force_sub_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
 
@@ -429,4 +413,5 @@ async def handle_text(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_fs_", handle_text)

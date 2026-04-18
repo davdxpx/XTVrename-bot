@@ -8,10 +8,9 @@ import time
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from utils.log import get_logger
-
 from tools.mirror_leech.downloaders import Downloader, register_downloader
 from tools.mirror_leech.Tasks import MLContext
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.http")
 
@@ -55,22 +54,23 @@ class HTTPDownloader(Downloader):
         for attempt in range(2):
             try:
                 timeout = aiohttp.ClientTimeout(total=None, connect=30, sock_read=120)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(ctx.source, allow_redirects=True) as resp:
-                        resp.raise_for_status()
-                        filename = _derive_filename(ctx.source, resp)
-                        total = float(resp.headers.get("Content-Length") or 0)
-                        dest = dest_dir / filename
+                async with aiohttp.ClientSession(timeout=timeout) as session, session.get(
+                    ctx.source, allow_redirects=True
+                ) as resp:
+                    resp.raise_for_status()
+                    filename = _derive_filename(ctx.source, resp)
+                    total = float(resp.headers.get("Content-Length") or 0)
+                    dest = dest_dir / filename
 
-                        downloaded = 0.0
-                        started = time.time()
-                        with dest.open("wb") as f:
-                            async for chunk in resp.content.iter_chunked(_CHUNK):
-                                if ctx.cancelled():
-                                    logger.info("HTTPDownloader cancelled: %s", ctx.task_id)
-                                    raise asyncio.CancelledError()  # noqa
-                                if not chunk:
-                                    continue
+                    downloaded = 0.0
+                    started = time.time()
+                    with dest.open("wb") as f:
+                        async for chunk in resp.content.iter_chunked(_CHUNK):
+                            if ctx.cancelled():
+                                logger.info("HTTPDownloader cancelled: %s", ctx.task_id)
+                                raise asyncio.CancelledError()  # noqa
+                            if not chunk:
+                                continue
                                 f.write(chunk)
                                 downloaded += len(chunk)
                                 elapsed = max(time.time() - started, 1e-3)
