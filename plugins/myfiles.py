@@ -1766,9 +1766,13 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             # Using add_to_batch which handles (batch_id, item_id, sort_key, display_name, message_id)
             queue_manager.add_to_batch(batch_id, str(i), (0, i, 0), f.get("file_name", f"File {i}"), 0)
 
-        # Kick off background task to send files
-        import asyncio
-        asyncio.create_task(process_send_all(client, user_id, files, plan, batch_id))
+        # Kick off background task to send files (hardened: errors surface via utils.tasks.spawn)
+        from utils.tasks import spawn as _spawn_task
+        _spawn_task(
+            process_send_all(client, user_id, files, plan, batch_id),
+            user_id=user_id,
+            label=f"myfiles:send_all:{user_id}",
+        )
 
         await callback_query.message.reply_text(f"⏳ Added {len(files)} files to delivery queue. They will arrive shortly.")
         return

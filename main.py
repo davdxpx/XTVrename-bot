@@ -180,8 +180,11 @@ if __name__ == "__main__":
             async def cache_link(link):
                 try:
                     await app.get_chat(link)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Non-fatal: peer may be private / link stale. Log so ops
+                    # can investigate; downstream sends will surface the issue
+                    # as PeerIdInvalid if this channel is actually needed.
+                    logger.warning(f"[peer-cache] failed to cache link '{link}': {e}")
 
             for link in links:
                 tasks.append(cache_link(link))
@@ -193,8 +196,8 @@ if __name__ == "__main__":
             async def cache_id(ch_id):
                 try:
                     await app.get_chat(ch_id)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"[peer-cache] failed to cache id {ch_id}: {e}")
 
             if force_sub_channels:
                 for ch in force_sub_channels:

@@ -1,10 +1,144 @@
 # --- Imports ---
+import asyncio
+import json
 import re
 from guessit import guessit
 from utils.tmdb import tmdb
 from utils.log import get_logger
 
 logger = get_logger("utils.detect")
+
+
+# === Template Key Normalization ===
+# Historical reason: `Config.DEFAULT_FILENAME_TEMPLATES` stores "movies" (plural)
+# but TMDB's `type` field yields "movie" (singular). Series happened to work
+# because plural = singular for "series". This normalizer eliminates the
+# mismatch everywhere template keys are built from a detected media type.
+_TEMPLATE_KEY_ALIASES = {
+    "movie": "movies",
+    "movies": "movies",
+    "series": "series",
+    "tv": "series",
+    "episode": "series",
+    "show": "series",
+}
+
+
+def template_key_for(media_type, is_subtitle=False, personal_type=None):
+    """Return the canonical key into Config.DEFAULT_FILENAME_TEMPLATES.
+
+    - movie/movies → "movies"
+    - series/tv/episode → "series"
+    - subtitles get a "subtitles_" prefix
+    - personal_type wins (personal_video/photo/file)
+    """
+    if personal_type:
+        return f"personal_{personal_type}"
+    if not media_type:
+        return ""
+    base = _TEMPLATE_KEY_ALIASES.get(str(media_type).lower(), str(media_type).lower())
+    if is_subtitle:
+        return f"subtitles_{base}"
+    return base
+
+
+# === FFprobe Audio Stream Analysis ===
+async def probe_audio_streams(filepath, timeout=20):
+    """Inspect audio streams of a media file via ffprobe.
+
+    Returns one of "DUAL", "Multi", or None if nothing conclusive.
+    - 1 stream → None (single audio, let caller keep empty)
+    - 2 streams → "DUAL" if two distinct languages OR exactly two streams
+    - 3+ streams → "Multi"
+    - On error (ffprobe missing, bad file, timeout) → None; caller keeps state.
+    """
+    if not filepath:
+        return None
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=index:stream_tags=language",
+            "-of",
+            "json",
+            str(filepath),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            logger.warning(f"ffprobe timeout on {filepath}")
+            return None
+    except FileNotFoundError:
+        logger.warning("ffprobe not found on PATH; skipping audio stream probe.")
+        return None
+    except Exception as e:
+        logger.warning(f"ffprobe failed on {filepath}: {e}")
+        return None
+
+    try:
+        data = json.loads(stdout.decode("utf-8", errors="ignore") or "{}")
+    except Exception as e:
+        logger.warning(f"ffprobe JSON parse failed for {filepath}: {e}")
+        return None
+
+    streams = data.get("streams", []) or []
+    count = len(streams)
+    if count <= 1:
+        return None
+    # Distinct non-empty languages
+    langs = {
+        (s.get("tags") or {}).get("language", "").strip().lower()
+        for s in streams
+    }
+    langs.discard("")
+    langs.discard("und")
+    if count >= 3:
+        return "Multi"
+    if count == 2:
+        # If tags disagree OR missing, treat as DUAL (the common case for 2 audio tracks).
+        return "DUAL"
+    return None
+
+
+def apply_autofill(fs):
+    """Populate audio/codec/specials from runtime detection when safe.
+
+    Rules (per field):
+      - If `{field}_locked` is True → do nothing (user explicitly chose None).
+      - If value already present → do nothing.
+      - Else copy from `detected_{field}_runtime` if available.
+    Mutates fs in place; returns set of filled field names.
+    """
+    filled = set()
+    if not isinstance(fs, dict):
+        return filled
+    for field in ("audio", "codec"):
+        if fs.get(f"{field}_locked"):
+            continue
+        if fs.get(field):
+            continue
+        runtime = fs.get(f"detected_{field}_runtime")
+        if runtime:
+            fs[field] = runtime
+            filled.add(field)
+    # Specials is a list — merge detected into existing if not locked.
+    if not fs.get("specials_locked"):
+        runtime_specials = fs.get("detected_specials_runtime") or []
+        current = fs.get("specials") or []
+        if runtime_specials and not current:
+            fs["specials"] = list(dict.fromkeys(runtime_specials))
+            filled.add("specials")
+    return filled
 
 # === Helper Functions ===
 def analyze_filename(filename):
