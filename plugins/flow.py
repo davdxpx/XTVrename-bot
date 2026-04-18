@@ -7,7 +7,8 @@ from utils.tmdb import tmdb
 from utils.auth import auth_filter
 from utils.state import set_state, get_state, update_data, get_data, clear_session, mark_for_db_persist
 from plugins.process import process_file
-from utils.detect import analyze_filename, auto_match_tmdb
+from utils.detect import analyze_filename, auto_match_tmdb, template_key_for
+from utils.tasks import spawn as _spawn_task
 from config import Config
 from utils.log import get_logger
 import asyncio
@@ -954,7 +955,12 @@ async def process_ready_file(client, user_id, message_obj, session_data):
                     pass
             reply_msg = await client.send_message(user_id, "Processing file...")
             from plugins.process import process_file
-            asyncio.create_task(process_file(client, reply_msg, data))
+            _spawn_task(
+                process_file(client, reply_msg, data),
+                user_id=user_id,
+                label=f"process_file:ready:{user_id}",
+                key=reply_msg.id,
+            )
         except Exception as e:
             logger.error(f"Failed to process ready file: {e}")
             await client.send_message(user_id, f"Error: {e}")
@@ -1777,7 +1783,12 @@ async def handle_file_upload(client, message):
                 "> ⏳ Trimming video..."
             )
             from plugins.process import process_file
-            asyncio.create_task(process_file(client, reply_msg, data))
+            _spawn_task(
+                process_file(client, reply_msg, data),
+                user_id=user_id,
+                label=f"process_file:trim:{user_id}",
+                key=reply_msg.id,
+            )
         except Exception as e:
             logger.error(f"Failed to get message for trim mode: {e}")
             await client.send_message(user_id, f"❌ Error: `{e}`")
@@ -1882,7 +1893,12 @@ async def handle_file_upload(client, message):
             "> ⏳ Converting to OGG Opus voice note..."
         )
         from plugins.process import process_file
-        asyncio.create_task(process_file(client, reply_msg, data))
+        _spawn_task(
+            process_file(client, reply_msg, data),
+            user_id=user_id,
+            label=f"process_file:voice:{user_id}",
+            key=reply_msg.id,
+        )
         clear_session(user_id)
         return
 
@@ -1921,7 +1937,12 @@ async def handle_file_upload(client, message):
             "> ⏳ Cropping to square and converting..."
         )
         from plugins.process import process_file
-        asyncio.create_task(process_file(client, reply_msg, data))
+        _spawn_task(
+            process_file(client, reply_msg, data),
+            user_id=user_id,
+            label=f"process_file:videonote:{user_id}",
+            key=reply_msg.id,
+        )
         clear_session(user_id)
         return
 
@@ -2271,19 +2292,48 @@ async def handle_password_input(client, message):
         archive_path = data.get("archive_path")
         msg_id = data.get("archive_msg_id")
         orig_state = data.get("archive_state")
+        attempts = int(data.get("archive_password_attempts", 0)) + 1
+        max_attempts = 3
 
         try:
             msg = await client.get_messages(user_id, msg_id)
             await msg.edit_text("⏳ **Attempting to extract with password...**")
-            await process_extracted_archive(client, user_id, archive_path, msg, orig_state, password)
+            extract_ok = await process_extracted_archive(
+                client, user_id, archive_path, msg, orig_state, password
+            )
         except Exception as e:
             logger.error(f"Error handling password: {e}")
             await message.reply_text(f"Error: {e}")
+            extract_ok = False
 
+        # Retry loop: stay in awaiting_archive_password until success or max attempts.
+        if extract_ok is False and attempts < max_attempts:
+            update_data(user_id, "archive_password_attempts", attempts)
+            remaining = max_attempts - attempts
+            try:
+                await message.reply_text(
+                    f"❌ **Wrong password** or archive is corrupted.\n"
+                    f"You have **{remaining}** attempt(s) left — send the password again or press Cancel."
+                )
+            except Exception:
+                pass
+            raise StopPropagation
+
+        # Either success, or too many wrong attempts — clean up session either way.
         update_data(user_id, "archive_path", None)
         update_data(user_id, "archive_msg_id", None)
         update_data(user_id, "archive_state", None)
-        set_state(user_id, orig_state)
+        update_data(user_id, "archive_password_attempts", 0)
+        if extract_ok is False:
+            try:
+                await message.reply_text(
+                    "🚫 Too many failed attempts. Cancelling this archive."
+                )
+            except Exception:
+                pass
+            clear_session(user_id)
+        else:
+            set_state(user_id, orig_state)
 
         raise StopPropagation
 
@@ -2296,10 +2346,16 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
     success = await extract_archive(archive_path, extract_dir, password)
 
     if not success:
-        await msg.edit_text("❌ **Extraction Failed!**\n\nThe archive might be corrupted or the password was incorrect.")
-        if os.path.exists(archive_path):
-            os.remove(archive_path)
-        return
+        # Don't delete the archive here: caller may want to retry the password.
+        try:
+            await msg.edit_text(
+                "❌ **Extraction Failed!**\n\n"
+                "The archive might be corrupted or the password was incorrect. "
+                "Send the password again to retry, or press Cancel."
+            )
+        except Exception:
+            pass
+        return False
 
     valid_exts = [".mkv", ".mp4", ".avi", ".mov", ".webm", ".jpg", ".jpeg", ".png", ".webp", ".srt", ".ass", ".vtt", ".mp3", ".flac", ".m4a", ".wav"]
     extracted_files = []
@@ -2316,7 +2372,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             os.remove(archive_path)
         import shutil
         shutil.rmtree(extract_dir, ignore_errors=True)
-        return
+        return True
 
     await msg.edit_text(f"✅ **Extraction Complete!**\n\nFound {len(extracted_files)} media file(s). Processing...")
 
@@ -2473,6 +2529,8 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
 
         import shutil
         shutil.rmtree(extract_dir, ignore_errors=True)
+
+    return True
 
 async def handle_auto_detection(client, message):
     if message.photo:
@@ -2639,7 +2697,7 @@ async def update_auto_detected_message(client, msg_id, user_id):
     )
 
     templates = await db.get_filename_templates(user_id)
-    template_key = fs["type"] if not fs["is_subtitle"] else f"subtitles_{fs['type']}"
+    template_key = template_key_for(fs["type"], is_subtitle=fs["is_subtitle"])
     template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
 
     has_specials = "{Specials}" in template
@@ -2724,7 +2782,7 @@ async def update_confirmation_message(client, msg_id, user_id):
     text = f"📄 **File:** `{fs['original_name']}`\n\n"
 
     templates = await db.get_filename_templates(user_id)
-    template_key = media_type if not is_sub else f"subtitles_{media_type}"
+    template_key = template_key_for(media_type, is_subtitle=is_sub)
     template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
 
     has_specials = "{Specials}" in template
@@ -2931,6 +2989,7 @@ async def handle_season_change_prompt(client, callback_query):
     user_id = callback_query.from_user.id
 
     set_state(user_id, f"awaiting_season_correction_{msg_id}")
+    from pyrogram.errors import FloodWait
     try:
         await callback_query.message.edit_text(
             "**Enter Season Number:**\n" "Send a number (e.g. 2)",
@@ -2946,6 +3005,26 @@ async def handle_season_change_prompt(client, callback_query):
         )
     except MessageNotModified:
         pass
+    except FloodWait as e:
+        logger.warning(f"FloodWait in handle_season_change_prompt: sleeping for {e.value}s")
+        await asyncio.sleep(e.value + 1)
+        try:
+            await callback_query.message.edit_text(
+                "**Enter Season Number:**\n" "Send a number (e.g. 2)",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "❌ Cancel", callback_data=f"back_confirm_{msg_id}"
+                            )
+                        ]
+                    ]
+                ),
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning(f"handle_season_change_prompt edit failed: {e}")
 
 @Client.on_callback_query(filters.regex(r"^cancel_file_(\d+)$"))
 async def handle_file_cancel(client, callback_query):
@@ -3108,6 +3187,7 @@ async def handle_change_codec(client, callback_query):
 
     fs = file_sessions[msg_id]
     current = fs.get("codec", "")
+    locked = bool(fs.get("codec_locked"))
 
     codecs = ["x264", "x265", "HEVC"]
     buttons = []
@@ -3122,14 +3202,15 @@ async def handle_change_codec(client, callback_query):
     if row:
         buttons.append(row)
 
-    text = f"✅ None" if not current else "None"
-    buttons.append([InlineKeyboardButton(text, callback_data=f"set_codec_none_{msg_id}")])
+    none_text = "🚫 None (locked)" if locked else ("✅ None" if not current else "None")
+    buttons.append([InlineKeyboardButton(none_text, callback_data=f"set_codec_none_{msg_id}")])
 
     buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
 
     try:
         await callback_query.message.edit_text(
-            "📼 **Select Codec:**\nChoose a codec for the template:",
+            "📼 **Select Codec:**\nChoose a codec for the template. "
+            "Pick **None** to lock — auto-fill won't overwrite it.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
     except MessageNotModified:
@@ -3145,10 +3226,13 @@ async def handle_set_codec(client, callback_query):
         await callback_query.answer("Session expired.", show_alert=True)
         return
 
+    fs = file_sessions[msg_id]
     if codec == "none":
-        file_sessions[msg_id]["codec"] = ""
+        fs["codec"] = ""
+        fs["codec_locked"] = True
     else:
-        file_sessions[msg_id]["codec"] = codec
+        fs["codec"] = codec
+        fs["codec_locked"] = False
 
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
 
@@ -3161,6 +3245,7 @@ async def handle_change_audio(client, callback_query):
 
     fs = file_sessions[msg_id]
     current = fs.get("audio", "")
+    locked = bool(fs.get("audio_locked"))
 
     audios = ["DUAL", "DL", "Dubbed", "Multi", "MicDub", "LineDub", "DTS", "AC3", "Atmos"]
     buttons = []
@@ -3175,13 +3260,14 @@ async def handle_change_audio(client, callback_query):
     if row:
         buttons.append(row)
 
-    text = f"✅ None" if not current else "None"
-    buttons.append([InlineKeyboardButton(text, callback_data=f"set_audio_none_{msg_id}")])
+    none_text = "🚫 None (locked)" if locked else ("✅ None" if not current else "None")
+    buttons.append([InlineKeyboardButton(none_text, callback_data=f"set_audio_none_{msg_id}")])
     buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
 
     try:
         await callback_query.message.edit_text(
-            "🔊 **Select Audio:**\nChoose an audio tag for the template:",
+            "🔊 **Select Audio:**\nChoose an audio tag for the template. "
+            "Pick **None** to lock — auto-fill won't overwrite it even if Dual/Multi streams are detected.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
     except MessageNotModified:
@@ -3197,10 +3283,13 @@ async def handle_set_audio(client, callback_query):
         await callback_query.answer("Session expired.", show_alert=True)
         return
 
+    fs = file_sessions[msg_id]
     if audio == "none":
-        file_sessions[msg_id]["audio"] = ""
+        fs["audio"] = ""
+        fs["audio_locked"] = True
     else:
-        file_sessions[msg_id]["audio"] = audio
+        fs["audio"] = audio
+        fs["audio_locked"] = False
 
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
 
@@ -3213,6 +3302,7 @@ async def handle_change_specials(client, callback_query):
 
     fs = file_sessions[msg_id]
     current = fs.get("specials", [])
+    locked = bool(fs.get("specials_locked"))
 
     specials_options = ["BluRay", "WEB-DL", "WEBRip", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT", "BDRip"]
     buttons = []
@@ -3227,14 +3317,17 @@ async def handle_change_specials(client, callback_query):
     if row:
         buttons.append(row)
 
+    lock_label = "🚫 None (locked)" if locked else "🚫 None (lock)"
     buttons.append([
         InlineKeyboardButton("❌ Clear All", callback_data=f"clear_spc_{msg_id}"),
-        InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")
+        InlineKeyboardButton(lock_label, callback_data=f"lock_spc_{msg_id}"),
     ])
+    buttons.append([InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")])
 
     try:
         await callback_query.message.edit_text(
-            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed):",
+            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed). "
+            "Use **🚫 None (lock)** to prevent auto-fill from populating this field.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
     except MessageNotModified:
@@ -3259,6 +3352,9 @@ async def handle_toggle_specials(client, callback_query):
         current.append(special)
 
     fs["specials"] = current
+    # Toggling any special means user is actively choosing — release lock.
+    fs["specials_locked"] = False
+    locked = False
 
     specials_options = ["BluRay", "WEB-DL", "WEBRip", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT", "BDRip"]
     buttons = []
@@ -3272,14 +3368,17 @@ async def handle_toggle_specials(client, callback_query):
     if row:
         buttons.append(row)
 
+    lock_label = "🚫 None (locked)" if locked else "🚫 None (lock)"
     buttons.append([
         InlineKeyboardButton("❌ Clear All", callback_data=f"clear_spc_{msg_id}"),
-        InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")
+        InlineKeyboardButton(lock_label, callback_data=f"lock_spc_{msg_id}"),
     ])
+    buttons.append([InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")])
 
     try:
         await callback_query.message.edit_text(
-            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed):",
+            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed). "
+            "Use **🚫 None (lock)** to prevent auto-fill from populating this field.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
     except MessageNotModified:
@@ -3295,6 +3394,19 @@ async def handle_clear_specials(client, callback_query):
 
     file_sessions[msg_id]["specials"] = []
 
+    await update_confirmation_message(client, msg_id, callback_query.from_user.id)
+
+@Client.on_callback_query(filters.regex(r"^lock_spc_") & auth_filter)
+async def handle_lock_specials(client, callback_query):
+    msg_id = int(callback_query.data.split("_")[2])
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+
+    fs = file_sessions[msg_id]
+    fs["specials"] = []
+    fs["specials_locked"] = True
+    await callback_query.answer("🚫 Specials locked — auto-fill will skip this.", show_alert=False)
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
 
 @Client.on_callback_query(filters.regex(r"^edit_system_filename$"))

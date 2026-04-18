@@ -268,9 +268,30 @@ class Database:
 
     async def get_filename_templates(self, user_id=None):
         settings = await self.get_settings(user_id)
-        if settings:
-            return settings.get("filename_templates", Config.DEFAULT_FILENAME_TEMPLATES)
-        return Config.DEFAULT_FILENAME_TEMPLATES
+        raw = (
+            settings.get("filename_templates", Config.DEFAULT_FILENAME_TEMPLATES)
+            if settings
+            else Config.DEFAULT_FILENAME_TEMPLATES
+        )
+        return self._normalize_template_keys(raw)
+
+    @staticmethod
+    def _normalize_template_keys(templates):
+        """Accept legacy singular keys (e.g. 'movie', 'subtitles_movie') and
+        expose them under the canonical plural keys used by Config defaults.
+        Prevents Movie auto-detect confirmation losing Audio/Codec/Specials
+        buttons when stored templates use a different key variant."""
+        if not isinstance(templates, dict):
+            return templates
+        aliases = {
+            "movie": "movies",
+            "subtitles_movie": "subtitles_movies",
+        }
+        normalized = dict(templates)
+        for legacy, canonical in aliases.items():
+            if legacy in normalized and canonical not in normalized:
+                normalized[canonical] = normalized[legacy]
+        return normalized
 
     async def update_filename_template(self, key, value, user_id=None):
         if self.settings is None:

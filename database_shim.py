@@ -109,18 +109,32 @@ class SettingsCollectionShim:
         Returns None when no underlying docs exist, preserving the legacy
         "no settings yet, insert defaults" signal that bootstrap paths rely
         on for a fresh install.
+
+        Iterates MERGED_GLOBAL_DOCS in tuple order (not via `$in` which
+        gives implementation-defined ordering) so collisions resolve
+        deterministically: later tuple entries overwrite earlier ones.
         """
         merged: dict[str, Any] = {}
         count = 0
-        async for doc in self._settings.find({"_id": {"$in": list(schema.MERGED_GLOBAL_DOCS)}}):
+        for doc_id in schema.MERGED_GLOBAL_DOCS:
+            doc = await self._settings.find_one({"_id": doc_id})
+            if doc is None:
+                continue
             count += 1
             doc.pop("_id", None)
             for key, value in doc.items():
                 if key in schema.MERGE_EXCLUDE:
                     continue
-                # Later docs win on collision — should not happen with a
-                # well-maintained GLOBAL_KEY_TO_DOC but guard against it.
-                merged[key] = value
+                existing = merged.get(key)
+                if isinstance(existing, dict) and isinstance(value, dict):
+                    # Deep-merge dict values so legacy leftovers from
+                    # `legacy_misc` (pre-routing writes) stay visible
+                    # alongside values from the authoritative doc.
+                    combined = dict(existing)
+                    combined.update(value)
+                    merged[key] = combined
+                else:
+                    merged[key] = value
         if count == 0:
             return None
         merged["_id"] = schema.VIRTUAL_GLOBAL_SETTINGS

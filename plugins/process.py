@@ -21,6 +21,7 @@ from utils.progress import progress_for_pyrogram
 import math
 from utils.XTVengine import XTVEngine
 from utils.queue_manager import queue_manager
+from utils.detect import probe_audio_streams, apply_autofill
 
 logger = logging.getLogger("TaskProcessor")
 
@@ -575,6 +576,27 @@ class TaskProcessor:
         year_str = str(self.year) if self.year else ""
 
         pref_sep = await db.get_preferred_separator(self.user_id) if hasattr(self, 'user_id') else "."
+
+        # v1.6.0: Runtime audio-stream probe + auto-fill.
+        # Safe no-op when ffprobe missing, file absent, subtitle, or user locked fields.
+        if (
+            self.input_path
+            and not self.is_subtitle
+            and self.media_type not in ("audio", "convert", "extract_subtitles", "watermark")
+            and not self.data.get("audio_locked")
+            and not self.data.get("audio")
+        ):
+            try:
+                detected = await probe_audio_streams(self.input_path)
+                if detected:
+                    self.data["detected_audio_runtime"] = detected
+                    apply_autofill(self.data)
+                    logger.info(
+                        f"[autofill] user={self.user_id} msg={self.message_id} "
+                        f"audio={self.data.get('audio')!r} (runtime-detected)"
+                    )
+            except Exception as e:
+                logger.warning(f"probe_audio_streams failed: {e}")
 
         if "specials" in self.data:
             extracted_specials = self.data["specials"]
@@ -1777,18 +1799,47 @@ class TaskProcessor:
             n += 1
         return str(round(size, 2)) + " " + dic_power[n] + "B"
 
-    async def _update_status(self, text: str):
+    def _cancel_markup(self):
+        """Inline keyboard with a Cancel button bound to this task.
+
+        Returns None when the task has already entered a terminal state so
+        final success/error messages don't carry a stale Cancel button.
+        """
+        if getattr(self, "_terminal_status", False):
+            return None
+        if not self.status_msg:
+            return None
+        try:
+            from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+        except Exception:
+            return None
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton(
+                "❌ Cancel Task",
+                callback_data=f"cancel_task_{self.status_msg.id}",
+            )
+        ]])
+
+    async def _update_status(self, text: str, *, terminal: bool = False):
         from pyrogram.errors import FloodWait, MessageIdInvalid
+        if terminal:
+            self._terminal_status = True
+        markup = self._cancel_markup()
         for attempt in range(3):
             try:
                 if self.status_msg:
-                    await self.status_msg.edit_text(text)
+                    if markup is not None:
+                        await self.status_msg.edit_text(text, reply_markup=markup)
+                    else:
+                        await self.status_msg.edit_text(text)
                 return
             except FloodWait as e:
                 logger.warning(f"FloodWait in _update_status: sleeping for {e.value}s")
                 await asyncio.sleep(e.value + 1)
             except MessageIdInvalid:
                 logger.warning("MessageIdInvalid in _update_status: message was likely deleted.")
+                return
+            except MessageNotModified:
                 return
             except Exception as e:
                 logger.warning(f"Failed to update status message: {e}")
@@ -1840,19 +1891,72 @@ class TaskProcessor:
             except Exception as e:
                 logger.error(f"Failed to release quota in cleanup: {e}")
 
-async def process_file(client, message, data):
+@Client.on_callback_query(lambda _, __, q: q.data and q.data.startswith("cancel_task_"))
+async def handle_cancel_task(client, callback_query):
+    """User pressed Cancel Task on a status message. Cancels the task
+    registered for that status-message id (no-op if already done)."""
+    from utils.tasks import cancel_by_key
 
-    await db.ensure_user(
-        user_id=message.from_user.id if message.from_user else message.chat.id,
-        first_name=message.from_user.first_name if message.from_user else message.chat.title,
-        username=message.from_user.username if message.from_user else None,
-        last_name=message.from_user.last_name if message.from_user else None,
-        language_code=message.from_user.language_code if message.from_user else None,
-        is_bot=message.from_user.is_bot if message.from_user else False
-    )
+    try:
+        status_msg_id = int(callback_query.data.split("_", 2)[2])
+    except (ValueError, IndexError):
+        await callback_query.answer("Invalid cancel request.", show_alert=False)
+        return
+
+    cancelled = cancel_by_key(status_msg_id)
+    if cancelled:
+        await callback_query.answer("⛔️ Cancelling task...", show_alert=False)
+    else:
+        await callback_query.answer(
+            "Task already finished or not cancellable.", show_alert=False
+        )
+
+
+async def process_file(client, message, data):
+    """Entry point for file processing. Wrapped to ensure any unexpected
+    failure (e.g. DB down before TaskProcessor can take over) still lands
+    with a user-facing message instead of dying silently in a spawned task."""
+    user_id = message.from_user.id if message.from_user else message.chat.id
+
+    try:
+        await db.ensure_user(
+            user_id=user_id,
+            first_name=message.from_user.first_name if message.from_user else message.chat.title,
+            username=message.from_user.username if message.from_user else None,
+            last_name=message.from_user.last_name if message.from_user else None,
+            language_code=message.from_user.language_code if message.from_user else None,
+            is_bot=message.from_user.is_bot if message.from_user else False,
+        )
+    except Exception as e:
+        logger.exception(f"ensure_user failed for {user_id}: {e}")
+        try:
+            await message.edit_text(
+                "❌ **Database Error**\n\n"
+                "Could not initialize your session. Please try again in a moment.\n"
+                "If this persists, notify an admin."
+            )
+        except Exception:
+            pass
+        return
 
     processor = TaskProcessor(client, message, data)
-    await processor.run()
+    try:
+        await processor.run()
+    except asyncio.CancelledError:
+        try:
+            await message.edit_text("⛔️ **Task Cancelled** by user.")
+        except Exception:
+            pass
+        raise
+    except Exception as e:
+        logger.exception(f"process_file uncaught for user={user_id}: {e}")
+        try:
+            await message.edit_text(
+                f"❌ **Unexpected Error**\n\n`{type(e).__name__}: {e}`\n\n"
+                "The task was aborted. Your quota has been released."
+            )
+        except Exception:
+            pass
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

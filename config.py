@@ -8,9 +8,7 @@ load_dotenv()
 
 
 class Config:
-    # "T" suffix marks the torrent-edition build; main stays at "v1.5.2".
-    # MyFiles engine is the v2.2 / Mirror-Leech-aware release from main.
-    VERSION = "v1.5.2T"
+    VERSION = "v1.6.0T"
     MYFILES_VERSION = "2.2"
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     API_ID = int(os.getenv("API_ID", 0))
