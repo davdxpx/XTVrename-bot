@@ -211,8 +211,12 @@ async def ml_command(client: Client, message: Message) -> None:
     if len(parts) < 2 or not parts[1].strip():
         await message.reply_text(
             "Usage: `/ml <url>`\n\n"
-            "Supported: direct HTTP(S), YouTube / social video (yt-dlp),\n"
-            "Telegram file refs, and RSS feeds.",
+            "Supported sources:\n"
+            "• Direct HTTP(S) URL\n"
+            "• yt-dlp-compatible page (YouTube, social video, …)\n"
+            "• Telegram file ref (`tg:<chat>:<msg>`)\n"
+            "• RSS feed URL (first enclosure)\n"
+            "• Magnet link / `.torrent` URL (aria2)",
         )
         return
 

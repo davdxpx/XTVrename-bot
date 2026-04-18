@@ -1846,6 +1846,15 @@ class TaskProcessor:
                 return
 
     async def _cleanup(self):
+        # Clean up any external cleanup directory first (e.g. from TorrentDownloader)
+        cleanup_dir = self.data.get("cleanup_dir")
+        if cleanup_dir and os.path.exists(cleanup_dir):
+            try:
+                import shutil
+                shutil.rmtree(cleanup_dir, ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"Failed to remove temp dir {cleanup_dir}: {e}")
+
         for path in [self.input_path, self.output_path, self.thumb_path]:
             if path and os.path.exists(path):
                 try:
