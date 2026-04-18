@@ -60,7 +60,10 @@ class Database:
             # attributes point directly at their renamed collections.
             self.users = self.db[_schema.USERS_COLLECTION]
             self.settings = SettingsCollectionShim(
-                self.db[_schema.SETTINGS_COLLECTION], self.users
+                self.db[_schema.SETTINGS_COLLECTION],
+                self.users,
+                ceo_id=Config.CEO_ID or None,
+                public_mode=Config.PUBLIC_MODE,
             )
             self.daily_stats = self.db[_schema.DAILY_STATS_COLLECTION]
             self.pending_payments = self.db[_schema.PENDING_PAYMENTS_COLLECTION]
