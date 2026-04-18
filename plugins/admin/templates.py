@@ -21,6 +21,8 @@ Text-input flows (`awaiting_template_*`, `awaiting_fn_template_*`,
 and routed here at runtime.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -77,13 +79,11 @@ async def templates_cb(client, callback_query: CallbackQuery):
     # --- Templates menu ---
     if data == "admin_templates_menu":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📋 **Templates Menu**\n\nSelect a template category to edit:",
                 reply_markup=get_admin_templates_menu(),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Preferred separator ---
@@ -147,7 +147,7 @@ async def templates_cb(client, callback_query: CallbackQuery):
     # --- Metadata templates list ---
     if data == "admin_templates":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Metadata Templates**\n\nSelect a field to edit:",
                 reply_markup=InlineKeyboardMarkup(
@@ -172,8 +172,6 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Caption template ---
@@ -181,7 +179,7 @@ async def templates_cb(client, callback_query: CallbackQuery):
         await callback_query.answer()
         templates = await db.get_all_templates()
         current_caption = templates.get("caption", "{random}")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"📝 **Edit Caption Template**\n\n"
                 f"Current: `{current_caption}`\n\n"
@@ -206,8 +204,6 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "prompt_admin_caption":
@@ -215,7 +211,7 @@ async def templates_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_template_caption",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Send the new caption text:**\n\n"
                 "(Use `{random}` to use the default random text generator)",
@@ -229,14 +225,12 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Filename templates ---
     if data == "admin_filename_templates":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Filename Templates**\n\nSelect media type to edit:",
                 reply_markup=InlineKeyboardMarkup(
@@ -253,13 +247,11 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_fn_templates_personal":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Personal Filename Templates**\n\nSelect media type to edit:",
                 reply_markup=InlineKeyboardMarkup(
@@ -288,13 +280,11 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_fn_templates_subtitles":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Subtitles Filename Templates**\n\nSelect media type to edit:",
                 reply_markup=InlineKeyboardMarkup(
@@ -312,8 +302,6 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Individual filename template view ---
@@ -411,7 +399,7 @@ async def templates_cb(client, callback_query: CallbackQuery):
         field = data.split("_")[-1]
         templates = await db.get_all_templates()
         current_val = templates.get(field, "")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"✏️ **Edit {field.capitalize()} Template**\n\n"
                 f"Current: `{current_val}`\n\n"
@@ -433,8 +421,6 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Prompt for metadata template text ---
@@ -444,7 +430,7 @@ async def templates_cb(client, callback_query: CallbackQuery):
             "state": f"awaiting_template_{field}",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"✏️ **Send the new template text for {field.capitalize()}:**",
                 reply_markup=InlineKeyboardMarkup(
@@ -457,8 +443,6 @@ async def templates_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
 
@@ -503,5 +487,6 @@ async def _handle_fn_template_text(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_template_", _handle_template_text)
 _register("awaiting_fn_template_", _handle_fn_template_text)

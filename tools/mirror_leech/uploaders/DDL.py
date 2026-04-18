@@ -14,10 +14,9 @@ import os
 import secrets
 from pathlib import Path
 
-from utils.log import get_logger
-
-from tools.mirror_leech.uploaders import Uploader, register_uploader
 from tools.mirror_leech.Tasks import MLContext, UploadResult
+from tools.mirror_leech.uploaders import Uploader, register_uploader
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.ddl")
 

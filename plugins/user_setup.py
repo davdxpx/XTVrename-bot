@@ -1,8 +1,11 @@
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from database import db
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
 from config import Config
+from database import db
 from utils.log import get_logger
 
 logger = get_logger("plugins.user_setup")
@@ -204,10 +207,8 @@ async def handle_user_preferences(client, callback_query: CallbackQuery):
         if row:
             buttons.append(row)
         buttons.append([InlineKeyboardButton("← Back", callback_data="pref_back")])
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
 
     # --- Language selection ---
     elif data.startswith("pref_set_lang_"):
@@ -233,10 +234,8 @@ async def handle_user_preferences(client, callback_query: CallbackQuery):
             mark = "✅ " if code == current_thumb else ""
             buttons.append([InlineKeyboardButton(f"{mark}{name}", callback_data=f"pref_set_thumb_{code}")])
         buttons.append([InlineKeyboardButton("← Back", callback_data="pref_back")])
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
 
     # --- Thumbnail mode selection ---
     elif data.startswith("pref_set_thumb_"):

@@ -27,6 +27,8 @@ screen; the text-input flow that backs the "Change" button
 ``text_dispatcher`` and handled in ``premium.py``.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -40,15 +42,13 @@ logger = get_logger("plugins.admin.feature_toggles")
 
 async def _render_access_limits(callback_query: CallbackQuery):
     reply_markup = await get_admin_access_limits_menu()
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🔒 **Settings & Controls**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "Toggle system features on/off and configure plans, limits, and tools.",
             reply_markup=reply_markup,
         )
-    except MessageNotModified:
-        pass
 
 
 async def _render_feature_toggles(callback_query: CallbackQuery):
@@ -165,12 +165,10 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
         ],
     ]
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -279,12 +277,10 @@ async def _render_subtoggle_screen(
         + "\n".join(body_lines).rstrip()
         + "\n\n━━━━━━━━━━━━━━━━━━━━"
     )
-    try:
+    with contextlib.suppress(MessageNotModified):
         await cq.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 
 def _subtoggle_menu(menu_id: str):
@@ -471,19 +467,17 @@ async def feature_toggles_cb(client, callback_query: CallbackQuery):
             [InlineKeyboardButton("💎 Manage Deluxe Plan", callback_data="admin_edit_plan_deluxe")],
             [InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")],
         ]
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text, reply_markup=InlineKeyboardMarkup(buttons)
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Global Daily Egress preview ---
     if data == "admin_global_daily_egress":
         await callback_query.answer()
         current_val = await db.get_global_daily_egress_limit()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"🌍 **Edit Global Daily Egress Limit**\n\n"
                 f"Current: `{current_val}` MB\n\n"
@@ -504,6 +498,4 @@ async def feature_toggles_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return

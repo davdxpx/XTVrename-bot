@@ -13,7 +13,6 @@ from __future__ import annotations
 import pathlib
 import re
 
-
 _BANNED = re.compile(r"(?i)\b(torrent|magnet|qbittorrent|qbit)\b")
 _REPO = pathlib.Path(__file__).resolve().parent.parent
 _SCOPE = ("tools", "plugins", "utils")

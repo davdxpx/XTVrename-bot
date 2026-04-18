@@ -18,11 +18,13 @@
 """
 
 # --- Imports ---
-import os
-import time
 import asyncio
 import datetime
+import os
+import time
+
 from pyrogram import Client, idle
+
 from config import Config
 from utils.log import get_logger
 
@@ -41,20 +43,23 @@ app = Client(
 # Load additional tools explicitly since they are in a different directory
 # The plugins dict usually only loads from one root. To ensure tools are registered,
 # we import them here before the app starts.
-import tools.FileConverter
+import contextlib
+
 import tools.AudioMetadataEditor
+import tools.FileConverter
 import tools.ImageWatermarker
-import tools.SubtitleExtractor
-import tools.VideoTrimmer
 import tools.MediaInfo
-import tools.VoiceNoteConverter
-import tools.VideoNoteConverter
-import tools.YouTubeTool
-import tools.TorrentDownloader
 
 # Mirror-Leech registers its downloaders / uploaders on import so the
 # registries are populated before the plugin's handlers fire.
 import tools.mirror_leech  # noqa: F401
+import tools.SubtitleExtractor
+import tools.TorrentDownloader
+import tools.VideoNoteConverter
+import tools.VideoTrimmer
+import tools.VoiceNoteConverter
+import tools.YouTubeTool
+
 
 def register_tool_handlers(client, module):
     for name in dir(module):
@@ -131,9 +136,9 @@ if __name__ == "__main__":
                 db.db, public_mode=Config.PUBLIC_MODE, ceo_id=Config.CEO_ID
             )
         )
-    except Exception:
+    except Exception as e:
         logger.exception("Fatal: mediastudio_layout migration failed; aborting startup")
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
     # --- Database indexes ---
     # Indexes are also re-ensured by the migration, but we run once more
@@ -227,7 +232,7 @@ if __name__ == "__main__":
 
             # Cache database channels (prevents PeerIdInvalid after redeploy)
             db_channels = config.get("database_channels", {}) if config else {}
-            for plan_name, ch_id in db_channels.items():
+            for _plan_name, ch_id in db_channels.items():
                 if ch_id:
                     tasks.append(cache_id(ch_id))
 
@@ -287,7 +292,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     logger.debug(f"Queue cleanup: {e}")
                 try:
-                    from plugins.flow import cleanup_stale_file_sessions, cleanup_stale_debounce_entries
+                    from plugins.flow import cleanup_stale_debounce_entries, cleanup_stale_file_sessions
                     cleaned_fs = cleanup_stale_file_sessions()
                     cleaned_db = cleanup_stale_debounce_entries()
                     if cleaned_fs or cleaned_db:
@@ -312,14 +317,12 @@ if __name__ == "__main__":
             async for user_doc in cursor:
                 uid = user_doc.get("user_id")
                 if uid:
-                    try:
+                    with contextlib.suppress(Exception):
                         await app.send_message(
                             uid,
                             "The bot was restarted and your active renaming session was lost.\n"
                             "Please start again by sending a file or using /start."
                         )
-                    except Exception:
-                        pass
                     await db.clear_flow_session(uid)
                     count += 1
             if count:

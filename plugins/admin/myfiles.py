@@ -15,6 +15,7 @@ module during the domain-specific submodule refactor.
 """
 
 import asyncio
+import contextlib
 import datetime
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -57,10 +58,8 @@ async def admin_myfiles_callback(client, callback_query):
         buttons.append([InlineKeyboardButton("🗂 Retention & Quotas", callback_data="admin_mf_retention")])
         buttons.append([InlineKeyboardButton("🎛 MyFiles Feature Toggles", callback_data="admin_ftmenu_myfiles")])
         buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_myfiles_db_channels":
@@ -96,24 +95,20 @@ async def admin_myfiles_callback(client, callback_query):
                 [InlineKeyboardButton("← Back to MyFiles Settings", callback_data="admin_myfiles_settings")]
             ]
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
         return
 
     if data.startswith("prompt_myfiles_db_"):
         plan = data.replace("prompt_myfiles_db_", "")
         admin_sessions[user_id] = {"state": f"awaiting_myfiles_db_{plan}", "msg_id": callback_query.message.id}
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"🗄️ **Set DB Channel for {plan.capitalize()}**\n\n"
                 f"⚠️ **IMPORTANT:** You MUST add me as an Administrator to this channel with 'Post Messages' permissions so I can save files there!\n\n"
                 f"Please forward any message from the desired channel, or send the channel ID (e.g. `-100...`).",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_myfiles_db_channels")]])
             )
-        except MessageNotModified:
-            pass
 
     if data == "admin_myfiles_limits":
         config = await db.settings.find_one({"_id": "global_settings"})
@@ -137,10 +132,8 @@ async def admin_myfiles_callback(client, callback_query):
             [InlineKeyboardButton("← Back to MyFiles Settings", callback_data="admin_myfiles_settings")]
         ]
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
         return
 
     if data.startswith("admin_myfiles_edit_limits_"):
@@ -155,10 +148,8 @@ async def admin_myfiles_callback(client, callback_query):
             [InlineKeyboardButton("⏳ Edit Expiry Days", callback_data=f"prompt_myfiles_lim_{plan}_expiry")],
             [InlineKeyboardButton("← Back to Storage Limits", callback_data="admin_myfiles_limits")]
         ]
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
         return
 
     if data.startswith("prompt_myfiles_lim_"):
@@ -176,7 +167,7 @@ async def admin_myfiles_callback(client, callback_query):
 
         cancel_cb = "admin_myfiles_edit_limits_global" if plan == "global" else f"admin_edit_plan_{plan}"
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"⚙️ **Set {name}**\n"
                 f"For the **{plan.capitalize()}** Tier.\n\n"
@@ -187,8 +178,6 @@ async def admin_myfiles_callback(client, callback_query):
                     [InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]
                 ])
             )
-        except MessageNotModified:
-            pass
         return
 
     if data.startswith("set_unlimited_myfiles_lim_"):
@@ -217,13 +206,11 @@ async def admin_myfiles_callback(client, callback_query):
         cancel_cb = "admin_myfiles_edit_limits_global" if plan == "global" else f"admin_edit_plan_{plan}"
         display_names = {"permanent": "Permanent Storage Slots", "folder": "Custom Folder Limit", "expiry": "Temporary File Expiry"}
         name = display_names.get(field, field)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"✅ **{plan.capitalize()}** {name} set to **Unlimited**.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data=cancel_cb)]])
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "admin_myfiles_cleanup":
@@ -247,10 +234,8 @@ async def admin_myfiles_callback(client, callback_query):
             buttons.append([InlineKeyboardButton("🗑️ Clear Stale Flow Sessions", callback_data="admin_clean_stale_sessions")])
             buttons.append([InlineKeyboardButton("📊 Storage Stats", callback_data="admin_clean_storage_stats")])
         buttons.append([InlineKeyboardButton("← Back to MyFiles Settings", callback_data="admin_myfiles_settings")])
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
         return
 
     if data in ("admin_myfiles_clean_free", "admin_myfiles_clean_donator", "admin_clean_all_expired",
@@ -279,12 +264,10 @@ async def admin_myfiles_callback(client, callback_query):
                 f"**Empty Folders:** `{empty_folders}`\n"
                 f"**Stale Flow Sessions:** `{stale_sessions}`"
             )
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("← Back to Cleanup", callback_data="admin_myfiles_cleanup")]
                 ]))
-            except MessageNotModified:
-                pass
             return
 
         await callback_query.answer("Cleanup job started in background.", show_alert=True)
@@ -344,10 +327,8 @@ async def admin_myfiles_callback(client, callback_query):
                 )
                 count = res.modified_count
 
-            try:
+            with contextlib.suppress(Exception):
                 await client.send_message(user_id, f"✅ **Cleanup Complete: {job_name}**\n\nProcessed: {count} items.")
-            except Exception:
-                pass
 
         asyncio.create_task(run_admin_cleanup())
         return
@@ -404,7 +385,7 @@ async def handle_text(client, message, state, state_obj, msg_id):
             await edit_or_reply(client, message, msg_id, "❌ Invalid number. Try again.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]])
             )
-            raise StopPropagation
+            raise StopPropagation from None
 
         config = await db.get_public_config() if Config.PUBLIC_MODE else await db.settings.find_one({"_id": "global_settings"})
         limits = config.get("myfiles_limits", {})
@@ -432,4 +413,5 @@ async def handle_text(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_myfiles_", handle_text)

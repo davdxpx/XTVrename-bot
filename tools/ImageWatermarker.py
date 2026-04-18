@@ -1,14 +1,17 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
-from plugins.user_setup import track_tool_usage
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.state import set_state, get_state, get_data, update_data, clear_session
-from utils.log import get_logger
 import asyncio
+import contextlib
 import logging
 import os
+
+from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from plugins.user_setup import track_tool_usage
 from utils.ffmpeg_tools import execute_ffmpeg
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 logger = get_logger("tools.ImageWatermarker")
 
@@ -21,7 +24,7 @@ async def handle_watermarker_menu(client, callback_query):
     clear_session(user_id)
     set_state(user_id, "awaiting_watermark_image")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "©️ **Image Watermarker**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -31,8 +34,6 @@ async def handle_watermarker_menu(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^watermark_type_(text|image)$"))
 async def handle_watermark_type(client, callback_query):
@@ -58,15 +59,13 @@ async def handle_watermark_type(client, callback_query):
             "> as a watermark overlay."
         )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             msg,
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^wm_pos_(.*)$"))
 async def handle_watermark_position(client, callback_query):
@@ -76,7 +75,7 @@ async def handle_watermark_position(client, callback_query):
     update_data(user_id, "watermark_position", pos)
 
     set_state(user_id, "awaiting_watermark_size")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "©️ **Image Watermarker**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -97,8 +96,6 @@ async def handle_watermark_position(client, callback_query):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^wm_size_(.*)$"))
 async def handle_watermark_size(client, callback_query):

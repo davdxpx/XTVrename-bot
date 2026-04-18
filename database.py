@@ -2,13 +2,14 @@
 import contextlib
 import datetime
 import time
-from motor.motor_asyncio import AsyncIOMotorClient
-from config import Config
-from utils.log import get_logger
+
 import certifi
+from motor.motor_asyncio import AsyncIOMotorClient
 
 import database_schema as _schema
+from config import Config
 from database_shim import SettingsCollectionShim
+from utils.log import get_logger
 
 logger = get_logger("database")
 
@@ -1140,7 +1141,7 @@ class Database:
             return 0
         try:
             return await self.settings.count_documents({"_id": {"$regex": "^user_"}})
-        except Exception as e:
+        except Exception:
             return 0
 
     async def get_dashboard_stats(self):
@@ -1214,7 +1215,7 @@ class Database:
         try:
             config = await self.get_public_config()
             return user_id in config.get("blocked_users", [])
-        except Exception as e:
+        except Exception:
             return False
 
     async def reset_user_quota(self, user_id: int):

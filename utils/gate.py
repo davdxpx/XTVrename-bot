@@ -1,8 +1,12 @@
 # --- Imports ---
 import asyncio
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+import contextlib
+
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from database import db
 from utils.state import update_data
+
 
 # === Helper Functions ===
 async def send_force_sub_gate(client, message, config):
@@ -91,10 +95,8 @@ async def check_and_send_welcome(client, message, config):
 
         async def delete_later():
             await asyncio.sleep(5)
-            try:
+            with contextlib.suppress(Exception):
                 await msg.delete()
-            except Exception:
-                pass
 
         asyncio.create_task(delete_later())
 

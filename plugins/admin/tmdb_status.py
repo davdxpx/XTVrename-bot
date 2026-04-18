@@ -15,6 +15,8 @@ as a key is set.
 
 from __future__ import annotations
 
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import (
@@ -82,13 +84,9 @@ async def tmdb_status_callback(client, callback_query: CallbackQuery):
         return
     configured = is_tmdb_available()
     text = _status_text_configured() if configured else _status_text_missing()
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text, reply_markup=_keyboard(configured)
         )
-    except MessageNotModified:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.answer()
-    except Exception:
-        pass

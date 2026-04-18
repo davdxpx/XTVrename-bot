@@ -1,13 +1,16 @@
 # --- Imports ---
+import contextlib
+import datetime
+import math
+
+from bson.objectid import ObjectId
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+
 from config import Config
 from database import db
 from utils.log import get_logger
-import math
-import datetime
-from bson.objectid import ObjectId
 
 logger = get_logger("plugins.myfiles")
 
@@ -47,33 +50,25 @@ async def safe_edit_or_send(client, callback_query, text, markup, photo=None):
                     pass
                 except Exception:
                     # Send then delete
-                    new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
-                    try:
+                    await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
+                    with contextlib.suppress(Exception):
                         await callback_query.message.delete()
-                    except Exception:
-                        pass
             else:
                 # Text to Photo: Send new, then delete old
-                new_msg = await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
-                try:
+                await client.send_photo(chat_id=callback_query.message.chat.id, photo=photo, caption=text, reply_markup=markup)
+                with contextlib.suppress(Exception):
                     await callback_query.message.delete()
-                except Exception:
-                    pass
         else:
             # We are transitioning TO a text message
             if callback_query.message.photo:
                 # Photo to Text: Send new, then delete old
-                new_msg = await client.send_message(chat_id=callback_query.message.chat.id, text=text, reply_markup=markup)
-                try:
+                await client.send_message(chat_id=callback_query.message.chat.id, text=text, reply_markup=markup)
+                with contextlib.suppress(Exception):
                     await callback_query.message.delete()
-                except Exception:
-                    pass
             else:
                 # Text to Text: Just edit
-                try:
+                with contextlib.suppress(MessageNotModified):
                     await callback_query.message.edit_text(text, reply_markup=markup)
-                except MessageNotModified:
-                    pass
     except Exception as e:
         logger.error(f"Error in safe_edit_or_send: {e}")
 
@@ -297,14 +292,15 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     ms_label = "✅ Multi-Select: ON" if multi_select else "☑️ Multi-Select: OFF"
 
     buttons.append([
-        InlineKeyboardButton(sort_label, callback_data=f"mf_st"),
-        InlineKeyboardButton(ms_label, callback_data=f"mf_ms")
+        InlineKeyboardButton(sort_label, callback_data="mf_st"),
+        InlineKeyboardButton(ms_label, callback_data="mf_ms")
     ])
 
     for f in files:
         f_id_str = str(f['_id'])
         name = f.get("file_name", "Unknown File")
-        if len(name) > 30: name = name[:27] + "..."
+        if len(name) > 30:
+            name = name[:27] + "..."
         status_emoji = "📌" if f.get("status") == "permanent" else "⏳"
 
         if multi_select:
@@ -337,11 +333,11 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
     # Action buttons for the folder/category itself
     if multi_select and selected_files:
         buttons.append([
-            InlineKeyboardButton(f"📂 Move Selected ({len(selected_files)})", callback_data=f"mf_ms_mov"),
-            InlineKeyboardButton(f"🗑 Delete Selected ({len(selected_files)})", callback_data=f"mf_ms_del")
+            InlineKeyboardButton(f"📂 Move Selected ({len(selected_files)})", callback_data="mf_ms_mov"),
+            InlineKeyboardButton(f"🗑 Delete Selected ({len(selected_files)})", callback_data="mf_ms_del")
         ])
         buttons.append([
-            InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data=f"mf_ms_sha")
+            InlineKeyboardButton(f"🔗 Generate Share Link ({len(selected_files)})", callback_data="mf_ms_sha")
         ])
         # Bulk ops row — vanishes when the toggle is off.
         try:
@@ -367,7 +363,7 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         ])
 
     buttons.append([
-        InlineKeyboardButton("📤 Send All", callback_data=f"mf_sa")
+        InlineKeyboardButton("📤 Send All", callback_data="mf_sa")
     ])
 
     buttons.append([InlineKeyboardButton("← Back", callback_data=f"myfiles_leave_{back_data}")])
@@ -417,10 +413,8 @@ async def myfiles_text_handler(client: Client, message: Message):
             "created_at": datetime.datetime.utcnow()
         })
 
-        try:
+        with contextlib.suppress(Exception):
             await message.delete()
-        except Exception:
-            pass
 
         prompt_msg_id = state_info.get("prompt_msg_id")
         confirm_text = f"✅ Folder **{folder_name}** created successfully."
@@ -478,10 +472,8 @@ async def myfiles_text_handler(client: Client, message: Message):
         await db.files.update_one({"_id": ObjectId(file_id)}, {"$set": {"file_name": new_name}})
 
         # Delete user's input message for clean chat
-        try:
+        with contextlib.suppress(Exception):
             await message.delete()
-        except Exception:
-            pass
 
         # Edit the bot's prompt message with confirmation
         prompt_msg_id = state_info.get("prompt_msg_id")
@@ -542,10 +534,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             return
 
     if _debounce_mf(user_id, data):
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.answer()
-        except Exception:
-            pass
         return
 
     # Fast-dismiss loading spinner except where we specifically want an alert.
@@ -611,10 +601,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         # Build the new keyboard markup
         buttons, _ = await build_files_list_keyboard(user_id, filter_query, page=page, back_data=back_data)
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_reply_markup(InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
 
         return
 
@@ -732,7 +720,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
 
         text = "📂 **Batch Move Files**\n\nSelect a folder to move the selected files to:"
         buttons = [
-            [InlineKeyboardButton("🧹 Remove from Folder", callback_data=f"mf_ms_domov_None")]
+            [InlineKeyboardButton("🧹 Remove from Folder", callback_data="mf_ms_domov_None")]
         ]
 
         for folder in folders:
@@ -1314,10 +1302,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
                         season = str(tmdb_data["season"])
                     elif f.get("guess_data") and "season" in f["guess_data"]:
                         s_data = f["guess_data"]["season"]
-                        if isinstance(s_data, list):
-                            season = str(s_data[0])
-                        else:
-                            season = str(s_data)
+                        season = str(s_data[0]) if isinstance(s_data, list) else str(s_data)
                     else:
                         # Final fallback: Regex parse from file_name
                         import re
@@ -1676,7 +1661,8 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     if data.startswith("myfiles_toggle_perm_"):
         file_id = data.replace("myfiles_toggle_perm_", "")
         f = await db.files.find_one({"_id": ObjectId(file_id)})
-        if not f: return
+        if not f:
+            return
 
         new_status = "temporary" if f["status"] == "permanent" else "permanent"
 
@@ -1757,8 +1743,9 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
             plan = "global"
 
         # Add to Queue Manager
-        from utils.queue_manager import queue_manager
         import time
+
+        from utils.queue_manager import queue_manager
 
         batch_id = queue_manager.create_batch()
         # Register items into the batch so update_status works
@@ -1778,8 +1765,10 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         return
 
 async def process_send_all(client, user_id, files, plan, batch_id):
-    from pyrogram.errors import FloodWait
     import asyncio
+
+    from pyrogram.errors import FloodWait
+
     from utils.queue_manager import queue_manager
 
     count = 0
@@ -1816,10 +1805,8 @@ async def process_send_all(client, user_id, files, plan, batch_id):
             logger.error(f"Send all error: {e}")
 
     await client.send_message(user_id, f"✅ Batch send complete. Delivered {count} files.")
-    try:
+    with contextlib.suppress(Exception):
         await client.send_sticker(user_id, "CAACAgIAAxkBAAEQa0xpgkMvycmQypya3zZxS5rU8tuKBQACwJ0AAjP9EEgYhDgLPnTykDgE")
-    except Exception:
-        pass
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

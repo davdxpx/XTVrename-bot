@@ -18,6 +18,7 @@ Text-input handlers for `awaiting_dumb_*` states are registered with the
 shared ``text_dispatcher`` and routed here at runtime.
 """
 
+import contextlib
 import math
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -81,10 +82,8 @@ async def _render_dumb_menu(callback_query, page: int = 1):
 
     buttons.append([InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-    except MessageNotModified:
-        pass
 
 
 async def _render_dumb_opt(callback_query, ch_id: str):
@@ -116,17 +115,15 @@ async def _render_dumb_opt(callback_query, ch_id: str):
 
     buttons = [
         [InlineKeyboardButton("✏️ Rename Channel", callback_data=f"dumb_ren_{ch_id}")],
-        [InlineKeyboardButton(f"🔸 Set Standard Default", callback_data=f"dumb_def_std_{ch_id}")],
-        [InlineKeyboardButton(f"🎬 Set Movie Default", callback_data=f"dumb_def_mov_{ch_id}")],
-        [InlineKeyboardButton(f"📺 Set Series Default", callback_data=f"dumb_def_ser_{ch_id}")],
+        [InlineKeyboardButton("🔸 Set Standard Default", callback_data=f"dumb_def_std_{ch_id}")],
+        [InlineKeyboardButton("🎬 Set Movie Default", callback_data=f"dumb_def_mov_{ch_id}")],
+        [InlineKeyboardButton("📺 Set Series Default", callback_data=f"dumb_def_ser_{ch_id}")],
         [InlineKeyboardButton("🗑 Delete Channel", callback_data=f"dumb_del_{ch_id}")],
         [InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_menu")]
     ]
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-    except MessageNotModified:
-        pass
 
 
 # --- Callback dispatch -------------------------------------------------------
@@ -155,10 +152,8 @@ async def dumb_channels_callback(client, callback_query):
         if data.startswith("dumb_menu") and "_" in data.replace("dumb_menu", ""):
             parts = data.split("_")
             if len(parts) >= 3:
-                try:
+                with contextlib.suppress(ValueError, IndexError):
                     page = int(parts[2])
-                except (ValueError, IndexError):
-                    pass
         await _render_dumb_menu(callback_query, page=page)
         return
 
@@ -174,7 +169,7 @@ async def dumb_channels_callback(client, callback_query):
             "state": f"awaiting_dumb_rename_{ch_id}",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "✏️ **Rename Channel**\n\n"
                 "Please enter the new name for this global channel:\n\n"
@@ -183,8 +178,6 @@ async def dumb_channels_callback(client, callback_query):
                     [[InlineKeyboardButton("❌ Cancel", callback_data=f"dumb_opt_{ch_id}")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data.startswith("dumb_def_std_"):
@@ -214,7 +207,7 @@ async def dumb_channels_callback(client, callback_query):
             "state": "awaiting_dumb_add",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "➕ **Add Dumb Channel**\n\n"
                 "Please add me as an Administrator in the desired channel.\n"
@@ -224,8 +217,6 @@ async def dumb_channels_callback(client, callback_query):
                     [[InlineKeyboardButton("❌ Cancel", callback_data="dumb_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data.startswith("dumb_del_"):
@@ -238,7 +229,7 @@ async def dumb_channels_callback(client, callback_query):
     # --- Global timeout --------------------------------------------------------
     if data == "admin_dumb_timeout":
         current_val = await db.get_dumb_channel_timeout()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"⏱ **Edit Dumb Channel Timeout**\n\n"
                 f"This is the max time (in seconds) the bot will wait for earlier files before uploading to the Dumb Channel.\n\n"
@@ -250,8 +241,6 @@ async def dumb_channels_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "prompt_admin_dumb_timeout":
@@ -259,15 +248,13 @@ async def dumb_channels_callback(client, callback_query):
             "state": "awaiting_dumb_timeout",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "⏱ **Send the new timeout in seconds (e.g., 3600 for 1 hour):**",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
 
@@ -371,4 +358,5 @@ async def handle_text(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_dumb_", handle_text)

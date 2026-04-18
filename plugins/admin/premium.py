@@ -19,6 +19,8 @@ awaiting_public_daily_*) are registered with the shared
 ``text_dispatcher`` and routed here at runtime.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,7 +28,6 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 from config import Config
 from database import db
 from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
-
 
 # ── Shared tool definitions ────────────────────────────────────────────
 
@@ -153,10 +154,8 @@ async def _render_edit_plan(callback_query: CallbackQuery, plan_name: str):
     buttons.append([InlineKeyboardButton("⚙️ Configure Features", callback_data=f"admin_premium_features_{plan_name}")])
     buttons.append([InlineKeyboardButton("← Back to Plan Settings", callback_data="admin_per_plan_limits")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-    except MessageNotModified:
-        pass
 
 
 async def _render_premium_settings(callback_query: CallbackQuery):
@@ -193,10 +192,8 @@ async def _render_premium_settings(callback_query: CallbackQuery):
 
     buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="admin_access_limits")])
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-    except MessageNotModified:
-        pass
 
 
 async def _render_features_media(callback_query: CallbackQuery, plan_name: str):
@@ -238,10 +235,10 @@ async def _render_features_media(callback_query: CallbackQuery, plan_name: str):
 
     if plan_name == "free":
         text = (
-            f"🛠️ **Media Tools (Free)**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"Toggle media tools for free users.\n"
-            f"> These are the **global** toggles (apply to all non-premium users)."
+            "🛠️ **Media Tools (Free)**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "Toggle media tools for free users.\n"
+            "> These are the **global** toggles (apply to all non-premium users)."
         )
     else:
         text = (
@@ -252,10 +249,8 @@ async def _render_features_media(callback_query: CallbackQuery, plan_name: str):
             f"> Per-plan toggles control access within this tier."
         )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-    except MessageNotModified:
-        pass
 
 
 async def _render_features_perks(callback_query: CallbackQuery, plan_name: str):
@@ -278,10 +273,8 @@ async def _render_features_perks(callback_query: CallbackQuery, plan_name: str):
 
     text = f"🌟 **Account Perks ({plan_name.capitalize()})**\n\nConfigure account perks for this tier:"
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-    except MessageNotModified:
-        pass
 
 
 async def _render_privacy_menu(callback_query: CallbackQuery, plan_name: str):
@@ -337,10 +330,8 @@ async def _render_privacy_menu(callback_query: CallbackQuery, plan_name: str):
     else:
         text += "> ⚠️ __Privacy settings are disabled for this plan.__\n"
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-    except MessageNotModified:
-        pass
 
 
 # ── Handler ────────────────────────────────────────────────────────────
@@ -461,10 +452,8 @@ async def premium_cb(client, callback_query: CallbackQuery):
                 "> Each tool can be individually enabled or disabled."
             )
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except MessageNotModified:
-            pass
         return
 
     # --- Account perks ---
@@ -561,7 +550,7 @@ async def premium_cb(client, callback_query: CallbackQuery):
             field = parts[1]
 
             if field == "egress":
-                try:
+                with contextlib.suppress(MessageNotModified):
                     await callback_query.message.edit_text(
                         f"📦 **Edit Daily Egress Limit** ({plan_name.capitalize()} Plan)\n\n"
                         f"Select a predefined size or click **Change Custom** to enter a value manually (e.g. `20 GB` or `512 MB`):",
@@ -574,12 +563,10 @@ async def premium_cb(client, callback_query: CallbackQuery):
                             [InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")],
                         ]),
                     )
-                except MessageNotModified:
-                    pass
                 return
 
             if field == "price":
-                try:
+                with contextlib.suppress(MessageNotModified):
                     await callback_query.message.edit_text(
                         "💵 **Select Currency**\n\nFirst, select the fiat currency you want to use for this plan:",
                         reply_markup=InlineKeyboardMarkup([
@@ -592,8 +579,6 @@ async def premium_cb(client, callback_query: CallbackQuery):
                             [InlineKeyboardButton("← Back to Plan Settings", callback_data=f"admin_edit_plan_{plan_name}")]
                         ])
                     )
-                except MessageNotModified:
-                    pass
                 return
 
             admin_sessions[user_id] = {
@@ -627,15 +612,13 @@ async def premium_cb(client, callback_query: CallbackQuery):
 
             cancel_cb = f"admin_edit_plan_{plan_name}"
 
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     prompts.get(field, "Enter new value:"),
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("❌ Cancel", callback_data=cancel_cb)]]
                     ),
                 )
-            except MessageNotModified:
-                pass
             return
 
     # --- Custom egress prompt ---
@@ -645,7 +628,7 @@ async def premium_cb(client, callback_query: CallbackQuery):
             "state": f"awaiting_premium_{plan_name}_egress",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📦 **Send the new daily egress limit.**\n\n"
                 "You can send the value in MB (e.g., `2048`) or use `GB` format (e.g., `2 GB` or `5.5 GB`).\n"
@@ -654,8 +637,6 @@ async def premium_cb(client, callback_query: CallbackQuery):
                     [[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_edit_plan_{plan_name}")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Set premium egress preset ---
@@ -690,15 +671,13 @@ async def premium_cb(client, callback_query: CallbackQuery):
             "msg_id": callback_query.message.id,
         }
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"💵 **Set Price in {currency}**\n\nPlease enter the numeric amount (e.g., `9.99` or `500`):",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data=f"admin_premium_plan_{plan_name}")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Trial duration prompt ---
@@ -707,15 +686,13 @@ async def premium_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_trial_days",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "⏱ **Send the new PREMIUM TRIAL duration in days (e.g., 7).**\nSend `0` to disable.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_premium_settings")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Global daily egress prompt ---
@@ -724,15 +701,13 @@ async def premium_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_global_daily_egress",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🌍 **Send the new global daily egress limit in MB (e.g., 102400 for 100GB).**\nSend `0` to disable.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_access_limits")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Daily egress (free plan) ---
@@ -741,7 +716,7 @@ async def premium_cb(client, callback_query: CallbackQuery):
             return
         config = await db.get_public_config()
         current_val = config.get("daily_egress_mb", 0)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"📦 **Edit Daily Egress Limit** (Free Plan)\n\n"
                 f"Current: `{current_val}` MB\n\n"
@@ -755,8 +730,6 @@ async def premium_cb(client, callback_query: CallbackQuery):
                     [InlineKeyboardButton("← Back to Plan Settings", callback_data="admin_edit_plan_free")],
                 ]),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Set daily egress preset (free plan) ---
@@ -775,7 +748,7 @@ async def premium_cb(client, callback_query: CallbackQuery):
             return
         config = await db.get_public_config()
         current_val = config.get("daily_file_count", 0)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"📄 **Edit Daily File Limit** (Free Plan)\n\nCurrent: `{current_val}` files\n\nClick below to change it.",
                 reply_markup=InlineKeyboardMarkup([
@@ -783,8 +756,6 @@ async def premium_cb(client, callback_query: CallbackQuery):
                     [InlineKeyboardButton("← Back to Plan Settings", callback_data="admin_edit_plan_free")],
                 ]),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Prompt daily egress/files (free plan text input setup) ---
@@ -809,15 +780,13 @@ async def premium_cb(client, callback_query: CallbackQuery):
             text = "Send the new value:"
         cancel_btn = "admin_edit_plan_free"
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data=cancel_btn)]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
 
@@ -946,6 +915,7 @@ async def _handle_trial_days(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_global_daily_egress", _handle_global_daily_egress)
 _register("awaiting_premium_", _handle_premium_text)
 _register("awaiting_trial_days", _handle_trial_days)

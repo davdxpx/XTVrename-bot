@@ -1,12 +1,15 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
-from plugins.user_setup import track_tool_usage
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.state import set_state, get_state, get_data, clear_session
-from utils.log import get_logger
 import asyncio
+import contextlib
+
+from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from plugins.user_setup import track_tool_usage
 from utils.ffmpeg_tools import execute_ffmpeg
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state
 
 logger = get_logger("tools.VideoNoteConverter")
 
@@ -19,7 +22,7 @@ async def handle_video_note_menu(client, callback_query):
     clear_session(user_id)
     set_state(user_id, "awaiting_videonote_file")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "⭕ **Video Note Converter**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -31,8 +34,6 @@ async def handle_video_note_menu(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 # === Functions ===
 async def convert_to_video_note(input_path: str, output_dir: str, safe_title: str, progress_callback=None) -> tuple[bool, bytes, str, str]:

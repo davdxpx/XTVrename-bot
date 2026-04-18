@@ -1,16 +1,18 @@
 # --- Imports ---
+import asyncio
+import contextlib
 import os
 import re
 import time
-import asyncio
-from pyrogram import Client, filters, StopPropagation
+
+from pyrogram import Client, StopPropagation, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 from plugins.user_setup import track_tool_usage
-from utils.state import set_state, get_state, get_data, update_data, clear_session
 from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 # yt-dlp is an optional runtime dependency. Import lazily so main.py can still
 # load the module even if the package is missing on the host.
@@ -542,10 +544,8 @@ class _ProgressState:
 
     def hook(self, d: dict) -> None:
         """yt-dlp progress hook entry (sync, runs off-loop)."""
-        try:
+        with contextlib.suppress(Exception):
             self.latest = d
-        except Exception:
-            pass
 
     async def pump(self) -> None:
         """Periodically edits the status message with the latest progress."""
@@ -590,9 +590,9 @@ class _ProgressState:
             )
         if status == "finished":
             return (
-                f"✅ **Download complete — post-processing...**\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"> Converting / muxing, please wait."
+                "✅ **Download complete — post-processing...**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                "> Converting / muxing, please wait."
             )
         return None
 
@@ -1072,17 +1072,15 @@ async def handle_youtube_tool_menu(client, callback_query):
     clear_session(user_id)
 
     if not _YTDLP_AVAILABLE:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 _ytdlp_missing_text(),
                 reply_markup=InlineKeyboardMarkup(_cancel_row()),
             )
-        except MessageNotModified:
-            pass
         return
 
     set_state(user_id, "awaiting_youtube_url")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "▶️ **YouTube Tool**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1097,8 +1095,6 @@ async def handle_youtube_tool_menu(client, callback_query):
             reply_markup=InlineKeyboardMarkup(_cancel_row()),
             disable_web_page_preview=True,
         )
-    except MessageNotModified:
-        pass
 
 
 def format_video_info(info: dict) -> str:
@@ -1193,15 +1189,13 @@ async def handle_youtube_url_input(client, message):
 
     if not info:
         set_state(user_id, "awaiting_youtube_url")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await status_msg.edit_text(
                 "❌ Could not fetch video info.\n\n"
                 "The link might be invalid, private, age-restricted, or "
                 "region-blocked. Send another URL or cancel.",
                 reply_markup=InlineKeyboardMarkup(_cancel_row()),
             )
-        except MessageNotModified:
-            pass
         return
 
     update_data(user_id, "video_title", info.get("title") or "Untitled")
@@ -1214,7 +1208,7 @@ async def handle_youtube_url_input(client, message):
     uploader = info.get("uploader") or info.get("channel") or "Unknown"
     duration = _format_duration(info.get("duration"))
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_msg.edit_text(
             f"▶️ **YouTube Tool**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1224,8 +1218,6 @@ async def handle_youtube_url_input(client, message):
             reply_markup=_mode_menu_markup(),
             disable_web_page_preview=True,
         )
-    except MessageNotModified:
-        pass
     raise StopPropagation
 
 
@@ -1247,7 +1239,7 @@ async def handle_yt_mode(client, callback_query):
 
     if mode == "video":
         set_state(user_id, "awaiting_yt_quality")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🎬 **Video Download**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1255,26 +1247,22 @@ async def handle_yt_mode(client, callback_query):
                 "> Files over your plan's limit will fail to upload.",
                 reply_markup=_quality_menu_markup(),
             )
-        except MessageNotModified:
-            pass
         return
 
     if mode == "audio":
         set_state(user_id, "awaiting_yt_audio_bitrate")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🎵 **Audio (MP3) Download**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
                 "Pick an MP3 bitrate:",
                 reply_markup=_bitrate_menu_markup(),
             )
-        except MessageNotModified:
-            pass
         return
 
     if mode == "subs":
         set_state(user_id, "awaiting_yt_sub_lang")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Subtitle Download**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1282,8 +1270,6 @@ async def handle_yt_mode(client, callback_query):
                 "auto-generated ones.",
                 reply_markup=_sub_lang_menu_markup(),
             )
-        except MessageNotModified:
-            pass
         return
 
     if mode == "thumb":
@@ -1322,7 +1308,7 @@ async def handle_yt_quality(client, callback_query):
 
 async def _run_video_download(client, status_msg, user_id: int, url: str, quality: str):
     title_hint = (get_data(user_id) or {}).get("video_title") or ""
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_msg.edit_text(
             f"🎬 **Preparing video download...**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -1330,8 +1316,6 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
             f"> Quality: `{quality}`\n\n"
             f"__Starting download...__",
         )
-    except MessageNotModified:
-        pass
 
     loop = asyncio.get_event_loop()
     progress = _ProgressState(loop, status_msg, title_hint=title_hint)
@@ -1347,15 +1331,13 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
         progress.closed = True
         pump_task.cancel()
         if not ok:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await status_msg.edit_text(
                     f"❌ **Video download failed.**\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"`{result}`",
                     reply_markup=_result_menu_markup(),
                 )
-            except MessageNotModified:
-                pass
             return
         filepath = result
 
@@ -1382,15 +1364,13 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
             logger.warning(f"send_video failed, falling back to send_document: {e}")
             await client.send_document(chat_id=user_id, document=filepath, caption=caption)
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await status_msg.edit_text(
                 "✅ **Video delivered above.**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "Choose next action:",
                 reply_markup=_result_menu_markup(),
             )
-        except MessageNotModified:
-            pass
     except BotCheckError as bce:
         progress.closed = True
         if not pump_task.done():
@@ -1403,13 +1383,11 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Video download pipeline crashed")
-        try:
+        with contextlib.suppress(Exception):
             await status_msg.edit_text(
                 f"❌ Unexpected error: `{e}`",
                 reply_markup=_result_menu_markup(),
             )
-        except Exception:
-            pass
     finally:
         progress.closed = True
         if not pump_task.done():
@@ -1434,7 +1412,7 @@ async def handle_yt_audio_bitrate(client, callback_query):
 
 async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrate: str):
     title_hint = (get_data(user_id) or {}).get("video_title") or ""
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_msg.edit_text(
             f"🎵 **Preparing audio download...**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -1442,8 +1420,6 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
             f"> Bitrate: `{bitrate} kbps`\n\n"
             f"__Starting download...__"
         )
-    except MessageNotModified:
-        pass
 
     loop = asyncio.get_event_loop()
     progress = _ProgressState(loop, status_msg, title_hint=title_hint)
@@ -1459,15 +1435,13 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
         progress.closed = True
         pump_task.cancel()
         if not ok:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await status_msg.edit_text(
                     f"❌ **Audio download failed.**\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"`{result}`",
                     reply_markup=_result_menu_markup(),
                 )
-            except MessageNotModified:
-                pass
             return
         filepath = result
 
@@ -1495,15 +1469,13 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
             logger.warning(f"send_audio failed, falling back to send_document: {e}")
             await client.send_document(chat_id=user_id, document=filepath, caption=caption)
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await status_msg.edit_text(
                 "✅ **Audio delivered above.**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "Choose next action:",
                 reply_markup=_result_menu_markup(),
             )
-        except MessageNotModified:
-            pass
     except BotCheckError as bce:
         progress.closed = True
         if not pump_task.done():
@@ -1516,13 +1488,11 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Audio download pipeline crashed")
-        try:
+        with contextlib.suppress(Exception):
             await status_msg.edit_text(
                 f"❌ Unexpected error: `{e}`",
                 reply_markup=_result_menu_markup(),
             )
-        except Exception:
-            pass
     finally:
         progress.closed = True
         if not pump_task.done():
@@ -1547,30 +1517,26 @@ async def handle_yt_sub_lang(client, callback_query):
 
 async def _run_subtitle_download(client, status_msg, user_id: int, url: str, lang: str):
     title_hint = (get_data(user_id) or {}).get("video_title") or ""
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_msg.edit_text(
             f"📝 **Fetching subtitles...**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"**{title_hint}**\n"
             f"> Language: `{lang}`"
         )
-    except MessageNotModified:
-        pass
 
     output_dir = Config.DOWNLOAD_DIR
     filepath = None
     try:
         ok, result, info = await download_subtitles(url, lang, output_dir)
         if not ok:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await status_msg.edit_text(
                     f"❌ **Subtitle download failed.**\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"`{result}`",
                     reply_markup=_result_menu_markup(),
                 )
-            except MessageNotModified:
-                pass
             return
         filepath = result
 
@@ -1582,37 +1548,31 @@ async def _run_subtitle_download(client, status_msg, user_id: int, url: str, lan
             await client.send_document(chat_id=user_id, document=filepath, caption=caption)
         except Exception as e:
             logger.exception("Subtitle send_document failed")
-            try:
+            with contextlib.suppress(Exception):
                 await status_msg.edit_text(
                     f"❌ Upload failed: `{e}`",
                     reply_markup=_result_menu_markup(),
                 )
-            except Exception:
-                pass
             return
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await status_msg.edit_text(
                 "✅ **Subtitles delivered above.**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "Choose next action:",
                 reply_markup=_result_menu_markup(),
             )
-        except MessageNotModified:
-            pass
     except BotCheckError as bce:
         await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
     except FormatUnavailableError as fue:
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Subtitle pipeline crashed")
-        try:
+        with contextlib.suppress(Exception):
             await status_msg.edit_text(
                 f"❌ Unexpected error: `{e}`",
                 reply_markup=_result_menu_markup(),
             )
-        except Exception:
-            pass
     finally:
         _safe_remove(filepath)
         set_state(user_id, "awaiting_yt_result")
@@ -1620,29 +1580,25 @@ async def _run_subtitle_download(client, status_msg, user_id: int, url: str, lan
 
 async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
     title_hint = (get_data(user_id) or {}).get("video_title") or ""
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_msg.edit_text(
             f"🖼 **Fetching thumbnail...**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"**{title_hint}**"
         )
-    except MessageNotModified:
-        pass
 
     output_dir = Config.DOWNLOAD_DIR
     filepath = None
     try:
         ok, result, info = await download_thumbnail(url, output_dir)
         if not ok:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await status_msg.edit_text(
                     f"❌ **Thumbnail download failed.**\n"
                     f"━━━━━━━━━━━━━━━━━━━━\n"
                     f"`{result}`",
                     reply_markup=_result_menu_markup(),
                 )
-            except MessageNotModified:
-                pass
             return
         filepath = result
 
@@ -1658,28 +1614,24 @@ async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
 
         # Keep the thumbnail image in chat; replace the status message with
         # a small result menu (Back to Menu / New Link).
-        try:
+        with contextlib.suppress(MessageNotModified):
             await status_msg.edit_text(
                 "✅ **Thumbnail delivered above.**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 "Choose next action:",
                 reply_markup=_result_menu_markup(),
             )
-        except MessageNotModified:
-            pass
     except BotCheckError as bce:
         await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
     except FormatUnavailableError as fue:
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Thumbnail pipeline crashed")
-        try:
+        with contextlib.suppress(Exception):
             await status_msg.edit_text(
                 f"❌ Unexpected error: `{e}`",
                 reply_markup=_result_menu_markup(),
             )
-        except Exception:
-            pass
     finally:
         _safe_remove(filepath)
         # Session is kept alive so Back-to-Menu works. State is set to
@@ -1688,13 +1640,11 @@ async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
 
 
 async def _run_info_display(client, status_msg, user_id: int, url: str):
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_msg.edit_text(
             "ℹ️ **Fetching full metadata...**\n"
             "━━━━━━━━━━━━━━━━━━━━"
         )
-    except MessageNotModified:
-        pass
 
     try:
         info = await extract_video_info(url)
@@ -1705,14 +1655,12 @@ async def _run_info_display(client, status_msg, user_id: int, url: str):
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
         return
     if not info:
-        try:
+        with contextlib.suppress(Exception):
             await status_msg.edit_text(
                 "❌ Could not fetch video info. The link may be invalid, "
                 "private or region-blocked.",
                 reply_markup=_result_menu_markup(),
             )
-        except Exception:
-            pass
         set_state(user_id, "awaiting_yt_result")
         return
 
@@ -1737,25 +1685,21 @@ async def _run_info_display(client, status_msg, user_id: int, url: str):
             await client.send_document(chat_id=user_id, document=tmp_path,
                                        caption="ℹ️ YouTube Video Info")
             _safe_remove(tmp_path)
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await status_msg.edit_text(
                     "✅ **Info delivered above.**\n"
                     "━━━━━━━━━━━━━━━━━━━━\n"
                     "Choose next action:",
                     reply_markup=_result_menu_markup(),
                 )
-            except MessageNotModified:
-                pass
             delivered = True
         except Exception as e2:
             logger.exception("Info fallback failed")
-            try:
+            with contextlib.suppress(Exception):
                 await status_msg.edit_text(
                     f"❌ Could not render info: `{e2}`",
                     reply_markup=_result_menu_markup(),
                 )
-            except Exception:
-                pass
     set_state(user_id, "awaiting_yt_result")
     _ = delivered  # placeholder for future telemetry
 
@@ -1777,14 +1721,12 @@ async def handle_yt_back_mode(client, callback_query):
     title = session.get("video_title") or "Untitled"
     uploader = session.get("video_uploader") or "Unknown"
     duration = _format_duration(session.get("video_duration"))
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             _mode_menu_text(title, uploader, duration),
             reply_markup=_mode_menu_markup(),
             disable_web_page_preview=True,
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(filters.regex(r"^yt_new_link$"))
@@ -1797,7 +1739,7 @@ async def handle_yt_new_link(client, callback_query):
                 "video_duration", "video_uploader", "youtube_mode"):
         update_data(user_id, key, None)
     set_state(user_id, "awaiting_youtube_url")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "▶️ **YouTube Tool**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1805,8 +1747,6 @@ async def handle_yt_new_link(client, callback_query):
             reply_markup=InlineKeyboardMarkup(_cancel_row()),
             disable_web_page_preview=True,
         )
-    except MessageNotModified:
-        pass
 
 
 # === Cancel ===
@@ -1815,14 +1755,12 @@ async def handle_yt_cancel(client, callback_query):
     user_id = callback_query.from_user.id
     clear_session(user_id)
     await callback_query.answer("Cancelled.")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "❌ **YouTube Tool — cancelled.**\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "Use /start or /yt to open it again."
         )
-    except MessageNotModified:
-        pass
 
 
 # === Auto URL Detection ===
@@ -1881,14 +1819,12 @@ async def handle_yt_auto_detect(client, message):
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_youtube_url")
         return
     if not info:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await status_msg.edit_text(
                 "❌ Could not fetch video info. The link may be invalid, "
                 "private or region-blocked.",
                 reply_markup=InlineKeyboardMarkup(_cancel_row()),
             )
-        except MessageNotModified:
-            pass
         return
 
     update_data(user_id, "video_title", info.get("title") or "Untitled")
@@ -1900,7 +1836,7 @@ async def handle_yt_auto_detect(client, message):
     title = info.get("title") or "Untitled"
     uploader = info.get("uploader") or info.get("channel") or "Unknown"
     duration = _format_duration(info.get("duration"))
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_msg.edit_text(
             f"▶️ **YouTube Tool**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1910,8 +1846,6 @@ async def handle_yt_auto_detect(client, message):
             reply_markup=_mode_menu_markup(),
             disable_web_page_preview=True,
         )
-    except MessageNotModified:
-        pass
 
 
 # === Retry + admin cookies management ====================================
@@ -1931,15 +1865,13 @@ async def handle_yt_retry_url(client, callback_query):
     user_id = callback_query.from_user.id
     await callback_query.answer()
     set_state(user_id, "awaiting_youtube_url")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🔗 **Send a YouTube URL**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
             "Paste any `youtube.com` / `youtu.be` link.",
             reply_markup=InlineKeyboardMarkup(_cancel_row()),
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(filters.regex(r"^yt_upload_cookies$"))
@@ -1951,7 +1883,7 @@ async def handle_yt_upload_cookies_cb(client, callback_query):
 
     await callback_query.answer()
     set_state(user_id, "awaiting_yt_cookies_upload")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🍪 **Upload YouTube cookies**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1965,8 +1897,6 @@ async def handle_yt_upload_cookies_cb(client, callback_query):
             ]]),
             disable_web_page_preview=True,
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_message(filters.command(["ytcookies"]) & filters.private)
@@ -2042,7 +1972,6 @@ async def handle_ytcookies_upload(client, message):
 
     doc = message.document
     # Best-effort file-type gate: cookies files are tiny text files.
-    fname = (doc.file_name or "").lower() if doc else ""
     if doc and doc.file_size and doc.file_size > 2 * 1024 * 1024:
         await message.reply_text(
             "❌ Cookie file is suspiciously large (>2 MB). "
@@ -2055,13 +1984,13 @@ async def handle_ytcookies_upload(client, message):
         os.makedirs(os.path.dirname(_COOKIES_TARGET_PATH) or ".", exist_ok=True)
     except Exception as e:
         await message.reply_text(f"❌ Could not prepare cookies dir: {e}")
-        raise StopPropagation
+        raise StopPropagation from e
 
     try:
         await message.download(file_name=_COOKIES_TARGET_PATH)
     except Exception as e:
         await message.reply_text(f"❌ Download failed: {e}")
-        raise StopPropagation
+        raise StopPropagation from e
 
     # Quick sanity check: file must contain at least one YouTube cookie line.
     ok = False
@@ -2148,7 +2077,7 @@ async def handle_yt_cookies_remove_cb(client, callback_query):
     disk_line = "✅ removed" if disk_removed else "ℹ️ nothing to remove"
     db_line = "✅ removed" if db_removed else "ℹ️ nothing to remove"
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🗑 **YouTube cookies removed**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -2157,8 +2086,6 @@ async def handle_yt_cookies_remove_cb(client, callback_query):
             "Use /ytcookies to upload a fresh cookies.txt.",
             disable_web_page_preview=True,
         )
-    except MessageNotModified:
-        pass
 
 
 # --------------------------------------------------------------------------

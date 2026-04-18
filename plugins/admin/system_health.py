@@ -16,6 +16,8 @@ each row routes to its existing callback.
 
 from __future__ import annotations
 
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import (
@@ -25,7 +27,6 @@ from pyrogram.types import (
 )
 
 from plugins.admin.core import is_admin
-
 
 _SUBMENU_ID = "admin_system_health"
 
@@ -46,7 +47,7 @@ async def system_health_callback(client, callback_query: CallbackQuery):
     if not is_admin(callback_query.from_user.id):
         await callback_query.answer("Not authorised.", show_alert=True)
         return
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🩺 **System Health & Statuses**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -54,9 +55,5 @@ async def system_health_callback(client, callback_query: CallbackQuery):
             "and the Mirror-Leech subsystem.",
             reply_markup=_submenu_keyboard(),
         )
-    except MessageNotModified:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.answer()
-    except Exception:
-        pass
