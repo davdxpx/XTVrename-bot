@@ -1,7 +1,9 @@
 # --- Imports ---
-import time
 import asyncio
+import time
+
 import aiohttp
+
 from config import Config
 from utils.log import get_logger
 from utils.tmdb_gate import is_tmdb_available
@@ -62,10 +64,7 @@ class TMDb:
                 _MISSING_KEY_LOGGED = True
             return None
 
-        if params is None:
-            params = {}
-        else:
-            params = params.copy()
+        params = {} if params is None else params.copy()
 
         params["api_key"] = self.api_key
         params["language"] = language

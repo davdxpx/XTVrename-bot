@@ -19,6 +19,7 @@ extracted.
 """
 
 import asyncio
+import contextlib
 import io
 
 from pyrogram import Client, ContinuePropagation, filters
@@ -87,12 +88,10 @@ async def _render_thumb_menu(callback_query: CallbackQuery):
         [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]
     )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(
@@ -131,7 +130,7 @@ async def thumbnails_cb(client, callback_query: CallbackQuery):
         await callback_query.answer()
         await db.update_thumbnail(None, None, None)
         await db.update_thumbnail_mode("none", None)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "✅ **Thumbnail Removed & Deactivated**\n\n"
                 "Files will no longer use a default custom thumbnail and the "
@@ -147,8 +146,6 @@ async def thumbnails_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- View thumbnail ---
@@ -173,10 +170,8 @@ async def thumbnails_cb(client, callback_query: CallbackQuery):
 
                 async def auto_delete():
                     await asyncio.sleep(30)
-                    try:
+                    with contextlib.suppress(Exception):
                         await sent_msg.delete()
-                    except Exception:
-                        pass
 
                 asyncio.create_task(auto_delete())
 
@@ -193,7 +188,7 @@ async def thumbnails_cb(client, callback_query: CallbackQuery):
     # --- Upload entry ---
     if data == "admin_thumb_set":
         await callback_query.answer()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📤 **Set Default Thumbnail**\n\n"
                 "Click below to upload a new thumbnail. "
@@ -215,8 +210,6 @@ async def thumbnails_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Prompt for photo ---
@@ -225,7 +218,7 @@ async def thumbnails_cb(client, callback_query: CallbackQuery):
             "state": "awaiting_thumb",
             "msg_id": callback_query.message.id,
         }
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🖼 **Send the new photo** to set as the default thumbnail:",
                 reply_markup=InlineKeyboardMarkup(
@@ -238,16 +231,12 @@ async def thumbnails_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Delete message helper ---
     if data == "admin_delete_msg":
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.message.delete()
-        except Exception:
-            pass
         return
 
 
@@ -318,7 +307,5 @@ async def handle_admin_photo(client, message):
         admin_sessions.pop(user_id, None)
     except Exception as e:
         logger.error(f"Thumbnail upload failed: {e}")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await msg.edit_text(f"❌ Error: {e}")
-        except MessageNotModified:
-            pass

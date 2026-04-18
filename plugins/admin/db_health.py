@@ -18,6 +18,7 @@ Surfaces:
 
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 
 from pyrogram import Client, filters
@@ -124,12 +125,10 @@ async def _render_health(callback_query: CallbackQuery):
         ]
     )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "\n".join(lines), reply_markup=keyboard
         )
-    except MessageNotModified:
-        pass
 
 
 async def _render_drop_confirm(callback_query: CallbackQuery):
@@ -139,7 +138,7 @@ async def _render_drop_confirm(callback_query: CallbackQuery):
             [InlineKeyboardButton("🚫 Cancel", callback_data="admin_db_health")],
         ]
     )
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "⚠️ **Drop legacy backup collections?**\n\n"
             "This permanently deletes every `*" + db.schema.BACKUP_SUFFIX + "` "
@@ -149,8 +148,6 @@ async def _render_drop_confirm(callback_query: CallbackQuery):
             "This action cannot be undone from within the bot.",
             reply_markup=keyboard,
         )
-    except MessageNotModified:
-        pass
 
 
 async def _run_drop_backups(callback_query: CallbackQuery):
@@ -208,17 +205,13 @@ async def db_health_callback(client, callback_query: CallbackQuery):
         # Always ack so Telegram drops the loading spinner, even when the
         # message content happened to be identical (MessageNotModified was
         # swallowed in _render_health).
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.answer("Refreshed.")
-        except Exception:
-            pass
     elif data == "admin_db_health_dry_run":
         await _run_dry_run(callback_query)
     elif data == "admin_db_health_drop_backups":
         await _render_drop_confirm(callback_query)
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.answer()
-        except Exception:
-            pass
     elif data == "admin_db_health_drop_backups_confirm":
         await _run_drop_backups(callback_query)

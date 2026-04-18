@@ -9,11 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utils.log import get_logger
-
-from tools.mirror_leech.uploaders import Uploader, register_uploader
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
+from tools.mirror_leech.uploaders import Uploader, register_uploader
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.gdrive")
 
@@ -30,9 +29,8 @@ async def _refresh_access_token(refresh_token: str, client_id: str, client_secre
         "refresh_token": refresh_token,
         "grant_type": "refresh_token",
     }
-    async with aiohttp.ClientSession() as session:
-        async with session.post(_OAUTH_TOKEN_URL, data=data) as resp:
-            body = await resp.json()
+    async with aiohttp.ClientSession() as session, session.post(_OAUTH_TOKEN_URL, data=data) as resp:
+        body = await resp.json()
     token = body.get("access_token")
     if not token:
         raise RuntimeError(f"Google OAuth refresh failed: {body}")
@@ -90,12 +88,13 @@ class GoogleDriveUploader(Uploader):
             __import__("json").dumps(metadata),
             content_type="application/json; charset=UTF-8",
         )
-        form.add_field("file", open(local_path, "rb"), filename=local_path.name)
+        form.add_field("file", open(local_path, "rb"), filename=local_path.name)  # noqa: SIM115
 
         headers = {"Authorization": f"Bearer {token}"}
-        async with aiohttp.ClientSession() as session:
-            async with session.post(_UPLOAD_URL, data=form, headers=headers) as resp:
-                body = await resp.json()
+        async with aiohttp.ClientSession() as session, session.post(
+            _UPLOAD_URL, data=form, headers=headers
+        ) as resp:
+            body = await resp.json()
 
         file_id = body.get("id")
         if not file_id:

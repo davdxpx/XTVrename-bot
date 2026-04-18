@@ -1,7 +1,9 @@
-import aiohttp
 import asyncio
-import time
 import re
+import time
+
+import aiohttp
+
 from utils.log import get_logger
 
 logger = get_logger("utils.currency")
@@ -100,12 +102,8 @@ async def convert_to_usd_str(price_string: str) -> str:
         currency = "USD"
 
         if currency_sym:
-            if currency_sym == "$": currency = "USD"
-            elif currency_sym == "€": currency = "EUR"
-            elif currency_sym == "£": currency = "GBP"
-            elif currency_sym == "₹": currency = "INR"
-            elif currency_sym == "₽": currency = "RUB"
-            else: currency = currency_sym
+            currency_map = {"$": "USD", "€": "EUR", "£": "GBP", "₹": "INR", "₽": "RUB"}
+            currency = currency_map.get(currency_sym, currency_sym)
 
         local_formatted = format_fiat(amount, currency)
 

@@ -1,16 +1,17 @@
 # --- Imports ---
-import os
 import asyncio
+import contextlib
 import logging
+import os
 
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from plugins.user_setup import track_tool_usage
-from utils.state import set_state, get_state, get_data, update_data, clear_session
-from utils.log import get_logger
 from utils.ffmpeg_tools import execute_ffmpeg
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 logger = get_logger("tools.FileConverter")
 
@@ -201,13 +202,11 @@ async def handle_file_converter_menu(client, callback_query):
     clear_session(user_id)
     set_state(user_id, "awaiting_convert_file")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             TOOL_ENTRY_TEXT,
             reply_markup=InlineKeyboardMarkup([_cancel_row()]),
         )
-    except MessageNotModified:
-        pass
 
 
 # === Category root renderer (called after file upload by flow.py and by fc_back_cat) ===
@@ -273,10 +272,8 @@ async def render_category_menu(message_or_cbq, user_id: int, *, edit: bool = Fal
     set_state(user_id, "awaiting_convert_op")
 
     if edit:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await message_or_cbq.edit_text(text, reply_markup=markup)
-        except MessageNotModified:
-            pass
     else:
         await message_or_cbq.reply_text(text, reply_markup=markup)
 
@@ -307,7 +304,7 @@ async def _submit_conversion(client, callback_query, opstring: str):
 
     try:
         # Replace the menu in place with a "starting..." status, then spawn the job.
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🔀 **File Converter**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -315,8 +312,6 @@ async def _submit_conversion(client, callback_query, opstring: str):
                 f"> Op: `{opstring}`",
                 reply_markup=None,
             )
-        except MessageNotModified:
-            pass
 
         msg = await client.get_messages(
             session_data.get("file_chat_id"), session_data.get("file_message_id")
@@ -327,10 +322,8 @@ async def _submit_conversion(client, callback_query, opstring: str):
         asyncio.create_task(process_file(client, callback_query.message, data))
     except Exception as e:
         logger.error(f"Failed to start conversion ({opstring}): {e}")
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.message.edit_text(f"❌ Error: `{e}`")
-        except Exception:
-            pass
 
     clear_session(user_id)
 
@@ -369,10 +362,8 @@ async def _open_submenu(callback_query, title: str, hint: str, markup: InlineKey
         f"> 📄 **File:** `{file_name}`\n\n"
         f"{hint}"
     )
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(text, reply_markup=markup)
-    except MessageNotModified:
-        pass
 
 
 # === FC-3: Container submenu ===
@@ -610,13 +601,11 @@ async def handle_fc_back_tool(client, callback_query):
     await callback_query.answer()
     clear_session(user_id)
     set_state(user_id, "awaiting_convert_file")
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             TOOL_ENTRY_TEXT,
             reply_markup=InlineKeyboardMarkup([_cancel_row()]),
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(filters.regex(r"^convert_to_(.+)$"))

@@ -16,6 +16,8 @@ down into the provider availability list.
 
 from __future__ import annotations
 
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import (
@@ -134,12 +136,10 @@ async def _render_root(callback_query: CallbackQuery) -> None:
         if secrets_ok and enabled
         else _render_text_onboarding(enabled, secrets_ok)
     )
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text, reply_markup=_render_keyboard(enabled, secrets_ok)
         )
-    except MessageNotModified:
-        pass
 
 
 async def _render_providers(callback_query: CallbackQuery) -> None:
@@ -168,10 +168,8 @@ async def _render_providers(callback_query: CallbackQuery) -> None:
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton("← Back to Mirror-Leech", callback_data="ml_admin")]]
     )
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text("\n".join(lines), reply_markup=keyboard)
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(filters.regex(r"^ml_admin$"))
@@ -180,10 +178,8 @@ async def ml_admin_callback(client: Client, callback_query: CallbackQuery) -> No
         await callback_query.answer("Not authorised.", show_alert=True)
         return
     await _render_root(callback_query)
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.answer()
-    except Exception:
-        pass
 
 
 @Client.on_callback_query(filters.regex(r"^ml_admin_providers$"))
@@ -192,10 +188,8 @@ async def ml_admin_providers(client: Client, callback_query: CallbackQuery) -> N
         await callback_query.answer("Not authorised.", show_alert=True)
         return
     await _render_providers(callback_query)
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.answer()
-    except Exception:
-        pass
 
 
 @Client.on_callback_query(filters.regex(r"^ml_admin_gen_secrets$"))

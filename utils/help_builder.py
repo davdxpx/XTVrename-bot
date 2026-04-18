@@ -183,9 +183,7 @@ def is_tool_available(tool_key: str, ctx: HelpContext) -> bool:
         return True
     if ctx.toggles.get(tool_key, True):
         return True
-    if ctx.is_premium and ctx.plan_features.get(tool_key, False):
-        return True
-    return False
+    return bool(ctx.is_premium and ctx.plan_features.get(tool_key, False))
 
 
 def is_callback_tool_available(callback: str, ctx: HelpContext) -> bool:
@@ -531,8 +529,8 @@ def _plan_page(label: str, emoji: str, plan_key: str, ctx: HelpContext) -> tuple
     lines = [
         f"**{emoji} Premium {label}**",
         "",
-        f"> Current admin configuration.",
-        f"━━━━━━━━━━━━━━━━━━━━",
+        "> Current admin configuration.",
+        "━━━━━━━━━━━━━━━━━━━━",
         f"**Price:** `{price}`{stars_line}",
         f"**Daily Egress:** `{egress}`",
         f"**Daily Files:** `{files}`",

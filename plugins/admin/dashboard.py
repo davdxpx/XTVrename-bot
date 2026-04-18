@@ -19,6 +19,8 @@ These handlers were already self-contained with their own decorators in the
 legacy monolith; this extraction is a pure move.
 """
 
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,7 +28,6 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 from config import Config
 from database import db
 from utils.logger import debug
-
 
 debug("✅ Loaded handler: admin_dashboard_overview_cb")
 
@@ -88,9 +89,9 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
             f"🚫 Blocked Users: `{stats.get('blocked_users')}`\n"
         )
 
-    text += f"─────────────────────────"
+    text += "─────────────────────────"
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup(
@@ -116,8 +117,6 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 debug("✅ Loaded handler: admin_dashboard_top_cb")
 
@@ -159,10 +158,7 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
             files = usage.get("file_count", 0)
             mb = usage.get("egress_mb", 0.0)
 
-            if mb >= 1024:
-                mb_str = f"{mb / 1024:.2f} GB"
-            else:
-                mb_str = f"{mb:.2f} MB"
+            mb_str = f"{mb / 1024:.2f} GB" if mb >= 1024 else f"{mb:.2f} MB"
 
             text += f"**#{rank}** {display_name} — {files} files · {mb_str}\n"
 
@@ -199,12 +195,10 @@ async def admin_dashboard_top_cb(client: Client, callback_query: CallbackQuery):
         [InlineKeyboardButton("← Back to Dashboard", callback_data="admin_usage_dashboard")]
     )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text, reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 debug("✅ Loaded handler: admin_dashboard_daily_cb")
 
@@ -244,7 +238,7 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
 
             text += f"`{date_str:<13} {files:<7} {egress_str:>7}`{is_today}\n"
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup(
@@ -257,5 +251,3 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
                 ]
             ),
         )
-    except MessageNotModified:
-        pass

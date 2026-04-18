@@ -1,7 +1,9 @@
 # --- Imports ---
 import logging
 import sys
+
 from config import Config
+
 
 # === Classes ===
 class Colors:

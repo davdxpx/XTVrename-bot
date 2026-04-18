@@ -8,15 +8,15 @@ out to `rclone copy`; the tempfile is shredded when the task ends.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import tempfile
 from pathlib import Path
 
-from utils.log import get_logger
-
-from tools.mirror_leech.uploaders import Uploader, register_uploader
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
+from tools.mirror_leech.uploaders import Uploader, register_uploader
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.rclone")
 
@@ -76,7 +76,7 @@ class _Completed:
 async def _run_rclone(conf: str, args: list[str], *, timeout):
     """Run `rclone <args>` with a per-invocation conf file that's deleted
     afterwards, whether or not the command succeeds."""
-    tmp = tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False)
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False)  # noqa: SIM115
     try:
         tmp.write(conf)
         tmp.flush()
@@ -97,7 +97,5 @@ async def _run_rclone(conf: str, args: list[str], *, timeout):
             return _Completed(124, b"", b"rclone timed out")
         return _Completed(proc.returncode or 0, stdout, stderr)
     finally:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp.name)
-        except OSError:
-            pass

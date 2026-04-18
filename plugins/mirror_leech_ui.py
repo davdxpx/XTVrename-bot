@@ -29,6 +29,8 @@ Callback-data grammar (see Phase D plan for the full table):
 
 from __future__ import annotations
 
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.types import (
     CallbackQuery,
@@ -251,15 +253,13 @@ async def ml_command(client: Client, message: Message) -> None:
 @Client.on_callback_query(filters.regex(r"^ml_cancel_picker$"))
 async def ml_cancel_picker(client: Client, callback_query: CallbackQuery) -> None:
     """Best-effort dismiss of an in-progress picker message."""
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.message.edit_text(
             frame(
                 "🚫 **Mirror-Leech — Cancelled**",
                 "> Picker dismissed. Run `/ml <url>` again when you're ready.",
             )
         )
-    except Exception:
-        pass
     await callback_query.answer()
 
 
@@ -365,7 +365,7 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
 
         ContextStore.drop(cid)
         # Replace the picker with a batch-summary header.
-        try:
+        with contextlib.suppress(Exception):
             await client.edit_message_text(
                 chat_id=callback_query.message.chat.id,
                 message_id=callback_query.message.id,
@@ -374,8 +374,6 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
                     "\n".join(summary_lines),
                 ),
             )
-        except Exception:
-            pass
         return
 
     # Single-source path (either /ml url or MyFiles single-file).
@@ -389,15 +387,13 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
     task.message_id = callback_query.message.id
 
     # Prime the progress message so the user sees something immediately.
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.message.edit_text(
             render_task_text(task),
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("⏹ Cancel", callback_data=f"ml_cancel_{task.id}")]]
             ),
         )
-    except Exception:
-        pass
 
     ContextStore.drop(cid)
 
@@ -427,12 +423,10 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
         )
     except Exception as exc:
         logger.exception("enqueue failed for task %s", task.id)
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.message.edit_text(
                 f"❌ Could not start task: `{exc}`"
             )
-        except Exception:
-            pass
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cancel_([0-9a-f]{6,16})$"))
@@ -601,15 +595,13 @@ async def _render_cfg_root(
 
 @Client.on_callback_query(filters.regex(r"^ml_cfg_close$"))
 async def ml_cfg_close(client: Client, callback_query: CallbackQuery) -> None:
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.message.edit_text(
             frame(
                 "☁️ **Mirror-Leech — Config Closed**",
                 "> Open `/ml` or `/mlqueue` whenever you're ready.",
             )
         )
-    except Exception:
-        pass
     await callback_query.answer()
 
 
@@ -720,15 +712,13 @@ async def _render_provider_screen(
     rows.append([InlineKeyboardButton("← Back", callback_data="ml_cfg")])
 
     text = frame(f"☁️ **{cls.display_name}**", "\n".join(body_lines))
-    try:
+    with contextlib.suppress(Exception):
         await client.edit_message_text(
             chat_id=chat_id,
             message_id=message_id,
             text=text,
             reply_markup=InlineKeyboardMarkup(rows),
         )
-    except Exception:
-        pass
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cfg_test_([a-z0-9_]+)$"))
@@ -843,15 +833,13 @@ async def ml_cfg_paste_start(client: Client, callback_query: CallbackQuery) -> N
         "tmp": {},
     }
     await callback_query.answer()
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.message.edit_text(
             f"✏️ **Link {provider}**\n\n" + fmt["prompt"] + "\n\n__Send the next message in this chat.__",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data=f"ml_cfg_up_{provider}")]]
             ),
         )
-    except Exception:
-        pass
 
 
 @Client.on_message(filters.text & filters.private, group=4)
@@ -882,7 +870,7 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
                     f"⚠️ Need {len(fields)} lines; got {len(parts)}. Try again."
                 )
                 return
-            for field, value in zip(fields, parts):
+            for field, value in zip(fields, parts, strict=True):
                 await Accounts.set_secret(
                     message.from_user.id, provider, field, value.strip()
                 )
@@ -933,10 +921,8 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
 
     _paste_state.pop(message.from_user.id, None)
     # Best-effort: delete the user's secret-containing message.
-    try:
+    with contextlib.suppress(Exception):
         await message.delete()
-    except Exception:
-        pass
     await message.reply_text(f"✅ `{provider}` linked. Use **Test connection** to verify.")
 
 
@@ -948,6 +934,7 @@ async def _tg_ref_for_myfile(file_id: str) -> str | None:
     """Turn a MyFiles file _id into a `tg:<chat>:<message>` source string
     TelegramDownloader understands. Returns None when the file is gone."""
     from bson import ObjectId  # type: ignore
+
     from database import db
 
     try:

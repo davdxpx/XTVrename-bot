@@ -1,5 +1,6 @@
 import os
 import time
+
 from dotenv import load_dotenv
 
 BOT_START_TIME = time.time()
@@ -33,7 +34,7 @@ class Config:
 
     DOWNLOAD_DIR = "downloads/"
     THUMB_PATH = "downloads/thumb.jpg"
-    
+
     # Tenplates can be changed, in the Bot directly, or if you want also here.
     DEFAULT_TEMPLATES = {
         "title": "@XTVglobal - {title} {season_episode}",

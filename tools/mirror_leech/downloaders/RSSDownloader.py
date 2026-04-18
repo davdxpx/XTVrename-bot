@@ -11,11 +11,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from utils.log import get_logger
-
 from tools.mirror_leech.downloaders import Downloader, register_downloader
 from tools.mirror_leech.downloaders.HTTPDownloader import HTTPDownloader
 from tools.mirror_leech.Tasks import MLContext
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.rss")
 
@@ -44,10 +43,9 @@ class RSSDownloader(Downloader):
             ) from exc
 
         ctx.status("downloading")
-        async with aiohttp.ClientSession() as session:
-            async with session.get(ctx.source) as resp:
-                resp.raise_for_status()
-                body = await resp.read()
+        async with aiohttp.ClientSession() as session, session.get(ctx.source) as resp:
+            resp.raise_for_status()
+            body = await resp.read()
 
         feed = feedparser.parse(body)
         if not feed.entries:

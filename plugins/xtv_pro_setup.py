@@ -1,20 +1,23 @@
 # --- Imports ---
 import asyncio
+import contextlib
 import os
 import random
 import string
-from pyrogram.errors import MessageNotModified
-from pyrogram import Client, filters, ContinuePropagation
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import (
-    SessionPasswordNeeded,
-    PhoneCodeInvalid,
-    PasswordHashInvalid,
-    PhoneNumberInvalid,
     ApiIdInvalid,
+    MessageNotModified,
+    PasswordHashInvalid,
+    PhoneCodeInvalid,
+    PhoneNumberInvalid,
+    SessionPasswordNeeded,
 )
-from database import db
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from config import Config
+from database import db
 from utils.log import get_logger
 
 logger = get_logger("plugins.xtv_pro_setup")
@@ -62,12 +65,10 @@ async def pro_menu(client, callback_query):
             [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
         ]
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             status, reply_markup=InlineKeyboardMarkup(buttons)
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^pro_setup_delete$"))
 async def delete_setup(client, callback_query):
@@ -79,10 +80,8 @@ async def delete_setup(client, callback_query):
     await db.delete_pro_session()
 
     if getattr(client, "user_bot", None):
-        try:
+        with contextlib.suppress(Exception):
             await client.user_bot.stop()
-        except Exception:
-            pass
         client.user_bot = None
 
     await callback_query.message.edit_text(
@@ -101,7 +100,7 @@ async def start_setup(client, callback_query):
         return
 
     pro_setup_sessions[user_id] = {"state": "awaiting_api_id"}
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🚀 **𝕏TV Pro™ Setup**\n\n"
             "Let's configure the Userbot tunnel for 4GB files.\n"
@@ -110,8 +109,6 @@ async def start_setup(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_message(filters.private & filters.user(Config.CEO_ID), group=0)
 async def pro_setup_handler(client, message):
@@ -198,7 +195,7 @@ async def pro_setup_handler(client, message):
             data["phone_code_hash"] = sent_code.phone_code_hash
             data["state"] = "awaiting_code"
 
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     "✅ **Verification Code Sent!**\n\n"
                     "Check your Telegram app for the login code.\n"
@@ -214,10 +211,8 @@ async def pro_setup_handler(client, message):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
         except ApiIdInvalid:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     "❌ **Invalid API ID / Hash**. Setup failed.",
                     reply_markup=InlineKeyboardMarkup(
@@ -230,11 +225,9 @@ async def pro_setup_handler(client, message):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
             del pro_setup_sessions[user_id]
         except PhoneNumberInvalid:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     "❌ **Invalid Phone Number**. Setup failed.",
                     reply_markup=InlineKeyboardMarkup(
@@ -247,11 +240,9 @@ async def pro_setup_handler(client, message):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
             del pro_setup_sessions[user_id]
         except Exception as e:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     f"❌ **Error requesting code:** {e}",
                     reply_markup=InlineKeyboardMarkup(
@@ -264,8 +255,6 @@ async def pro_setup_handler(client, message):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
             del pro_setup_sessions[user_id]
         from pyrogram import StopPropagation
         raise StopPropagation
@@ -294,7 +283,7 @@ async def pro_setup_handler(client, message):
                 ),
             )
         except PhoneCodeInvalid:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     "❌ **Invalid Code**. Try again or restart setup.",
                     reply_markup=InlineKeyboardMarkup(
@@ -307,10 +296,8 @@ async def pro_setup_handler(client, message):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
         except Exception as e:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     f"❌ **Sign In Error:** {e}",
                     reply_markup=InlineKeyboardMarkup(
@@ -323,8 +310,6 @@ async def pro_setup_handler(client, message):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
             del pro_setup_sessions[user_id]
         from pyrogram import StopPropagation
         raise StopPropagation
@@ -349,7 +334,7 @@ async def pro_setup_handler(client, message):
                 ),
             )
         except Exception as e:
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
                     f"❌ **Error:** {e}",
                     reply_markup=InlineKeyboardMarkup(
@@ -362,8 +347,6 @@ async def pro_setup_handler(client, message):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
             del pro_setup_sessions[user_id]
         from pyrogram import StopPropagation
         raise StopPropagation
@@ -402,7 +385,7 @@ async def finalize_setup(userbot, user_id, msg):
             await main_app.user_bot.start()
             logger.info("𝕏TV Pro™ Premium Userbot Hot-Started Successfully!")
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await msg.edit_text(
                 "✅ **𝕏TV Pro™ Setup Complete!**\n\n"
                 f"Successfully authenticated as **{me.first_name}**.\n"
@@ -418,20 +401,16 @@ async def finalize_setup(userbot, user_id, msg):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         await userbot.disconnect()
         del pro_setup_sessions[user_id]
     except Exception as e:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await msg.edit_text(
                 f"❌ **Failed to finalize setup:** {e}",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         del pro_setup_sessions[user_id]
 
 # --------------------------------------------------------------------------

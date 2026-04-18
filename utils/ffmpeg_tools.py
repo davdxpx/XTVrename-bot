@@ -1,9 +1,10 @@
 # --- Imports ---
 import asyncio
+import contextlib
 import json
+import logging
 import os
 import time
-import logging
 
 LANGUAGE_MAP = {
     "eng": "English",
@@ -86,17 +87,13 @@ async def probe_file(filepath):
             return None, f"JSON Decode Error: {e}"
     except asyncio.TimeoutError:
         logging.getLogger("ffmpeg_tools").warning("ffprobe process timed out, killing...")
-        try:
+        with contextlib.suppress(Exception):
             process.kill()
-        except Exception:
-            pass
         return None, "ffprobe process timed out"
     except asyncio.CancelledError:
         logging.getLogger("ffmpeg_tools").warning("ffprobe process cancelled, killing...")
-        try:
+        with contextlib.suppress(Exception):
             process.kill()
-        except Exception:
-            pass
         raise
 
 def get_language_name(code):
@@ -126,7 +123,7 @@ async def generate_ffmpeg_command(
 
     is_subtitle_output = output_path.endswith(".srt")
 
-    for i, stream in enumerate(input_streams):
+    for _i, stream in enumerate(input_streams):
         disposition = stream.get("disposition", {})
         if disposition.get("attached_pic") == 1:
             continue
@@ -205,6 +202,7 @@ async def generate_ffmpeg_command(
     return cmd, None
 
 import re
+
 
 async def execute_ffmpeg(cmd, progress_callback=None):
     process = await asyncio.create_subprocess_exec(

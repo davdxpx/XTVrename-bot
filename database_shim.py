@@ -25,9 +25,8 @@ import collections
 import time
 from typing import Any
 
-from utils.log import get_logger
-
 import database_schema as schema
+from utils.log import get_logger
 
 logger = get_logger("database.shim")
 
@@ -42,7 +41,7 @@ def _extract_set_fields(update: dict) -> dict:
     for the caller to forward verbatim."""
     if not isinstance(update, dict):
         return {}
-    if any(k.startswith("$") for k in update.keys()):
+    if any(k.startswith("$") for k in update):
         return dict(update.get("$set", {}))
     return dict(update)
 
@@ -68,11 +67,32 @@ class SettingsCollectionShim:
     `user_<id>`) are rewritten to the real MediaStudio-Settings / MediaStudio-users
     documents. Writes that target an unrecognised doc id pass through verbatim
     so the shim never swallows data.
+
+    In non-public mode, keys listed in ``schema.PERSONAL_KEYS`` (templates,
+    dumb_channels, thumbnails, channel, …) that are written to or read from
+    the virtual ``global_settings`` doc are transparently routed to the CEO's
+    ``MediaStudio-users.<ceo_id>.personal_settings``. This matches the
+    ``mediastudio_layout`` migration, which moves exactly those keys from
+    the legacy ``global_settings`` doc to the CEO's user doc; without this
+    routing, handlers that legitimately write to the virtual global doc
+    would land their values in ``legacy_misc`` or ``dumb_channels_global``
+    while the migrated truth sits in the user doc — so the bot would appear
+    to have "lost" templates, dumb channels, default channel, thumbnails,
+    etc. right after the migration.
     """
 
-    def __init__(self, settings_collection, users_collection):
+    def __init__(
+        self,
+        settings_collection,
+        users_collection,
+        *,
+        ceo_id: int | None = None,
+        public_mode: bool = False,
+    ):
         self._settings = settings_collection  # AsyncIOMotorCollection (MediaStudio-Settings)
         self._users = users_collection  # AsyncIOMotorCollection (MediaStudio-users)
+        self._ceo_id = int(ceo_id) if ceo_id else None
+        self._public_mode = bool(public_mode)
         self._unknown_key_log: collections.deque = collections.deque(maxlen=_UNKNOWN_KEY_LOG_MAX)
 
     # ------------------------------------------------------------------ helpers
@@ -102,6 +122,25 @@ class SettingsCollectionShim:
             schema.LEGACY_MISC_DOC_ID,
         )
 
+    def _ceo_personal_routing_enabled(self) -> bool:
+        """Personal-key routing on virtual global_settings is only active in
+        non-public, single-tenant deployments with a configured CEO."""
+        return (not self._public_mode) and bool(self._ceo_id)
+
+    async def _read_ceo_personal(self) -> dict:
+        """Return the CEO's personal_settings dict (or {})."""
+        if not self._ceo_id:
+            return {}
+        doc = await self._users.find_one({"user_id": self._ceo_id})
+        if not doc:
+            return {}
+        return doc.get("personal_settings") or {}
+
+    @staticmethod
+    def _is_personal_key(key: str) -> bool:
+        top = key.partition(".")[0]
+        return top in schema.PERSONAL_KEYS
+
     async def _merge_global_docs(self) -> dict | None:
         """Merge all real Settings docs into a virtual flat dict matching the
         shape callers expect from {"_id": "global_settings"}.
@@ -113,6 +152,11 @@ class SettingsCollectionShim:
         Iterates MERGED_GLOBAL_DOCS in tuple order (not via `$in` which
         gives implementation-defined ordering) so collisions resolve
         deterministically: later tuple entries overwrite earlier ones.
+
+        In non-public mode, the CEO's personal_settings is merged on top so
+        PERSONAL_KEYS (templates, dumb_channels, channel, thumbnail_*, …)
+        migrated there by the mediastudio_layout migration remain visible
+        under the virtual global_settings doc used by every handler.
         """
         merged: dict[str, Any] = {}
         count = 0
@@ -135,6 +179,21 @@ class SettingsCollectionShim:
                     merged[key] = combined
                 else:
                     merged[key] = value
+
+        ceo_personal: dict = {}
+        if self._ceo_personal_routing_enabled():
+            ceo_personal = await self._read_ceo_personal()
+            for key, value in ceo_personal.items():
+                existing = merged.get(key)
+                if isinstance(existing, dict) and isinstance(value, dict):
+                    combined = dict(existing)
+                    combined.update(value)
+                    merged[key] = combined
+                else:
+                    merged[key] = value
+            if ceo_personal:
+                count += 1
+
         if count == 0:
             return None
         merged["_id"] = schema.VIRTUAL_GLOBAL_SETTINGS
@@ -151,12 +210,45 @@ class SettingsCollectionShim:
         return flat
 
     async def _apply_global_update(self, update: dict, upsert: bool) -> Any:
-        """Route a $set/$unset/etc. update targeting a virtual global doc."""
+        """Route a $set/$unset/etc. update targeting a virtual global doc.
+
+        In non-public mode with a configured CEO, PERSONAL_KEYS (templates,
+        dumb_channels, channel, thumbnail_*, …) are siphoned off into the
+        CEO's personal_settings so they stay aligned with the data layout
+        produced by the mediastudio_layout migration.
+        """
         set_fields = _extract_set_fields(update)
         unset_fields = _extract_unset_fields(update)
         other_ops = _extract_other_ops(update)
 
-        # Group fields by target doc. Support Mongo's dotted nested-key
+        # Siphon off personal-key writes (non-public mode only) and apply
+        # them to the CEO's user doc — preserving dotted subpaths so e.g.
+        # `dumb_channels.-100123` lands under personal_settings.dumb_channels.
+        ceo_route = self._ceo_personal_routing_enabled()
+        ceo_set: dict = {}
+        ceo_unset: list[str] = []
+        ceo_other: dict = {}
+        if ceo_route:
+            for k in list(set_fields.keys()):
+                if self._is_personal_key(k):
+                    ceo_set[k] = set_fields.pop(k)
+            for k in list(unset_fields):
+                if self._is_personal_key(k):
+                    ceo_unset.append(k)
+                    unset_fields.remove(k)
+            for op, body in list(other_ops.items()):
+                if isinstance(body, dict):
+                    moved = {
+                        k: body[k] for k in list(body.keys()) if self._is_personal_key(k)
+                    }
+                    for k in moved:
+                        body.pop(k)
+                    if moved:
+                        ceo_other[op] = moved
+                    if not body:
+                        other_ops.pop(op)
+
+        # Group remaining fields by target doc. Support Mongo's dotted nested-key
         # syntax (`feature_toggles.mirror_leech_aria2`): the routing table
         # is keyed by the top-level name, so we look up the prefix before
         # the first dot and keep the full dotted key in the rewritten
@@ -202,6 +294,19 @@ class SettingsCollectionShim:
                 last_result = await self._settings.update_one(
                     {"_id": target}, sub_update, upsert=upsert
                 )
+
+        if ceo_route and (ceo_set or ceo_unset or ceo_other):
+            ceo_update: dict = {}
+            if ceo_set:
+                ceo_update["$set"] = ceo_set
+            if ceo_unset:
+                ceo_update["$unset"] = {k: "" for k in ceo_unset}
+            if ceo_other:
+                ceo_update.update(ceo_other)
+            last_result = await self._apply_personal_update(
+                self._ceo_id, ceo_update, upsert=True
+            )
+
         return last_result
 
     async def _apply_personal_update(self, uid: int, update: dict, upsert: bool) -> Any:

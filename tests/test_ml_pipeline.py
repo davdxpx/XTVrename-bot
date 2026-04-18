@@ -15,9 +15,9 @@ from typing import Any
 
 import pytest
 
-from tools.mirror_leech.Tasks import MLContext, MLTask, UploadResult
 from tools.mirror_leech import downloaders, uploaders
 from tools.mirror_leech.Runner import run_task
+from tools.mirror_leech.Tasks import MLContext, MLTask, UploadResult
 
 
 @pytest.fixture

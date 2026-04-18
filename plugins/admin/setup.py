@@ -6,13 +6,16 @@
 # Backup Channel @XTVhome
 # Contact on Telegram @davdxpx
 # --------------------------------------------------------------------------
-from pyrogram import Client, filters, StopPropagation
+import contextlib
+
+from pyrogram import Client, StopPropagation, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
 from config import Config
 from database import db
-from utils.log import get_logger
 from plugins.admin.core import admin_sessions
+from utils.log import get_logger
 
 logger = get_logger("plugins.admin.setup")
 
@@ -407,10 +410,8 @@ async def handle_setup_callbacks(client, callback_query: CallbackQuery):
     elif data == "setup_force_sub":
         from plugins.admin.force_sub import get_force_sub_menu_content
         msg, kb = await get_force_sub_menu_content()
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.message.edit_text(msg, reply_markup=kb)
-        except Exception:
-            pass
 
     # --- Payments ---
     elif data == "setup_payments":
@@ -467,10 +468,8 @@ async def handle_setup_text_inputs(client, message):
         raise ContinuePropagation
 
     # Delete the user's message to keep chat clean
-    try:
+    with contextlib.suppress(Exception):
         await message.delete()
-    except Exception:
-        pass
 
     if state == "awaiting_setup_bot_name":
         await db.update_public_config("bot_name", message.text.strip())
@@ -519,17 +518,13 @@ async def handle_setup_forwarded_channels(client, message):
     channel_id = message.forward_from_chat.id if message.forward_from_chat else None
     if not channel_id:
         # Can't detect channel — delete and ignore
-        try:
+        with contextlib.suppress(Exception):
             await message.delete()
-        except Exception:
-            pass
         raise StopPropagation
 
     # Delete the forwarded message to keep chat clean
-    try:
+    with contextlib.suppress(Exception):
         await message.delete()
-    except Exception:
-        pass
 
     def_ch = await db.get_default_dumb_channel()
     mov_ch = await db.get_movie_dumb_channel()

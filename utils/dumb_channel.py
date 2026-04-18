@@ -1,8 +1,8 @@
 # --- Imports ---
-import re
 import enum
+import re
 from dataclasses import dataclass
-from typing import Optional, Tuple, Any
+from typing import Any, Optional, Tuple
 
 from utils.log import get_logger
 

@@ -1,17 +1,19 @@
 # --- Imports ---
-import os
-import time
-import psutil
-import platform
-import pyrogram
 import datetime
+import io
+import os
+import platform
+import time
+
+import psutil
+import pyrogram
+from pyrogram import Client, ContinuePropagation, StopPropagation, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram import Client, filters, StopPropagation, ContinuePropagation
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import Config, BOT_START_TIME
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from config import BOT_START_TIME, Config
 from database import db
 from utils.log import get_logger
-import io
 
 logger = get_logger("plugins.public_cmds")
 
@@ -106,10 +108,10 @@ async def info_command(client, message):
         channel_link = "Not configured"
 
     text = f"**ℹ️ {bot_name} Information**\n"
-    text += f"━━━━━━━━━━━━━━━━━━━━\n\n"
+    text += "━━━━━━━━━━━━━━━━━━━━\n\n"
 
-    text += f"**💡 About This Bot**\n"
-    text += f"Your ultimate media processing tool. Easily rename, format, and organize your files with professional metadata injection and custom thumbnails.\n\n"
+    text += "**💡 About This Bot**\n"
+    text += "Your ultimate media processing tool. Easily rename, format, and organize your files with professional metadata injection and custom thumbnails.\n\n"
 
 
 
@@ -121,7 +123,7 @@ async def info_command(client, message):
     cpu_usage = psutil.cpu_percent()
     ram_usage = psutil.virtual_memory().percent
 
-    text += f"**📊 System Details**\n"
+    text += "**📊 System Details**\n"
     text += f"• **Bot Version:** `{Config.VERSION} (Public Edition)`\n"
     text += f"• **MyFiles Engine:** `{Config.MYFILES_VERSION}`\n"
     text += f"• **Framework:** `Pyrofork v{pyrogram.__version__}`\n"
@@ -129,17 +131,17 @@ async def info_command(client, message):
     text += f"• **OS:** `{platform.system()} {platform.release()}`\n"
     text += f"• **Uptime:** `{uptime_str}`\n"
     text += f"• **Load:** `CPU {cpu_usage}% | RAM {ram_usage}%`\n"
-    text += f"• **Status:** `Online & Operational`\n"
+    text += "• **Status:** `Online & Operational`\n"
     text += f"• **Community:** `{community_name}`\n\n"
 
 
-    text += f"**📞 Help & Support**\n"
+    text += "**📞 Help & Support**\n"
     text += f"• **Support Contact:** {support_contact}\n"
     text += f"• **Community Link:** {channel_link}\n\n"
 
-    text += f"━━━━━━━━━━━━━━━━━━━━\n"
-    text += f"**⚡ Powered by:** [𝕏TV](https://t.me/XTVglobal)\n"
-    text += f"**👨‍💻 Developed by:** [𝕏0L0™](https://t.me/davdxpx)\n"
+    text += "━━━━━━━━━━━━━━━━━━━━\n"
+    text += "**⚡ Powered by:** [𝕏TV](https://t.me/XTVglobal)\n"
+    text += "**👨‍💻 Developed by:** [𝕏0L0™](https://t.me/davdxpx)\n"
 
     await message.reply_text(text, disable_web_page_preview=True)
 
@@ -155,6 +157,8 @@ async def settings_panel(client, message):
         "channels, and general preferences.",
         reply_markup=get_user_main_menu(),
     )
+
+import contextlib
 
 from utils.logger import debug
 
@@ -180,10 +184,8 @@ async def user_settings_callback(client, callback_query):
             if "_" in data.replace("dumb_user_menu", ""):
                 parts = data.split("_")
                 if len(parts) >= 4:
-                    try:
+                    with contextlib.suppress(Exception):
                         page = int(parts[3])
-                    except Exception:
-                        pass
 
             channels = await db.get_dumb_channels(user_id)
 
@@ -227,10 +229,8 @@ async def user_settings_callback(client, callback_query):
 
             buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="user_main")])
 
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-            except MessageNotModified:
-                pass
             return
 
         elif data.startswith("dumb_user_opt_"):
@@ -263,31 +263,27 @@ async def user_settings_callback(client, callback_query):
 
             buttons = [
                 [InlineKeyboardButton("✏️ Rename Channel", callback_data=f"dumb_user_ren_{ch_id}")],
-                [InlineKeyboardButton(f"🔸 Set Standard Default", callback_data=f"dumb_user_def_std_{ch_id}")],
-                [InlineKeyboardButton(f"🎬 Set Movie Default", callback_data=f"dumb_user_def_mov_{ch_id}")],
-                [InlineKeyboardButton(f"📺 Set Series Default", callback_data=f"dumb_user_def_ser_{ch_id}")],
+                [InlineKeyboardButton("🔸 Set Standard Default", callback_data=f"dumb_user_def_std_{ch_id}")],
+                [InlineKeyboardButton("🎬 Set Movie Default", callback_data=f"dumb_user_def_mov_{ch_id}")],
+                [InlineKeyboardButton("📺 Set Series Default", callback_data=f"dumb_user_def_ser_{ch_id}")],
                 [InlineKeyboardButton("🗑 Delete Channel", callback_data=f"dumb_user_del_{ch_id}")],
                 [InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_user_menu")]
             ]
 
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-            except MessageNotModified:
-                pass
             return
 
         elif data.startswith("dumb_user_ren_"):
             ch_id = data.replace("dumb_user_ren_", "")
             user_sessions[user_id] = {"state": f"awaiting_dumb_user_rename_{ch_id}", "msg_id": callback_query.message.id}
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "✏️ **Rename Channel**\n\n"
                     "Please enter the new name for this channel:\n\n"
                     "__(Send `disable` to cancel)__",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"dumb_user_opt_{ch_id}")]])
                 )
-            except MessageNotModified:
-                pass
             return
 
         elif data.startswith("dumb_user_def_std_"):
@@ -316,7 +312,7 @@ async def user_settings_callback(client, callback_query):
 
         elif data == "dumb_user_add":
             user_sessions[user_id] = {"state": "awaiting_dumb_user_add", "msg_id": callback_query.message.id}
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "➕ **Add Dumb Channel**\n\n"
                     "Please add me as an Administrator in the desired channel.\n"
@@ -332,8 +328,6 @@ async def user_settings_callback(client, callback_query):
                         ]
                     ),
                 )
-            except MessageNotModified:
-                pass
             return
 
         elif data.startswith("dumb_user_del_"):
@@ -360,13 +354,11 @@ async def user_settings_callback(client, callback_query):
             buttons.append(
                 [InlineKeyboardButton("← Back to Dumb Channels", callback_data="dumb_user_menu")]
             )
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "Select default auto-detect channel:",
                     reply_markup=InlineKeyboardMarkup(buttons),
                 )
-            except MessageNotModified:
-                pass
             return
         elif data.startswith("dumb_user_def_"):
             ch_id = data.replace("dumb_user_def_", "")
@@ -432,13 +424,11 @@ async def user_settings_callback(client, callback_query):
 
         buttons.append([InlineKeyboardButton("← Back to Settings", callback_data="user_main")])
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("set_thumb_mode_"):
         new_mode = data.replace("set_thumb_mode_", "")
@@ -467,10 +457,8 @@ async def user_settings_callback(client, callback_query):
                 import asyncio
                 async def auto_delete():
                     await asyncio.sleep(30)
-                    try:
+                    with contextlib.suppress(Exception):
                         await sent_msg.delete()
-                    except Exception:
-                        pass
 
                 asyncio.create_task(auto_delete())
 
@@ -483,14 +471,12 @@ async def user_settings_callback(client, callback_query):
             await callback_query.answer("No custom thumbnail currently uploaded!", show_alert=True)
 
     elif data == "user_delete_msg":
-        try:
+        with contextlib.suppress(Exception):
             await callback_query.message.delete()
-        except Exception:
-            pass
         return
 
     elif data == "user_thumb_set":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📤 **Set Default Thumbnail**\n\n"
                 "Click below to upload a new personal thumbnail. "
@@ -510,11 +496,9 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "prompt_user_thumb_set":
         user_sessions[user_id] = {"state": "awaiting_user_thumb", "msg_id": callback_query.message.id}
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🖼 **Send the new photo** to set as your personal thumbnail:",
                 reply_markup=InlineKeyboardMarkup(
@@ -527,28 +511,22 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_thumb_remove":
         await db.update_thumbnail(None, None, user_id)
         await db.update_thumbnail_mode("none", user_id)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "✅ **Thumbnail Removed & Deactivated**\n\nYour files will no longer use a default custom thumbnail and the thumbnail mode has been set to None.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back to Thumbnail Settings", callback_data="user_thumb_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_templates_menu":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📋 **Templates Menu**\n\n" "Select a template category to edit:",
                 reply_markup=get_user_templates_menu(),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_pref_separator":
         try:
             current_sep = await db.get_preferred_separator(user_id)
@@ -605,7 +583,7 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "user_templates":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Metadata Templates**\n\n" "Select a field to edit:",
                 reply_markup=InlineKeyboardMarkup(
@@ -642,12 +620,10 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_caption":
         templates = await db.get_all_templates(user_id)
         current_caption = templates.get("caption", "{random}")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"📝 **Edit Caption Template**\n\n"
                 f"Current: `{current_caption}`\n\n"
@@ -672,11 +648,9 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "prompt_user_caption":
         user_sessions[user_id] = {"state": "awaiting_user_template_caption", "msg_id": callback_query.message.id}
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
                 reply_markup=InlineKeyboardMarkup(
@@ -689,8 +663,6 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_view":
         settings = await db.get_settings(user_id)
         templates = settings.get("templates", {}) if settings else {}
@@ -705,7 +677,7 @@ async def user_settings_callback(client, callback_query):
         elif thumb_mode == "custom":
             mode_str = "Custom Thumbnail"
 
-        text = f"👀 **Your Current Settings**\n\n"
+        text = "👀 **Your Current Settings**\n\n"
         text += f"**Thumbnail Mode:** `{mode_str}`\n"
         text += f"**Custom Thumbnail Set:** {has_thumb}\n\n"
         text += "**Metadata Templates:**\n"
@@ -728,17 +700,15 @@ async def user_settings_callback(client, callback_query):
 
         text += f"\n**Channel Variable:** `{settings.get('channel', Config.DEFAULT_CHANNEL) if settings else Config.DEFAULT_CHANNEL}`\n"
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back to Settings", callback_data="user_main")]]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_filename_templates":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Filename Templates**\n\n" "Select media type to edit:",
                 reply_markup=InlineKeyboardMarkup(
@@ -771,10 +741,8 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_fn_templates_personal":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Personal Filename Templates**\n\n"
                 "Select media type to edit:",
@@ -806,10 +774,8 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_fn_templates_subtitles":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📝 **Edit Subtitles Filename Templates**\n\n"
                 "Select media type to edit:",
@@ -835,8 +801,6 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data.startswith("edit_user_fn_template_"):
         field = data.replace("edit_user_fn_template_", "")
         templates = await db.get_filename_templates(user_id)
@@ -894,9 +858,9 @@ async def user_settings_callback(client, callback_query):
         except MessageNotModified:
             pass
     elif data == "user_general_settings_menu":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                f"⚙️ **General Settings**\n\n"
+                "⚙️ **General Settings**\n\n"
                 "Select a setting to configure:",
                 reply_markup=InlineKeyboardMarkup(
                     [
@@ -924,12 +888,10 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_general_workflow":
         current_mode = await db.get_workflow_mode(user_id)
         mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Mode"
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"⚙️ **Personal Workflow Mode Settings**\n\n"
                 f"Current Mode: `{mode_str}`\n\n"
@@ -954,8 +916,6 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_general_preferences":
         from plugins.user_setup import send_user_tool_preferences_setup
         await send_user_tool_preferences_setup(client, user_id, callback_query)
@@ -974,7 +934,7 @@ async def user_settings_callback(client, callback_query):
         await globals()["user_settings_callback"](client, MockQuery(callback_query.message, callback_query.from_user))
     elif data == "user_general_channel":
         current_channel = await db.get_channel(user_id)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"📢 **Channel Username Settings**\n\n"
                 f"Current Channel Variable: `{current_channel}`\n\n"
@@ -990,22 +950,18 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "prompt_user_channel":
         user_sessions[user_id] = {"state": "awaiting_user_channel", "msg_id": callback_query.message.id}
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "⚙️ **Send the new Channel name variable to use in templates (e.g. `@MyChannel`):**",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="user_main")]]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "user_general_language":
         current_language = await db.get_preferred_language(user_id)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"🌍 **Preferred Language Settings**\n\n"
                 f"Current Preferred Language: `{current_language}`\n\n"
@@ -1022,10 +978,8 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data == "prompt_user_language":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🌍 **Select your preferred language for TMDb Metadata:**\n\n"
                 "__(Default is English)__",
@@ -1063,8 +1017,6 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data.startswith("set_lang_"):
         new_language = data.replace("set_lang_", "")
         await db.update_preferred_language(new_language, user_id)
@@ -1082,20 +1034,18 @@ async def user_settings_callback(client, callback_query):
         return
     elif data == "user_main":
         user_sessions.pop(user_id, None)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🛠 **Personal Settings Panel** 🛠\n\n"
                 "Welcome to your personal settings.\n"
                 "Here you can customize templates and thumbnails for your own files.",
                 reply_markup=get_user_main_menu(),
             )
-        except MessageNotModified:
-            pass
     elif data.startswith("edit_user_template_"):
         field = data.split("_")[-1]
         templates = await db.get_all_templates(user_id)
         current_val = templates.get(field, "")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"✏️ **Edit {field.capitalize()} Template**\n\n"
                 f"Current: `{current_val}`\n\n"
@@ -1117,12 +1067,10 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
     elif data.startswith("prompt_user_template_"):
         field = data.replace("prompt_user_template_", "")
         user_sessions[user_id] = {"state": f"awaiting_user_template_{field}", "msg_id": callback_query.message.id}
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"✏️ **Send the new template text for {field.capitalize()}:**",
                 reply_markup=InlineKeyboardMarkup(
@@ -1135,8 +1083,6 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
 
 @Client.on_message(filters.photo & filters.private, group=2)
 async def handle_user_photo(client, message):
@@ -1157,28 +1103,22 @@ async def handle_user_photo(client, message):
             binary_data = f.read()
         await db.update_thumbnail(file_id, binary_data, user_id)
         await db.update_thumbnail_mode("custom", user_id)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await msg.edit_text(
                 "✅ Personal thumbnail updated successfully!\nYour thumbnail mode has been set to **Custom**.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back to Thumbnail Settings", callback_data="user_thumb_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         user_sessions.pop(user_id, None)
     except Exception as e:
         logger.error(f"Thumbnail upload failed: {e}")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await msg.edit_text(f"❌ Error: {e}")
-        except MessageNotModified:
-            pass
 
 async def edit_or_reply(client, message, msg_id, text, reply_markup=None, disable_web_page_preview=False):
-    try:
+    with contextlib.suppress(Exception):
         await message.delete()
-    except Exception:
-        pass
     if msg_id:
         try:
             return await client.edit_message_text(
@@ -1361,7 +1301,6 @@ async def _send_usage(client, target, user_id, is_callback=False):
 
     usage = await db.get_user_usage(user_id)
 
-    import datetime
 
     current_utc = datetime.datetime.now(datetime.timezone.utc)
     current_utc_date = current_utc.strftime("%Y-%m-%d")
@@ -1435,10 +1374,7 @@ async def _send_usage(client, target, user_id, is_callback=False):
     empty_blocks = 10 - filled_blocks
     progress_bar = ("■" * filled_blocks) + ("□" * empty_blocks)
 
-    if is_admin_user:
-        text = "👑 **Admin Account**\n──────────────────────────\n"
-    else:
-        text = ""
+    text = "👑 **Admin Account**\n──────────────────────────\n" if is_admin_user else ""
 
     text += (
         f"📊 **Your Usage — {current_date_display}**\n\n"
@@ -1450,7 +1386,7 @@ async def _send_usage(client, target, user_id, is_callback=False):
     if limit_to_check > 0 or (not is_admin_user and daily_file_count_limit > 0):
         text += f"`{progress_bar}` {max_percent:.1f}%\n\n"
     else:
-        text += f"__(No limits currently applied)__\n\n"
+        text += "__(No limits currently applied)__\n\n"
 
     text += (
         f"**All-Time**\n"
@@ -1464,10 +1400,8 @@ async def _send_usage(client, target, user_id, is_callback=False):
     )
 
     if is_callback:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await target.edit_message_text(text, reply_markup=markup)
-        except MessageNotModified:
-            pass
     else:
         await target.reply_text(text, reply_markup=markup)
 
@@ -1479,10 +1413,8 @@ async def usage_command(client, message):
 
 @Client.on_callback_query(filters.regex("^refresh_usage$"))
 async def refresh_usage_cb(client, callback_query):
-    try:
+    with contextlib.suppress(Exception):
         await callback_query.answer("Refreshed!")
-    except Exception:
-        pass
     if not is_public_mode():
         return
     await _send_usage(client, callback_query.message, callback_query.from_user.id, True)

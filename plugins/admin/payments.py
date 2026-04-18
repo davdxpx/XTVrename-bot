@@ -17,6 +17,8 @@ Text-input flows (`awaiting_pay_*`) are registered with the shared
 ``text_dispatcher`` and routed here at runtime.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -54,7 +56,7 @@ async def _render_pay_settings(client, callback_query: CallbackQuery):
         f"• ETH: `{eth}`"
     )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup([
@@ -68,23 +70,19 @@ async def _render_pay_settings(client, callback_query: CallbackQuery):
                 [InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]
             ])
         )
-    except MessageNotModified:
-        pass
 
 
 async def _render_pay_queue(client, callback_query: CallbackQuery):
     """Build and display the pending approvals queue."""
     pending = await db.get_all_pending_payments()
     if not pending:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📬 **Pending Approvals Queue**\n\nNo pending payments found.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     p = pending[0]
@@ -99,7 +97,7 @@ async def _render_pay_queue(client, callback_query: CallbackQuery):
         "Review this transaction and approve or reject it."
     )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup([
@@ -109,8 +107,6 @@ async def _render_pay_queue(client, callback_query: CallbackQuery):
                 [InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]
             ])
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(
@@ -126,7 +122,7 @@ async def payments_cb(client, callback_query: CallbackQuery):
     # --- Payments menu ---
     if data == "admin_payments_menu":
         config = await db.get_public_config()
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "💳 **Manage Payments**\n\nManage payment methods, discounts, and view pending transactions.",
                 reply_markup=InlineKeyboardMarkup([
@@ -136,8 +132,6 @@ async def payments_cb(client, callback_query: CallbackQuery):
                     [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]
                 ])
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Payment settings ---
@@ -147,7 +141,7 @@ async def payments_cb(client, callback_query: CallbackQuery):
 
     # --- Crypto menu ---
     if data == "admin_pay_crypto_menu":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🪙 **Crypto Address Settings**\n\nSelect which cryptocurrency address you want to edit:",
                 reply_markup=InlineKeyboardMarkup([
@@ -157,8 +151,6 @@ async def payments_cb(client, callback_query: CallbackQuery):
                     [InlineKeyboardButton("← Back to Payment Settings", callback_data="admin_pay_settings")]
                 ])
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Toggle payment method ---
@@ -183,15 +175,13 @@ async def payments_cb(client, callback_query: CallbackQuery):
                 "state": f"awaiting_pay_disc_{months}",
                 "msg_id": callback_query.message.id,
             }
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     f"📉 **Edit {months}-Month Discount**\n\nPlease send the new discount percentage (e.g. `10` or `15`):",
                     reply_markup=InlineKeyboardMarkup(
                         [[InlineKeyboardButton("❌ Cancel", callback_data="admin_pay_discounts")]]
                     ),
                 )
-            except MessageNotModified:
-                pass
             return
 
         # Payment method address/ID/email prompts
@@ -204,15 +194,13 @@ async def payments_cb(client, callback_query: CallbackQuery):
         if method.startswith("crypto_"):
             cancel_data = "admin_pay_crypto_menu"
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"✏️ **Edit {method.replace('_', ' ').upper()} Details**\n\nPlease send the new address/ID/email:",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data=cancel_data)]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Discount settings ---
@@ -229,7 +217,7 @@ async def payments_cb(client, callback_query: CallbackQuery):
             f"**12 Months:** `{m12}% Off`\n"
         )
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup([
@@ -238,8 +226,6 @@ async def payments_cb(client, callback_query: CallbackQuery):
                     [InlineKeyboardButton("← Back to Payments", callback_data="admin_payments_menu")]
                 ])
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Pending approvals queue ---
@@ -259,13 +245,11 @@ async def payments_cb(client, callback_query: CallbackQuery):
             await db.add_premium_user(p['user_id'], days, plan=p['plan'])
             await db.add_log("approve_payment", user_id, f"Approved {payment_id} for user {p['user_id']}")
 
-            try:
+            with contextlib.suppress(Exception):
                 await client.send_message(
                     p['user_id'],
                     f"✅ **Payment Approved!**\n\nYour payment for the **Premium {p['plan'].capitalize()} Plan** ({p['duration_months']} Months) has been verified.\nYour account is now upgraded. Enjoy!"
                 )
-            except Exception:
-                pass
 
             await callback_query.answer("Payment Approved & User Upgraded!", show_alert=True)
 
@@ -282,13 +266,11 @@ async def payments_cb(client, callback_query: CallbackQuery):
             await db.update_pending_payment_status(payment_id, "rejected")
             await db.add_log("reject_payment", user_id, f"Rejected {payment_id} for user {p['user_id']}")
 
-            try:
+            with contextlib.suppress(Exception):
                 await client.send_message(
                     p['user_id'],
                     f"❌ **Payment Rejected**\n\nYour payment (ID: `{payment_id}`) for the Premium {p['plan'].capitalize()} Plan could not be verified. Please contact support."
                 )
-            except Exception:
-                pass
 
             await callback_query.answer("Payment Rejected.", show_alert=True)
 
@@ -359,4 +341,5 @@ async def handle_text(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_pay_", handle_text)

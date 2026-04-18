@@ -1,5 +1,6 @@
 # --- Imports ---
 import logging
+
 from config import Config
 
 logger = logging.getLogger("XTVbot")

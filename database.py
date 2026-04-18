@@ -2,13 +2,14 @@
 import contextlib
 import datetime
 import time
-from motor.motor_asyncio import AsyncIOMotorClient
-from config import Config
-from utils.log import get_logger
+
 import certifi
+from motor.motor_asyncio import AsyncIOMotorClient
 
 import database_schema as _schema
+from config import Config
 from database_shim import SettingsCollectionShim
+from utils.log import get_logger
 
 logger = get_logger("database")
 
@@ -60,7 +61,10 @@ class Database:
             # attributes point directly at their renamed collections.
             self.users = self.db[_schema.USERS_COLLECTION]
             self.settings = SettingsCollectionShim(
-                self.db[_schema.SETTINGS_COLLECTION], self.users
+                self.db[_schema.SETTINGS_COLLECTION],
+                self.users,
+                ceo_id=Config.CEO_ID or None,
+                public_mode=Config.PUBLIC_MODE,
             )
             self.daily_stats = self.db[_schema.DAILY_STATS_COLLECTION]
             self.pending_payments = self.db[_schema.PENDING_PAYMENTS_COLLECTION]
@@ -1098,7 +1102,7 @@ class Database:
             return 0
         try:
             return await self.settings.count_documents({"_id": {"$regex": "^user_"}})
-        except Exception as e:
+        except Exception:
             return 0
 
     async def get_dashboard_stats(self):
@@ -1172,7 +1176,7 @@ class Database:
         try:
             config = await self.get_public_config()
             return user_id in config.get("blocked_users", [])
-        except Exception as e:
+        except Exception:
             return False
 
     async def reset_user_quota(self, user_id: int):

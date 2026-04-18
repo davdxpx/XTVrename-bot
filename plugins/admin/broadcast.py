@@ -1,14 +1,17 @@
 # --- Imports ---
 import asyncio
+import contextlib
 import time
+
+from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
-from pyrogram import Client, filters, ContinuePropagation
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database import db
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
 from config import Config
-from utils.state import set_state, get_state, update_data, get_data, clear_session
+from database import db
 from plugins.admin.core import is_admin
 from utils.logger import debug
+from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 debug("✅ Loaded handler: broadcast_callback")
 
@@ -37,7 +40,7 @@ async def broadcast_callback(client, callback_query):
     if data == "admin_broadcast":
         set_state(user_id, "awaiting_broadcast_message")
         update_data(user_id, "broadcast_buttons", [])
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "📢 **Broadcast Message**\n\n"
                 "Please send the message (text, photo, video, etc.) that you want to broadcast to all users.",
@@ -51,12 +54,10 @@ async def broadcast_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
 
     elif data == "broadcast_add_btn":
         set_state(user_id, "awaiting_broadcast_button")
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "➕ **Add Inline Button**\n\n"
                 "Please send the button text and URL separated by a pipe `|`.\n\n"
@@ -71,8 +72,6 @@ async def broadcast_callback(client, callback_query):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
 
     elif data == "broadcast_preview":
         set_state(user_id, "broadcast_ready")
@@ -118,12 +117,10 @@ async def broadcast_callback(client, callback_query):
         )
 
     elif data == "broadcast_send":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🚀 **Broadcast started!**\n\nFetching users..."
             )
-        except MessageNotModified:
-            pass
 
         ud = get_data(user_id)
         msg_id = ud.get("broadcast_message_id")
@@ -135,10 +132,8 @@ async def broadcast_callback(client, callback_query):
 
     elif data == "broadcast_cancel":
         clear_session(user_id)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text("❌ **Broadcast cancelled.**")
-        except MessageNotModified:
-            pass
 
 @Client.on_message(filters.private, group=3)
 async def broadcast_message_handler(client, message):
@@ -233,12 +228,10 @@ async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
     sent = 0
     failed = 0
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_message.edit_text(
             f"🚀 **Broadcast started!**\n\nSending to {total} users..."
         )
-    except MessageNotModified:
-        pass
 
     start_time = time.time()
 
@@ -255,19 +248,17 @@ async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
             failed += 1
 
         if (sent + failed) % 20 == 0:
-            try:
+            with contextlib.suppress(Exception):
                 await status_message.edit_text(
                     f"🚀 **Broadcasting...**\n\nTotal: {total}\nSent: {sent}\nFailed: {failed}"
                 )
-            except Exception:
-                pass
 
         await asyncio.sleep(0.1)
 
     end_time = time.time()
     duration = round(end_time - start_time, 2)
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await status_message.edit_text(
             f"✅ **Broadcast Complete!**\n\n"
             f"📊 **Statistics:**\n"
@@ -276,8 +267,6 @@ async def run_broadcast(client, admin_id, status_message, msg_id, buttons):
             f"Failed/Blocked: `{failed}`\n"
             f"Time Taken: `{duration}s`"
         )
-    except MessageNotModified:
-        pass
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
