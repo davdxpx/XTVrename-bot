@@ -7,9 +7,6 @@
   <img src="./assets/banner.png" alt="𝕏TV MediaStudio™ Banner" width="100%">
 </p>
 
-⚠️ **ATTENTION:** This branch (`torrent-edition`) installs `aria2c` and contains Torrent features. **DO NOT** host on Railway, Render, or Heroku (Risk of Ban!). This version is strictly intended for your own Root Servers (VPS/Dedicated)!
-
-
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.9+-blue.svg?logo=python&logoColor=white" alt="Python"></a>
   <a href="https://docs.pyrogram.org/"><img src="https://img.shields.io/badge/Pyrogram-v2.0+-blue.svg?logo=telegram&logoColor=white" alt="Pyrogram"></a>
@@ -23,13 +20,41 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
-### 📋 What's New in v1.5.2
+### 📋 What's New in v1.6.0
+*   **🎬 Movie Auto-Detect Confirmation — Fully Working**: Change Specials / Audio / Codec buttons now appear reliably for Movies when your template uses the matching placeholders. Root cause was a long-standing singular-vs-plural template-key mismatch (`fs["type"] == "movie"` looked up against `DEFAULT_FILENAME_TEMPLATES["movies"]`) that made the three buttons silently vanish. Series happened to work only because singular == plural there. Fixed via a new `utils.detect.template_key_for()` normalizer + DB key aliasing (`database._normalize_template_keys()`) so both legacy and canonical template keys resolve correctly.
+*   **🔊 Runtime Dual / Multi Audio Auto-Fill (FFprobe)**: Before the final rename the bot now probes the actual audio streams of the downloaded file via `ffprobe`. 2 distinct streams → `DUAL`, 3+ streams → `Multi`. Applies to **Movies, Series and batch flows** — not just Movies. Fills the `{Audio}` placeholder automatically whenever the user did not already set it and did not explicitly lock it. Graceful no-op when `ffprobe` is missing, the file is a subtitle, or the user chose to lock the field.
+*   **🚫 None (lock) Buttons**: Every "Change Audio / Codec / Specials" menu gets a dedicated **🚫 None (lock)** button. Picking it clears the value **and** pins it so runtime auto-fill won't silently populate it. Picking any other value clears the lock automatically. Makes "I really want an empty Audio tag" a first-class user intent instead of an accidental overwrite.
+*   **❌ Cancel Task Button**: In-progress status messages now carry an inline **❌ Cancel Task** button. Pressing it cancels the corresponding `process_file` task via a keyed task registry (`utils.tasks.cancel_by_key`). Stale / finished tasks answer gracefully with "already finished".
+*   **🗃 MyFiles Enterprise (v2.2 Endgame)**: Massive upgrades — **Trash** (soft-delete + restore), **Tags** (edit inline, filter in dashboard), **Versioning** (keep history when you re-rename a file), **Quota Header** (per-user live quota counter on the main dashboard), **Granular Sharing** (per-file share scopes, revocable, deep-link output), **Activity Feed**, **Advanced Search** (typed queries across title / tag / channel / year), **Bulk Operations** (multi-select delete / move / share / mirror-leech), and **Smart Collections** (saved filter rules that behave like auto-updating folders). Backed by a new enterprise schema v1 migration (`db_migrations/myfiles_extras_v1`) with dedicated audit / activity / quotas / shares collections.
+*   **☁️ Mirror-Leech Expansions**: Four brand-new downloader categories — **Aria2** (classic multi-connection HTTP/FTP), **gallery-dl** (Reddit / Twitter / Pixiv / 100+ gallery sites), **cloud-host** (one-click hosters), and **instant-share** (paste → deep-link). The progress UI was rebuilt with **Rename-style frames** and `■ / □` progress bars, and a new **Share deep-link** output lets you hand a file to someone in one tap. The download pipeline no longer stalls after a `Start` click. English strings replace the stray German remnants, and per-file share flows route through the same dotted-key shim the MediaStudio layout migration ships with.
+*   **🩺 Admin System Health Submenu**: `/admin → 🩺 System Health & Statuses` groups **DB Schema Health**, **TMDb Status** and **☁️ Mirror-Leech Config** under one entry so the main admin menu stays clean. Each panel collapses into a blockquote summary once it's configured — full onboarding copy only shows up while something is still missing.
+*   **🎲 One-Click SECRETS_KEY Generator**: Tap **🎲 Generate SECRETS_KEY** inside the Mirror-Leech admin screen and the bot posts a fresh Fernet key plus copy-paste snippets for every supported host (`.env`, Render, Railway, Koyeb, Zeabur, Heroku, Fly, Docker). No more CLI gymnastics.
+*   **🎚 Feature Toggle Panel Redesign**: Admin feature toggles now have **pagination**, **per-feature descriptions**, and a **cleaner callback grammar**. Sub-feature toggles (per-premium-plan overrides) rewired and fixed — they actually persist now thanks to a deterministic dotted-key shim with proper dict-deep-merge (previous merge order silently dropped plan overrides).
+*   **📖 Dynamic /help Builder**: The `/help` guide is now an admin-aware dynamic builder (`plugins/help.py`). Tool pages are flat and searchable, File Converter / YouTube / MyFiles / Dumb Channels each get their own submenu, Mirror-Leech moved under **All Tools** (the old "v2.2" umbrella is gone), and admin-only tools only show to admins. Duplicate legacy handlers in `plugins/start.py` removed.
+*   **🗂 Retention & Quota Admin**: Dedicated admin panels for setting MyFiles retention windows and per-plan quotas — previously this required DB surgery.
+*   **🧱 MediaStudio Layout Migration**: New `db_migrations/mediastudio_layout` run-on-boot migration relocates settings into per-concern documents while a `SettingsCollectionShim` back-compat layer routes all legacy `find_one({"_id": "global_settings"})` calls transparently. Fails the boot loudly instead of silently half-migrating, so a partial upgrade never corrupts state.
+*   **🛡 Runtime Hardening**: New `utils/tasks.py` **`spawn()` wrapper** replaces raw `asyncio.create_task` for long-running coroutines — uncaught exceptions now reach both logs **and** the user-facing message instead of silently killing the task. New `utils/tg_safe.py` with `safe_edit` / `safe_send` / `safe_edit_message_text` / `safe_answer` handles `FloodWait` (sleep + retry) and `MessageNotModified` automatically. `process_file` gained an outer `try / except` so failures before `TaskProcessor.run()` (e.g. DB outage during `ensure_user`) surface a friendly error message instead of a silent drop.
+*   **⏱ Sliding-TTL Session State**: `utils/state.py` now bumps the last-activity timestamp on every read / write, so the 30-minute cleanup task can never sweep an active user mid-flow. New `session_lock(user_id)` helper + `@requires_state(...)` decorator for handler-group safety so text-input messages reach the right handler every time. `update_data()` now accepts a single dict for batched writes without losing the touch semantics.
+*   **🎯 Setup System Rewrite**: Fresh setup flow uses an anchor-message pattern — one message that edits in place instead of a growing thread of prompts. Fixed a long-standing edge where setup kept asking public-mode questions in non-public mode.
+*   **🛟 YouTube Resilience**: `player_client` now rotates automatically on `Requested format is not available` (in addition to the existing anti-bot fallback) and `FormatUnavailableError` is a first-class explained error instead of a generic crash. File Converter gained matching error-handling polish.
+*   **🧩 Dumb Channel Input Handler Fix**: Moved the channel-input handler to `group=0` with explicit diagnostics so a forwarded message / raw `-100…` id reliably reaches the wizard even when other group-5+ listeners are active.
+*   **🔁 Archive Password Retry**: Wrong-password attempts no longer abort the archive flow. Users now get **up to 3 tries** before the session is cancelled — every failed try preserves state and prompts a retry.
+*   **📶 Season Change FloodWait Parity**: `handle_season_change_prompt` now retries on `FloodWait` the same way `handle_ep_change_prompt` already did — no more silent drops when Telegram rate-limits the edit.
+*   **🪵 Peer Cache Logging**: `main.py` force-sub / database-channel peer caching no longer swallows errors silently. Failures log a warning so downstream `PeerIdInvalid` issues are actually diagnosable.
+*   **🧪 CI / Tooling**: Ruff findings cleaned up (import ordering, nested `with`, `contextlib.suppress`); lint CI job flagged as advisory (`continue-on-error`) so hotfixes aren't blocked by style-only issues. Pinned `cryptography` for Fernet-backed Mirror-Leech secrets.
+
+> 🧲 **Power-user note — Torrent Edition**: Need torrent support? The dedicated **[`torrent-edition`](https://github.com/davdxpx/XTV-MediaStudio/tree/torrent-edition)** branch tracks every v1.6.0 feature **plus** a complete torrent subsystem (multi-provider search, favorites, aria2-backed downloads, Mirror-Leech torrent bridge). It installs `aria2c` — run it **only on your own VPS / dedicated server**. Railway / Render / Heroku will flag the image.
+
+<details>
+<summary><b>📋 What's New in v1.5.2</b></summary>
+
 *   **🎬 YouTube Tool (`/yt`)**: Full-featured downloader — Video (up to 4K / 4GB with 𝕏TV Pro), Audio (MP3 128/192/320 kbps with embedded cover art), Thumbnail (HQ JPG), Subtitles/Captions (12 languages, SRT output, auto-caption fallback), and complete Video Info metadata.
 *   **🛡 YouTube Anti-Bot Hardening**: Three-layer defense against YouTube's "sign in to confirm you're not a bot" guard — cookie file support (`/ytcookies` admin command to upload a Netscape `cookies.txt`), automatic player-client rotation (iOS / Android / TV / web-embedded) on bot-check failures, and a dedicated in-chat help screen with Retry + Upload-cookies buttons.
 *   **🎛 File Converter Mega Edition (`/c`)**: Completely redesigned with category-based submenus. **Video**: Container swap (MP4, MKV, MOV, AVI, WEBM, FLV, 3GP, TS), Codec (x264, x265, VP9, AV1), Extract Audio (MP3, M4A, OGG, OPUS, FLAC, WAV), Extract Frame (PNG/JPG/WEBP), Animated GIF presets, Audio FX (Normalize / Boost / Mono), Transform (Resolution 480p/720p/1080p/4K, Mute, Speed 0.5×/1.5×/2×, Reverse). **Audio**: Format (MP3/M4A/OGG/OPUS/FLAC/WAV/WMA), Bitrate 128/192/256/320 kbps, FX (Normalize, Boost, Bass Boost, Speed, Reverse, Mono). **Image**: Format (PNG/JPG/WEBP/BMP/TIFF/GIF/ICO/AVIF/PDF), Resize (presets + 50% / 25%), Rotate/Flip, Filters (Grayscale/Invert/Sepia), Compress presets.
 *   **📡 Unified Dumb Channel Wizard (v2)**: The old broken "Add Dumb Channel" flow is replaced by a proper 3-step wizard. Accepts forwarded messages (both legacy and new Pyrogram forward APIs), `-100…` IDs, `@usernames`, bare usernames, `t.me/user` and `t.me/c/id` links. Pre-save bot-admin validation with 5 distinct result states (ok+post, ok-no-post, member-no-admin, not-member, invalid). Native Telegram "Add me as admin" deep-link button. Dedup check, retry flow, and quick-default shortcuts (set as Standard / Movie / Series default after save).
 *   **🧰 New Media Tools**: MediaInfo (`/mi`) for detailed stream analysis, Subtitle Extractor (`/s`) for ripping subs from MKV/MP4, Video Trimmer (`/t`) for cutting clips without re-encoding, Voice Note Converter (`/v`) and Video Note Converter (`/vn`) for Telegram's round-note formats.
 *   **🎨 YouTube Tool UX Polish**: Thumbnail flow now offers `← Back to Menu` and `🔗 New Link` buttons (session persists across retries). Fixed markdown italic rendering across 8 label locations so text no longer shows literal underscores.
+</details>
 
 <details>
 <summary><b>📋 What's New in v1.5.1</b></summary>
@@ -137,17 +162,6 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
     1. **Cookies**: admin command `/ytcookies` lets you upload a Netscape-format `cookies.txt`. The file is stored at `config/yt_cookies.txt` and used automatically for every subsequent request. Export with a browser extension like "Get cookies.txt LOCALLY" while logged into youtube.com.
     2. **Player-Client Fallback**: on bot-check failure the extractor automatically rotates through `default → ios → android → tv_embedded → web_embedded → mweb` before giving up.
     3. **Dedicated UI**: when YouTube still blocks the request the bot shows a clear in-chat help screen with a Retry button, an `🍪 Upload cookies` button (admins only), and cookie-status indicator — never a silent "Could not fetch info".
-
-  ### 🔹 Torrent Downloader
-*   **Multi-Provider Search Engine**: Searches **1337x**, **TorrentGalaxy**, and **LimeTorrents** concurrently and deduplicates results by info hash.
-*   **Category-Based Filtering**: Narrow searches by Movies, TV Shows, Music, Games, Software, or Anime.
-*   **Paginated Results**: Browse results 5 at a time with detailed info views (seeders, leechers, size, provider, date).
-*   **aria2 Download Management**: Downloads via aria2 RPC with a real-time progress bar, speed, ETA, and cancel button.
-*   **Plan-Based Size Limits**: Free users are limited to 2GB, Standard to 5GB, Deluxe has unlimited downloads.
-*   **Smart File Selection**: After download, select which files to process with type icons, file sizes, and sort by size/name.
-*   **Search History & Favorites**: Last 5 searches are saved for quick re-runs. Favorite torrents for instant access later.
-*   **Download History**: Track all downloads with status (completed/failed/cancelled) and statistics.
-*   **Pipeline Integration**: Selected files are automatically fed into the bot's standard processing pipeline (rename, metadata, upload).
 
 ### 🔹 Professional Metadata Injection
 *   **FFmpeg Power**: Injects custom metadata (Title, Author, Artist, Copyright) directly into MKV/MP4 containers. The ultimate Telegram FFmpeg media processing bot.
@@ -322,8 +336,6 @@ themselves the moment you add it — no redeploy needed for most keys.
 | `SECRETS_KEY` | ❌ | empty | Fernet key encrypting Mirror-Leech provider credentials. Required only when Mirror-Leech is enabled. |
 | `YT_COOKIES_FILE` | ❌ | `config/yt_cookies.txt` | Absolute path to a Netscape YouTube cookies file. Admins can also upload at runtime via `/ytcookies`. |
 
-> **Note:** The Torrent Downloader requires **aria2** to be installed and running as an RPC daemon on port 6800. See the Deployment Guide below for setup instructions.
-
 ---
 
 ## 🚀 𝕏TV Pro™ Setup (4GB File Support)
@@ -381,74 +393,99 @@ Welcome to the **𝕏TV MediaStudio™** deployment documentation! Because this 
 > **TL;DR** — set the 5 required env vars and click any deploy button below. `TMDB_API_KEY` is **optional**; the bot runs fine without it and shows a 🔒 notice on TMDb-dependent features until you add one. Same story for `SECRETS_KEY` (Mirror-Leech only).
 
 <details>
+<summary><b>⚡ 1-Click Cloud Deployments (PaaS)</b></summary>
+<br>
+
+Platform-as-a-Service (PaaS) providers build and run the code directly from your GitHub repository.
+
+### 1. Render (Highly Recommended - Zero Egress Costs)
+Render provides **generous unmetered bandwidth**, saving you from unexpected egress bills when processing large video files.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
+1. **Fork** this repository to your GitHub account.
+2. Click the **Deploy to Render** button above.
+3. Connect your GitHub account and select your forked repository.
+4. Render will detect the `render.yaml` file automatically.
+5. Fill in the required **Environment Variables** (like `BOT_TOKEN`, `API_ID`, etc.). Pay special attention to `PUBLIC_MODE`.
+6. Click **Apply/Save**. Your bot will build and start as a Background Worker!
+*Note: If out-of-memory crashes occur, consider upgrading from the Free Tier.*
+
+### 2. Railway
+Railway offers lightning-fast deployments and great performance, though be mindful of monthly egress bandwidth usage.
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new)
+
+1. **Fork** this repository.
+2. Click the **Deploy on Railway** button above.
+3. Select your GitHub repository.
+4. Go to the **Variables** tab in your new Railway project and add your required configuration.
+5. Railway will automatically build the `Dockerfile` and start your bot!
+
+### 3. Koyeb
+Koyeb provides high-performance global infrastructure with a generous free tier for compute, though bandwidth is limited.
+
+[![Deploy to Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy)
+
+1. **Fork** this repository.
+2. Click **Create Service** on Koyeb. Choose **GitHub** and select your repository.
+3. Set the **Builder** to Docker. Add your `.env` values under **Environment variables**.
+4. Click **Deploy**.
+
+### 4. Zeabur
+Zeabur makes deploying bots effortless.
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://dash.zeabur.com/templates/github)
+
+1. **Fork** this repository.
+2. Log in to Zeabur, create a **Project**, click **Add Service** -> **Git** and select your repository.
+3. Add your environment variables in the **Variables** tab.
+
+</details>
+
+<details>
 <summary><b>🖥️ VPS & Dedicated Server Deployments</b></summary>
 <br>
 
 If you need maximum control, massive storage, and the cheapest bandwidth, deploying on a Virtual Private Server (VPS) via SSH is the best route.
 
-### 1. Recommended Providers
-*   **Oracle Cloud (Always Free ARM):** 4 CPU Cores, 24GB RAM, and **10TB of Free Egress Bandwidth** per month. (Create a Canonical Ubuntu Ampere A1 instance).
-*   **Hetzner Cloud:** Incredible performance for the price. ~€4/mo gets you a dedicated IPv4 and **20TB of Bandwidth**. (Create an Ubuntu 24.04 server).
-*   **Standard VPS:** DigitalOcean, AWS EC2, Linode, etc.
+### 1. Oracle Cloud (Always Free ARM)
+The "Always Free" Ampere A1 instance gives you 4 CPU Cores, 24GB of RAM, and **10TB of Free Egress Bandwidth** every month!
 
----
+1. Create a Canonical Ubuntu instance (Virtual machine -> Ampere -> VM.Standard.A1.Flex).
+2. Connect via SSH: `ssh -i "path/to/key.key" ubuntu@YOUR_PUBLIC_IP`
+3. Follow the Standard Docker Deployment steps below. Our Dockerfile automatically detects and optimizes for ARM!
 
-### 2. Step-by-Step Installation
+### 2. Hetzner Cloud (The Ultimate Budget VPS - 20TB Traffic)
+For around €4 a month, you get a dedicated IPv4 and a massive **20TB of Traffic (Bandwidth)** per month included.
 
-**Step 1: Connect to your Server**
-Connect to your server via SSH.
-```bash
-ssh root@YOUR_SERVER_IP
-# Or if using an identity file like Oracle Cloud:
-# ssh -i "path/to/key.key" ubuntu@YOUR_SERVER_IP
-```
+1. Create an Ubuntu 24.04 server. The cheapest Arm64 (CAX series) or x86 (CX series) is perfect.
+2. Connect via SSH: `ssh root@YOUR_SERVER_IP`
+3. Follow the Standard Docker Deployment steps below.
 
-**Step 2: Update your System**
-Ensure your package list is up to date.
-```bash
-sudo apt update && sudo apt upgrade -y
-```
-
-**Step 3: Install Required Packages**
-Install essential tools like `git` and `aria2` (required for the torrent engine).
-```bash
-sudo apt install git aria2 curl -y
-```
-
-**Step 4: Install Docker cleanly**
-To avoid dependency conflicts (like `containerd.io` vs `containerd`), use the official Docker installation script.
-```bash
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-```
-
-**Step 5: Setup the Torrent Daemon (Aria2c)**
-Run `aria2c` in the background so the bot can communicate with it to process torrents.
-```bash
-aria2c --enable-rpc --rpc-listen-all --daemon
-```
-
-**Step 6: Download the Bot**
-Clone the repository and enter the directory.
-```bash
-git clone https://github.com/davdxpx/XTV-MediaStudio.git
-cd XTV-MediaStudio
-```
-
-**Step 7: Configure Settings**
-Copy the example configuration file and edit it to include your tokens and MongoDB URI.
-```bash
-cp .env.example .env
-nano .env
-```
-*(Save with `Ctrl+O`, `Enter`, and exit with `Ctrl+X`)*
-
-**Step 8: Build and Run**
-Start the bot using the Docker Compose plugin.
-```bash
-sudo docker compose up -d --build
-```
-*(You can view logs anytime using `sudo docker compose logs -f`)*
+### 3. Standard VPS (DigitalOcean, AWS EC2, etc.)
+1. **Connect** to your server via SSH.
+2. **Install Docker**:
+   ```
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install docker.io docker-compose git -y
+   sudo systemctl enable --now docker
+   ```
+3. **Download the Bot:**
+   ```
+   git clone https://github.com/davdxpx/XTV-MediaStudio.git
+   cd XTV-MediaStudio
+   ```
+4. **Configure Settings:** (Create a `.env` file and put your variables there)
+   ```
+   cp .env.example .env
+   # Edit .env using a text editor
+   ```
+5. **Run the Bot:**
+   ```
+   docker-compose up -d --build
+   ```
+*(View logs anytime using `docker-compose logs -f`)*
 
 </details>
 
@@ -540,11 +577,10 @@ admin - ⛔ Access Global Configurations (Admins Only)
 *   **/c** or **/convert**: Open the **File Converter Mega Edition** (category-based video / audio / image operations).
 *   **/w** or **/watermark**: Open the **Image Watermarker** (text or overlay image).
 *   **/s** or **/subtitle**: Open the **Subtitle Extractor** (rip subs from MKV/MP4).
-*   **/trim**: Open the **Video Trimmer** (fast cut without re-encoding).
+*   **/t** or **/trim**: Open the **Video Trimmer** (fast cut without re-encoding).
 *   **/v** or **/voice**: Open the **Voice Note Converter** (to Telegram voice-note format).
 *   **/vn** or **/videonote**: Open the **Video Note Converter** (to Telegram round-note format).
 *   **/mi** or **/mediainfo**: Open **MediaInfo** (detailed stream/codec analyzer).
-*   **/t** or **/torrent**: Open Torrent Downloader (Search, download, and process torrents)
 
 ### Admin-Only
 *   **/ytcookies**: Upload a Netscape-format `cookies.txt` to bypass YouTube's anti-bot guard. Admins only — see the [YouTube Tool section](#-youtube-tool-yt) for the full flow.

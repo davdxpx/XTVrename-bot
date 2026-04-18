@@ -55,13 +55,10 @@ def set_state(user_id, state):
     user_data[user_id]["state"] = state
     _touch(user_id)
 
-def update_data(user_id, key_or_dict, value=None):
+def update_data(user_id, key, value):
     if user_id not in user_data:
         user_data[user_id] = {}
-    if isinstance(key_or_dict, dict):
-        user_data[user_id].update(key_or_dict)
-    else:
-        user_data[user_id][key_or_dict] = value
+    user_data[user_id][key] = value
     _touch(user_id)
 
 def get_data(user_id):

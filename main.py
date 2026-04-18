@@ -50,7 +50,6 @@ import tools.MediaInfo
 import tools.VoiceNoteConverter
 import tools.VideoNoteConverter
 import tools.YouTubeTool
-import tools.TorrentDownloader
 
 # Mirror-Leech registers its downloaders / uploaders on import so the
 # registries are populated before the plugin's handlers fire.
@@ -75,7 +74,6 @@ register_tool_handlers(app, tools.MediaInfo)
 register_tool_handlers(app, tools.VoiceNoteConverter)
 register_tool_handlers(app, tools.VideoNoteConverter)
 register_tool_handlers(app, tools.YouTubeTool)
-register_tool_handlers(app, tools.TorrentDownloader)
 
 user_bot = None
 
@@ -145,9 +143,6 @@ if __name__ == "__main__":
 
         logger.info("Ensuring database indexes...")
         app.loop.run_until_complete(ensure_indexes_v2(db.db))
-        # Torrent-edition extras: index the torrent_downloads /
-        # torrent_favorites collections the /torrent subsystem reads.
-        app.loop.run_until_complete(db.ensure_torrent_indexes())
     except Exception as e:
         logger.warning(f"Error creating indexes: {e}")
 

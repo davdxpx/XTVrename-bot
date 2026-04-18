@@ -171,17 +171,6 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
             )
         ]
     )
-    # Bridge into the torrent-edition-only legacy admin panel. The button
-    # is rendered on every deployment of this branch; on main (which
-    # doesn't have admin_legacy.py) this row is simply absent.
-    keyboard.append(
-        [
-            InlineKeyboardButton(
-                "🧲 Torrent Admin",
-                callback_data="admin_torrent_bridge",
-            )
-        ]
-    )
 
     return InlineKeyboardMarkup(keyboard)
 

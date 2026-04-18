@@ -48,12 +48,6 @@ from . import force_sub  # noqa: F401
 from . import myfiles  # noqa: F401
 from . import payments  # noqa: F401
 from . import premium  # noqa: F401
-# System-health trio + torrent bridge (torrent-edition only).
-from . import db_health  # noqa: F401
-from . import tmdb_status  # noqa: F401
-from . import mirror_leech_admin  # noqa: F401
-from . import system_health  # noqa: F401
-from . import torrent_bridge  # noqa: F401
 
 __all__ = [
     "admin_sessions",

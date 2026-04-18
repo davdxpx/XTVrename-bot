@@ -2,7 +2,7 @@
 from pyrogram import Client, filters
 from pyrogram.enums import ChatMemberStatus
 from database import db
-from plugins.admin_legacy import admin_sessions, is_admin
+from plugins.admin import admin_sessions, is_admin
 from config import Config
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils.log import get_logger

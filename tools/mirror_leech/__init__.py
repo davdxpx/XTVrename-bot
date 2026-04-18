@@ -27,16 +27,17 @@ def _safe_import(mod: str) -> None:
         )
 
 
-# Downloaders
-_safe_import("tools.mirror_leech.downloaders.TelegramDownloader")      
-_safe_import("tools.mirror_leech.downloaders.InstantShareDownloader")  
-_safe_import("tools.mirror_leech.downloaders.MediaPlatformDownloader") 
-_safe_import("tools.mirror_leech.downloaders.GalleryDLDownloader")    
-_safe_import("tools.mirror_leech.downloaders.YTDLPDownloader")         
-_safe_import("tools.mirror_leech.downloaders.RSSDownloader")           
-_safe_import("tools.mirror_leech.downloaders.Aria2Downloader")        
-_safe_import("tools.mirror_leech.downloaders.HTTPDownloader") 
-_safe_import("tools.mirror_leech.downloaders.MLTorrentDownloader")
+# Downloaders. Order matters — Controller.pick_downloader picks the
+# first matcher, so more specific detectors must come before generic
+# fallbacks.
+_safe_import("tools.mirror_leech.downloaders.TelegramDownloader")      # tg: scheme
+_safe_import("tools.mirror_leech.downloaders.InstantShareDownloader")  # our DDL urls
+_safe_import("tools.mirror_leech.downloaders.MediaPlatformDownloader") # cloud hosts
+_safe_import("tools.mirror_leech.downloaders.GalleryDLDownloader")     # social / galleries
+_safe_import("tools.mirror_leech.downloaders.YTDLPDownloader")         # video extractors
+_safe_import("tools.mirror_leech.downloaders.RSSDownloader")           # feed
+_safe_import("tools.mirror_leech.downloaders.Aria2Downloader")         # multi-connection HTTP
+_safe_import("tools.mirror_leech.downloaders.HTTPDownloader")          # generic fallback
 
 # Uploaders
 _safe_import("tools.mirror_leech.uploaders.GoogleDrive")

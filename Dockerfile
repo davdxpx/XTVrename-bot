@@ -17,7 +17,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     p7zip-full \
-    aria2 \
     rclone \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
@@ -31,8 +30,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Create downloads directory for aria2
-RUN mkdir -p /app/downloads
-
-# Run aria2c daemon in background, then start the application
-CMD aria2c --enable-rpc --rpc-listen-all --rpc-listen-port=6800 --dir=/app/downloads --daemon=true && python3 main.py
+# Run the application
+CMD ["python3", "main.py"]
