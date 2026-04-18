@@ -842,9 +842,10 @@ async def user_settings_callback(client, callback_query):
         templates = await db.get_filename_templates(user_id)
         current_val = templates.get(field, "")
         try:
-            vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
-            if field.lower() in ["series", "subtitles_series"]:
+            if field.lower() in {"movies", "series", "subtitles_movies", "subtitles_series"}:
                 vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
+            else:
+                vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
 
             await callback_query.message.edit_text(
                 f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
@@ -873,8 +874,7 @@ async def user_settings_callback(client, callback_query):
         field = data.replace("prompt_user_fn_template_", "")
         user_sessions[user_id] = {"state": f"awaiting_user_fn_template_{field}", "msg_id": callback_query.message.id}
         try:
-            vars_text = ""
-            if field.lower() in ["series", "subtitles_series"]:
+            if field.lower() in {"movies", "series", "subtitles_movies", "subtitles_series"}:
                 vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
             else:
                 vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"

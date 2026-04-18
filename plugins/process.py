@@ -706,6 +706,13 @@ class TaskProcessor:
                 )
                 base_name = f"{safe_title}"
 
+            logger.info(
+                f"[rename] user={self.user_id} mode=general "
+                f"template={template!r} specials={specials_str!r} codec={codec_str!r} "
+                f"audio={audio_str!r} quality={self.quality!r} "
+                f"original={self.original_name!r} -> {base_name!r}"
+            )
+
             final_filename = f"{base_name}{ext}"
             meta_title = base_name
 
@@ -742,6 +749,14 @@ class TaskProcessor:
                     else f"{safe_title}.{season_episode}.{self.language}"
                 )
                 base_name = clean_filename(base_name, fallback_template)
+
+            logger.info(
+                f"[rename] user={self.user_id} mode=series sub={self.is_subtitle} "
+                f"template={template!r} specials={specials_str!r} codec={codec_str!r} "
+                f"audio={audio_str!r} quality={self.quality!r} "
+                f"season_episode={season_episode!r} original={self.original_name!r} "
+                f"-> {base_name!r}"
+            )
 
             final_filename = f"{base_name}{ext}"
             meta_title = self.templates.get("title", "").format(
@@ -782,6 +797,13 @@ class TaskProcessor:
                     else f"{safe_title}.{year_str}.{self.language}"
                 )
                 base_name = clean_filename(base_name, fallback_template)
+
+            logger.info(
+                f"[rename] user={self.user_id} mode={self.media_type} sub={self.is_subtitle} "
+                f"template={template!r} specials={specials_str!r} codec={codec_str!r} "
+                f"audio={audio_str!r} quality={self.quality!r} year={year_str!r} "
+                f"original={self.original_name!r} -> {base_name!r}"
+            )
 
             final_filename = f"{base_name}{ext}"
             meta_title = (
