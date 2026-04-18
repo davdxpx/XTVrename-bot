@@ -151,14 +151,22 @@ class Database:
 
 
     def _get_doc_id(self, user_id=None):
-        """Return the legacy virtual doc id for a settings lookup.
+        """Return the virtual doc id for a settings lookup.
 
         The SettingsCollectionShim routes "global_settings" and "user_<id>"
         transparently onto the MediaStudio layout, so call sites don't need
-        to know anything about the underlying split. Public/non-public mode
-        no longer special-cases this — if `user_id` is given, we address the
-        user's personal settings; otherwise we address the global doc.
+        to know anything about the underlying split.
+
+        Non-public mode intentionally ignores ``user_id``: in a single-
+        tenant private bot every caller — admin panels, rename flow,
+        dumb-channel wizard — must see the same configuration. Honouring
+        ``user_id`` here would silently split the same user's data across
+        two docs (admin reads global, rename reads ``user_<id>``) which is
+        exactly the symptom v1.6.0-alpha shipped with. In public mode the
+        split is intended and per-user settings work as before.
         """
+        if not Config.PUBLIC_MODE:
+            return "global_settings"
         if user_id is not None:
             return f"user_{user_id}"
         return "global_settings"

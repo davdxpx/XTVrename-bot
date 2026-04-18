@@ -25,6 +25,7 @@ from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
+from config import Config
 from database import db
 from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 
@@ -319,22 +320,34 @@ async def templates_cb(client, callback_query: CallbackQuery):
     if data.startswith("edit_fn_template_"):
         await callback_query.answer()
         field = data.replace("edit_fn_template_", "")
+        # Invalidate so the admin view always reflects the latest DB state,
+        # not a stale 60s-cache value. Cheap no-op when cache is empty.
+        db._invalidate_settings_cache()
         templates = await db.get_filename_templates()
         current_val = templates.get(field, "")
+        # Config default for this key — shown when nothing custom is stored,
+        # so the user can see "this is the fallback" vs. "this is really saved".
+        default_val = Config.DEFAULT_FILENAME_TEMPLATES.get(field, "")
         try:
-            vars_text = (
-                "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, "
-                "`{Season_Episode}`, `{Language}`, `{Channel}`"
-            )
-            if field.lower() in ["series", "subtitles_series"]:
+            if field.lower() in {"movies", "series", "subtitles_movies", "subtitles_series"}:
                 vars_text = (
                     "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, "
                     "`{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, "
                     "`{Codec}`, `{Audio}`"
                 )
+            else:
+                vars_text = (
+                    "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, "
+                    "`{Season_Episode}`, `{Language}`, `{Channel}`"
+                )
+            stored_line = (
+                f"Current: `{current_val}`"
+                if current_val
+                else f"Current: _not set — using default_ `{default_val}`"
+            )
             await callback_query.message.edit_text(
                 f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
-                f"Current: `{current_val}`\n\n"
+                f"{stored_line}\n\n"
                 f"Variables: {vars_text}\n"
                 "Note: File extension will be added automatically.",
                 reply_markup=InlineKeyboardMarkup(
@@ -365,8 +378,7 @@ async def templates_cb(client, callback_query: CallbackQuery):
             "msg_id": callback_query.message.id,
         }
         try:
-            vars_text = ""
-            if field.lower() in ["series", "subtitles_series"]:
+            if field.lower() in {"movies", "series", "subtitles_movies", "subtitles_series"}:
                 vars_text = (
                     "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, "
                     "`{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, "

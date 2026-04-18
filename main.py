@@ -164,6 +164,20 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"myfiles_extras_v1 migration issue: {e}")
 
+    # --- Consolidate stray user_* settings docs into global (non-public only) ---
+    # Fixes admin panel showing an empty list of dumb channels while the
+    # rename flow still has them: without this, two different docs coexist.
+    try:
+        from database import db
+        from db_migrations.consolidate_nonpublic_settings import (
+            run_consolidate_nonpublic_settings,
+        )
+
+        logger.info("Running DB migration: consolidate_nonpublic_settings ...")
+        app.loop.run_until_complete(run_consolidate_nonpublic_settings(db))
+    except Exception as e:
+        logger.warning(f"consolidate_nonpublic_settings migration issue: {e}")
+
     # --- Restore YouTube cookies from DB (survives container redeploys) ---
     try:
         from tools.YouTubeTool import restore_youtube_cookies_from_db
