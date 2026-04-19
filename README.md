@@ -20,7 +20,9 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 
 ---
 
-### 📋 What's New in v1.6.0
+<details>
+<summary>📋 What's New in v1.6.0</summary>
+
 *   **🎬 Movie Auto-Detect Confirmation — Fully Working**: Change Specials / Audio / Codec buttons now appear reliably for Movies when your template uses the matching placeholders. Root cause was a long-standing singular-vs-plural template-key mismatch (`fs["type"] == "movie"` looked up against `DEFAULT_FILENAME_TEMPLATES["movies"]`) that made the three buttons silently vanish. Series happened to work only because singular == plural there. Fixed via a new `utils.detect.template_key_for()` normalizer + DB key aliasing (`database._normalize_template_keys()`) so both legacy and canonical template keys resolve correctly.
 *   **🔊 Runtime Dual / Multi Audio Auto-Fill (FFprobe)**: Before the final rename the bot now probes the actual audio streams of the downloaded file via `ffprobe`. 2 distinct streams → `DUAL`, 3+ streams → `Multi`. Applies to **Movies, Series and batch flows** — not just Movies. Fills the `{Audio}` placeholder automatically whenever the user did not already set it and did not explicitly lock it. Graceful no-op when `ffprobe` is missing, the file is a subtitle, or the user chose to lock the field.
 *   **🚫 None (lock) Buttons**: Every "Change Audio / Codec / Specials" menu gets a dedicated **🚫 None (lock)** button. Picking it clears the value **and** pins it so runtime auto-fill won't silently populate it. Picking any other value clears the lock automatically. Makes "I really want an empty Audio tag" a first-class user intent instead of an accidental overwrite.
@@ -44,6 +46,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **🧪 CI / Tooling**: Ruff findings cleaned up (import ordering, nested `with`, `contextlib.suppress`); lint CI job flagged as advisory (`continue-on-error`) so hotfixes aren't blocked by style-only issues. Pinned `cryptography` for Fernet-backed Mirror-Leech secrets.
 
 > 🧲 **Power-user branch**: Need the extended edition with the additional peer-to-peer subsystem? A separate branch tracks every v1.6.0 feature plus that stack — check the repository branch list. **Only run the extended edition on your own VPS / dedicated server.** Railway / Render / Heroku will flag the image.
+</details>
 
 <details>
 <summary><b>📋 What's New in v1.5.2</b></summary>
