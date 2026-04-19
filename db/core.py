@@ -1075,16 +1075,16 @@ class Database:
             logger.error(f"Error fetching daily stats: {e}")
             return []
 
-    async def get_top_users_today(self, limit=10, skip=0):
+    async def get_top_users_today(self, limit=10, skip=0, date: str | None = None):
         if self.settings is None:
             return [], 0
 
-        current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        target_date = date or datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
             query = {
                 "_id": {"$regex": "^user_"},
-                "usage.date": current_utc_date,
+                "usage.date": target_date,
                 "usage.egress_mb": {"$gt": 0}
             }
 
