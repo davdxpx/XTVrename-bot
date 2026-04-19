@@ -7,7 +7,7 @@
 Keeps plugins/myfiles.py focused on the legacy flow and bolts on the
 Trash / Tags / Versioning / Quotas / Audit / Search / Sharing / Activity
 / Bulk / Smart-Collection handlers here, all gated by
-`utils.feature_gate.feature_enabled` so they silently vanish for users
+`utils.auth.feature_gate.feature_enabled` so they silently vanish for users
 whose plan (or the bot as a whole) hasn't enabled the respective
 feature.
 
@@ -37,8 +37,8 @@ from config import Config
 from db import db
 from tools.mirror_leech.UIChrome import format_bytes, progress_block
 from tools.mirror_leech.UIChrome import frame_plain as frame
-from utils.feature_gate import feature_enabled
-from utils.log import get_logger
+from utils.auth.feature_gate import feature_enabled
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.myfiles.extras")
 
@@ -506,7 +506,7 @@ async def search_start(client: Client, cq: CallbackQuery) -> None:
 
 
 async def _handle_search_query(client: Client, message: Message, pending: dict) -> None:
-    from utils.myfiles_search import build_query
+    from utils.myfiles.search import build_query
     user_id = message.from_user.id
     if not await feature_enabled("myfiles_search", user_id):
         _drop_pending(user_id)
@@ -1146,7 +1146,7 @@ async def _handle_smart_create(client: Client, message: Message, pending: dict) 
 
 @Client.on_callback_query(filters.regex(r"^mf_smart_open_([0-9a-f]{24})$"))
 async def smart_open(client: Client, cq: CallbackQuery) -> None:
-    from utils.myfiles_search import build_query
+    from utils.myfiles.search import build_query
     user_id = cq.from_user.id
     if not await feature_enabled("myfiles_smart", user_id):
         await cq.answer("Smart Collections disabled.", show_alert=True)

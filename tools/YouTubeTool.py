@@ -11,7 +11,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 from plugins.user_setup import track_tool_usage
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 # yt-dlp is an optional runtime dependency. Import lazily so main.py can still

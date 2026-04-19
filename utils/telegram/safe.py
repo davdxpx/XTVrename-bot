@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 from pyrogram.errors import FloodWait, MessageNotModified
 
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("utils.tg_safe")
 

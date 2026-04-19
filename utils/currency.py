@@ -4,7 +4,7 @@ import time
 
 import aiohttp
 
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("utils.currency")
 

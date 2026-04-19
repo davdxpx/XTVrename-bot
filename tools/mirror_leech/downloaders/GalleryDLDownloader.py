@@ -20,7 +20,7 @@ from typing import Optional
 
 from tools.mirror_leech.downloaders import Downloader, register_downloader
 from tools.mirror_leech.Tasks import MLContext
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.gallery_dl")
 

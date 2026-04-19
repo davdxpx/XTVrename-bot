@@ -62,7 +62,7 @@ class Config:
         """Validate required configuration at startup.
 
         Note: TMDB_API_KEY is intentionally NOT validated here. It is
-        optional as of the broaden-audience refactor — see utils.tmdb_gate
+        optional as of the broaden-audience refactor — see utils.tmdb.gate
         for the availability check. Features that need it gracefully
         degrade with a friendly message; everything else keeps working.
         """

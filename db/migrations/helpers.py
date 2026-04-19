@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("db.migrations.helpers")
 

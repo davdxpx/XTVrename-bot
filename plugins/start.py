@@ -4,7 +4,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 from utils.state import clear_session
 
 logger = get_logger("plugins.start")
@@ -16,7 +16,7 @@ from db import db
 from plugins.force_sub_handler import send_starter_setup_message
 from plugins.user_setup import perform_smart_swap_if_needed, send_user_tool_preferences_setup, track_tool_usage
 from utils.auth import check_force_sub
-from utils.gate import check_and_send_welcome, send_force_sub_gate
+from utils.auth.gate import check_and_send_welcome, send_force_sub_gate
 
 
 @Client.on_message(filters.regex(r"^/(start|new)") & filters.private, group=0)

@@ -9,7 +9,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from config import Config
 from db import schema as _schema
 from db.shim import SettingsCollectionShim
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("database")
 

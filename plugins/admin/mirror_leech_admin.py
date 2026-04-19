@@ -31,7 +31,7 @@ from plugins.admin.core import is_admin
 from tools.mirror_leech import Secrets
 from tools.mirror_leech.downloaders import all_downloaders
 from tools.mirror_leech.uploaders import all_uploaders
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.admin.mirror_leech")
 

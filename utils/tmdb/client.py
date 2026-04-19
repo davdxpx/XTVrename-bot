@@ -5,8 +5,8 @@ import time
 import aiohttp
 
 from config import Config
-from utils.log import get_logger
-from utils.tmdb_gate import is_tmdb_available
+from utils.telegram.log import get_logger
+from utils.tmdb.gate import is_tmdb_available
 
 logger = get_logger("utils.tmdb")
 

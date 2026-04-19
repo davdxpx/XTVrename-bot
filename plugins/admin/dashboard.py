@@ -27,7 +27,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from config import Config
 from db import db
-from utils.logger import debug
+from utils.telegram.logger import debug
 
 debug("✅ Loaded handler: admin_dashboard_overview_cb")
 

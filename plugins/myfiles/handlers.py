@@ -22,7 +22,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from config import Config
 from db import db
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 from plugins.myfiles.core import (
     _debounce_mf,
@@ -491,7 +491,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     # === SETTINGS CATEGORY HANDLERS ===
 
     if data == "settings_cat_processing":
-        from utils.tmdb_gate import is_tmdb_available
+        from utils.tmdb.gate import is_tmdb_available
 
         s = await db.get_settings(user_id)
         quality = s.get("default_quality", "720p") if s else "720p"
@@ -689,7 +689,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
     # Locked-toggle hint: tapped when a TMDb-dependent toggle is shown
     # as 🔒 because no TMDB_API_KEY is configured.
     if data == "tmdb_locked_hint":
-        from utils.tmdb_gate import tmdb_required_message
+        from utils.tmdb.gate import tmdb_required_message
         await callback_query.answer(
             tmdb_required_message("Auto TMDb match"),
             show_alert=True,
@@ -1066,7 +1066,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         # Swap to the granular sharing configurator when the admin
         # enables it; otherwise keep the legacy one-tap link.
         try:
-            from utils.feature_gate import feature_enabled as _fe
+            from utils.auth.feature_gate import feature_enabled as _fe
             _sharing_on = await _fe("myfiles_sharing", user_id)
         except Exception:
             _sharing_on = False
@@ -1095,7 +1095,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         # Extras — each gated by feature_toggles so the row silently
         # vanishes when the admin disables the feature.
         try:
-            from utils.feature_gate import feature_many as _fm
+            from utils.auth.feature_gate import feature_many as _fm
             ent = await _fm(
                 ["myfiles_tags", "myfiles_versions"], user_id
             )
@@ -1285,7 +1285,7 @@ async def myfiles_callback(client: Client, callback_query: CallbackQuery):
         if f:
             # Soft-delete when Trash feature is on → keep in recycle bin.
             try:
-                from utils.feature_gate import feature_enabled as _fe
+                from utils.auth.feature_gate import feature_enabled as _fe
                 trash_on = await _fe("myfiles_trash", user_id)
             except Exception:
                 trash_on = False

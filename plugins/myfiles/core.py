@@ -22,7 +22,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 from db import db
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.myfiles.core")
 
@@ -228,7 +228,7 @@ async def get_myfiles_main_menu(user_id: int):
     # Extras entrypoints — each gated by its own feature toggle, so
     # rows silently vanish when admin disables the feature.
     try:
-        from utils.feature_gate import feature_many as _fm
+        from utils.auth.feature_gate import feature_many as _fm
         ent = await _fm(
             [
                 "myfiles_trash",
@@ -360,7 +360,7 @@ async def build_files_list_keyboard(user_id: int, filter_query: dict, page: int,
         ])
         # Bulk ops row — vanishes when the toggle is off.
         try:
-            from utils.feature_gate import feature_enabled as _fe
+            from utils.auth.feature_gate import feature_enabled as _fe
             _bulk_on = await _fe("myfiles_bulk", user_id)
         except Exception:
             _bulk_on = False

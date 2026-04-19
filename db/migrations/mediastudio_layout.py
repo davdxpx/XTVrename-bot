@@ -12,7 +12,7 @@ import time
 from db import schema
 from db.migrations.helpers import backup_collection, collection_exists, copy_collection
 from db.migrations.split import split_user_settings_doc
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("db.migrations.mediastudio_layout")
 

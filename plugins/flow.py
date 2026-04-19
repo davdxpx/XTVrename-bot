@@ -15,8 +15,8 @@ from plugins.process import process_file
 from plugins.user_setup import track_tool_usage
 from tools.AudioMetadataEditor import render_audio_menu
 from utils.auth import auth_filter
-from utils.detect import analyze_filename, auto_match_tmdb, template_key_for
-from utils.log import get_logger
+from utils.media.detect import analyze_filename, auto_match_tmdb, template_key_for
+from utils.telegram.log import get_logger
 from utils.state import clear_session, get_data, get_state, mark_for_db_persist, set_state, update_data
 from utils.tasks import spawn as _spawn_task
 from utils.tmdb import tmdb
@@ -437,7 +437,7 @@ async def manual_title_handler(client, message):
         raise StopPropagation
 
 async def search_handler(client, message, media_type):
-    from utils.tmdb_gate import ensure_tmdb
+    from utils.tmdb.gate import ensure_tmdb
 
     if not await ensure_tmdb(client, message, feature="Manual TMDb search"):
         return
@@ -839,7 +839,7 @@ async def handle_send_as_preference(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^sel_tmdb_(movie|series)_(\d+)$"))
 async def handle_tmdb_selection(client, callback_query):
-    from utils.tmdb_gate import ensure_tmdb
+    from utils.tmdb.gate import ensure_tmdb
 
     if not await ensure_tmdb(client, callback_query, feature="TMDb title selection"):
         return
@@ -1390,10 +1390,10 @@ import time
 import uuid
 
 from db import db
-from utils.archive import check_password_protected, extract_archive, is_archive
+from utils.media.archive import check_password_protected, extract_archive, is_archive
 from utils.auth import check_force_sub
-from utils.gate import check_and_send_welcome, send_force_sub_gate
-from utils.progress import progress_for_pyrogram
+from utils.auth.gate import check_and_send_welcome, send_force_sub_gate
+from utils.telegram.progress import progress_for_pyrogram
 from utils.queue_manager import queue_manager
 
 
@@ -1769,7 +1769,7 @@ async def handle_file_upload(client, message):
             input_path = os.path.join(Config.DOWNLOAD_DIR, f"{user_id}_{message.id}_probe_input")
             downloaded = await client.download_media(message, file_name=input_path)
             if downloaded and os.path.exists(downloaded):
-                from utils.ffmpeg_tools import probe_file
+                from utils.media.ffmpeg_tools import probe_file
                 probe_data, _ = await probe_file(downloaded)
                 from tools.MediaInfo import format_media_info
                 info_text = format_media_info(probe_data, file_name)
@@ -2321,7 +2321,7 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
         tmdb_data = await auto_match_tmdb(metadata, language=lang)
 
         if not tmdb_data:
-            from utils.tmdb_gate import is_tmdb_available
+            from utils.tmdb.gate import is_tmdb_available
             if not is_tmdb_available():
                 await client.send_message(
                     user_id,
@@ -2483,7 +2483,7 @@ async def handle_auto_detection(client, message):
     tmdb_data = await auto_match_tmdb(metadata, language=lang)
 
     if not tmdb_data:
-        from utils.tmdb_gate import is_tmdb_available
+        from utils.tmdb.gate import is_tmdb_available
         if not is_tmdb_available():
             await message.reply_text(
                 "🔒 **TMDb disabled — use General Mode**\n\n"
@@ -2991,7 +2991,7 @@ async def handle_change_type(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^change_tmdb_(\d+)$"))
 async def handle_change_tmdb_init(client, callback_query):
-    from utils.tmdb_gate import ensure_tmdb
+    from utils.tmdb.gate import ensure_tmdb
 
     if not await ensure_tmdb(client, callback_query, feature="Change TMDb match"):
         return
@@ -3051,7 +3051,7 @@ async def handle_change_se_menu(client, callback_query):
 
 @Client.on_callback_query(filters.regex(r"^correct_tmdb_(\d+)_(\d+)$"))
 async def handle_correct_tmdb_selection(client, callback_query):
-    from utils.tmdb_gate import ensure_tmdb
+    from utils.tmdb.gate import ensure_tmdb
 
     if not await ensure_tmdb(client, callback_query, feature="Correct TMDb match"):
         return

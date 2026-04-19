@@ -23,7 +23,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 from db import db
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.public_cmds.usage")
 

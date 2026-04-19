@@ -13,7 +13,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import BOT_START_TIME, Config
 from db import db
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.public_cmds.handlers")
 
@@ -160,7 +160,7 @@ async def settings_panel(client, message):
 
 import contextlib
 
-from utils.logger import debug
+from utils.telegram.logger import debug
 
 debug("✅ Loaded handler: user_settings_callback")
 

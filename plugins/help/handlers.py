@@ -52,8 +52,8 @@ from plugins.help.builder import (
     is_callback_tool_available,
     is_tool_available,
 )
-from utils.log import get_logger
-from utils.logger import debug
+from utils.telegram.log import get_logger
+from utils.telegram.logger import debug
 
 logger = get_logger("plugins.help.handlers")
 

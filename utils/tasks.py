@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, Optional, Set
 
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("utils.tasks")
 

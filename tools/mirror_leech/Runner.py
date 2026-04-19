@@ -23,7 +23,7 @@ from tools.mirror_leech.Controller import UnsupportedSourceError, pick_downloade
 from tools.mirror_leech.downloaders import downloader_by_id
 from tools.mirror_leech.Tasks import MLContext, MLTask, UploadResult
 from tools.mirror_leech.uploaders import uploader_by_id
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.runner")
 

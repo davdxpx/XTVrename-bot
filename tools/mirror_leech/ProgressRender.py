@@ -21,7 +21,7 @@ from tools.mirror_leech.UIChrome import (
     frame,
     progress_block,
 )
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 if TYPE_CHECKING:
     from tools.mirror_leech.Tasks import MLTask

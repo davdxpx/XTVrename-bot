@@ -35,7 +35,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from db import db
 from plugins.admin.core import get_admin_access_limits_menu, is_admin
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.admin.feature_toggles")
 
@@ -52,7 +52,7 @@ async def _render_access_limits(callback_query: CallbackQuery):
 
 
 async def _render_feature_toggles(callback_query: CallbackQuery):
-    from utils.tmdb_gate import is_tmdb_available
+    from utils.tmdb.gate import is_tmdb_available
 
     toggles = await db.get_feature_toggles()
     tmdb_on = is_tmdb_available()

@@ -47,7 +47,7 @@ from tools.mirror_leech.Controller import (
 )
 from tools.mirror_leech.UIChrome import frame_plain as frame
 from tools.mirror_leech.uploaders import available_uploaders
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.mirror_leech_ui")
 

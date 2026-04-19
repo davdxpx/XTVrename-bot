@@ -36,7 +36,7 @@ from db.migrations.mediastudio_layout import (
     run_mediastudio_layout_migration,
 )
 from plugins.admin.core import is_admin
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.admin.db_health")
 
