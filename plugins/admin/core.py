@@ -94,9 +94,6 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "📺 Dumb Channels", callback_data="admin_dumb_channels"
-                ),
-                InlineKeyboardButton(
                     "📺 Dumb Channel Settings",
                     callback_data="admin_dumb_user_defaults",
                 ),

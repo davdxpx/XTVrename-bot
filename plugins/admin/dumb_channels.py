@@ -117,7 +117,7 @@ def _on_off(b: bool) -> str:
 
 def _channel_value(value):
     if value in (None, "", 0):
-        return "_not set_"
+        return "__not set__"
     return f"`{value}`"
 
 
