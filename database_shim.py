@@ -249,7 +249,7 @@ class SettingsCollectionShim:
                         other_ops.pop(op)
 
         # Group remaining fields by target doc. Support Mongo's dotted nested-key
-        # syntax (`feature_toggles.mirror_leech_aria2`): the routing table
+        # syntax (`feature_toggles.mirror_leech_gallery_dl`): the routing table
         # is keyed by the top-level name, so we look up the prefix before
         # the first dot and keep the full dotted key in the rewritten
         # update so Mongo writes the nested field.

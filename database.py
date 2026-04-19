@@ -280,11 +280,14 @@ class Database:
 
     async def get_filename_templates(self, user_id=None):
         settings = await self.get_settings(user_id)
-        raw = (
-            settings.get("filename_templates", Config.DEFAULT_FILENAME_TEMPLATES)
-            if settings
-            else Config.DEFAULT_FILENAME_TEMPLATES
-        )
+        raw = settings.get("filename_templates") if settings else None
+        # Treat `{}` the same as a missing key — otherwise the zero-arg
+        # `dict.get(...)` fallback returns the empty dict instead of the
+        # hard defaults, which makes the admin panel and the processing
+        # pipeline both resolve every field to "" when the stored value
+        # is ever wiped to an empty dict by a legacy write.
+        if not isinstance(raw, dict) or not raw:
+            raw = Config.DEFAULT_FILENAME_TEMPLATES
         return self._normalize_template_keys(raw)
 
     @staticmethod
@@ -1311,22 +1314,39 @@ class Database:
             return None
         return await self.users.find_one({"user_id": user_id})
 
+    # Ghost docs get created by migrations / upserts from mirror-leech /
+    # myfiles / force-sub helpers — they only set {user_id, …} and have no
+    # first_name. A "real" user has always gone through ensure_user() which
+    # writes first_name + joined_at. Filter those ghosts out of admin views.
+    _REAL_USER_FILTER = {
+        "first_name": {"$exists": True, "$nin": [None, ""]},
+    }
+
+    def _real_users_filter(self, filter_dict: dict) -> dict:
+        if not filter_dict:
+            return dict(self._REAL_USER_FILTER)
+        return {"$and": [dict(self._REAL_USER_FILTER), dict(filter_dict)]}
+
     async def get_users_paginated(self, filter_dict: dict, skip: int, limit: int, sort_by: str = "joined_at"):
         if self.users is None:
             return []
         sort_order = -1 if sort_by in ["joined_at", "updated_at"] else 1
-        cursor = self.users.find(filter_dict).sort(sort_by, sort_order).skip(skip).limit(limit)
+        cursor = (
+            self.users.find(self._real_users_filter(filter_dict))
+            .sort(sort_by, sort_order)
+            .skip(skip)
+            .limit(limit)
+        )
         return await cursor.to_list(length=limit)
 
     async def count_users(self, filter_dict: dict):
         if self.users is None:
             return 0
-        return await self.users.count_documents(filter_dict)
+        return await self.users.count_documents(self._real_users_filter(filter_dict))
 
     async def search_users(self, query: str, limit: int = 10):
         if self.users is None:
             return []
-        filter_dict = {}
         if query.isdigit():
             filter_dict = {"user_id": int(query)}
         else:
@@ -1336,17 +1356,17 @@ class Database:
                     {"first_name": {"$regex": query, "$options": "i"}},
                 ]
             }
-        cursor = self.users.find(filter_dict).limit(limit)
+        cursor = self.users.find(self._real_users_filter(filter_dict)).limit(limit)
         return await cursor.to_list(length=limit)
 
-    async def add_premium_user(self, user_id: int, days: float, plan: str = "standard"):
+    async def add_premium_user(self, user_id: int, days: float, plan: str = "standard") -> bool:
         if self.users is None:
-            return
+            return False
         now = time.time()
 
         user_doc = await self.get_user(user_id)
         if not user_doc:
-            return
+            return False
 
         current_exp = user_doc.get("premium_expiry", 0)
         current_plan = user_doc.get("premium_plan", "standard")
@@ -1363,6 +1383,7 @@ class Database:
                 "premium_expiry": new_exp
             }}
         )
+        return True
 
     async def reset_user_premium(self, user_id: int):
         if self.users is None:
