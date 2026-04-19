@@ -77,7 +77,7 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
                     "🌐 Public Mode Settings", callback_data="admin_public_settings"
                 ),
                 InlineKeyboardButton(
-                    "🔒 Settings", callback_data="admin_access_limits"
+                    "🔒 Settings & Controls", callback_data="admin_access_limits"
                 ),
             ]
         )
