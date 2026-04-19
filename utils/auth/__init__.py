@@ -10,12 +10,13 @@ that want the canonical submodule path (``utils.auth.auth.is_authorized``)
 can still use it.
 """
 
-from utils.auth.auth import check_force_sub, is_admin, is_authorized
+from utils.auth.auth import auth_filter, check_force_sub, is_admin, is_authorized
 from utils.auth.feature_gate import feature_enabled, feature_many
 from utils.auth.gate import check_and_send_welcome, send_force_sub_gate
 from utils.auth.mode import is_public_mode, non_public_only, public_only
 
 __all__ = [
+    "auth_filter",
     "check_and_send_welcome",
     "check_force_sub",
     "feature_enabled",
