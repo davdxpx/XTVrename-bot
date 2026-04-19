@@ -280,11 +280,14 @@ class Database:
 
     async def get_filename_templates(self, user_id=None):
         settings = await self.get_settings(user_id)
-        raw = (
-            settings.get("filename_templates", Config.DEFAULT_FILENAME_TEMPLATES)
-            if settings
-            else Config.DEFAULT_FILENAME_TEMPLATES
-        )
+        raw = settings.get("filename_templates") if settings else None
+        # Treat `{}` the same as a missing key — otherwise the zero-arg
+        # `dict.get(...)` fallback returns the empty dict instead of the
+        # hard defaults, which makes the admin panel and the processing
+        # pipeline both resolve every field to "" when the stored value
+        # is ever wiped to an empty dict by a legacy write.
+        if not isinstance(raw, dict) or not raw:
+            raw = Config.DEFAULT_FILENAME_TEMPLATES
         return self._normalize_template_keys(raw)
 
     @staticmethod
