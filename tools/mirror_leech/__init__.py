@@ -36,7 +36,6 @@ _safe_import("tools.mirror_leech.downloaders.MediaPlatformDownloader") # cloud h
 _safe_import("tools.mirror_leech.downloaders.GalleryDLDownloader")     # social / galleries
 _safe_import("tools.mirror_leech.downloaders.YTDLPDownloader")         # video extractors
 _safe_import("tools.mirror_leech.downloaders.RSSDownloader")           # feed
-_safe_import("tools.mirror_leech.downloaders.Aria2Downloader")         # multi-connection HTTP
 _safe_import("tools.mirror_leech.downloaders.HTTPDownloader")          # generic fallback
 
 # Uploaders

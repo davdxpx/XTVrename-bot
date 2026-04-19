@@ -1,8 +1,12 @@
 """Guard-rail test: some One-Click hosters (Render / Koyeb / Railway)
-scan the repository for the word `torrent` and ban the app on sight.
+scan the repository for keywords and ban the app on sight — so the
+deploy blows up before the bot ever boots.
 
-The torrent-capable build lives on a separate branch; this branch must
-stay word-clean under tools/, plugins/, utils/, main.py, config.py.
+The extended build lives on a separate branch; this branch must stay
+word-clean under:
+  * Python files inside tools/, plugins/, utils/, main.py, config.py
+  * the dependency manifests Railway actually grep's: requirements.txt,
+    Aptfile, nixpacks.toml
 
 Readme / license / docs are exempt because those files describe
 *absence* of the feature.
@@ -13,13 +17,19 @@ from __future__ import annotations
 import pathlib
 import re
 
-_BANNED = re.compile(r"(?i)\b(torrent|magnet|qbittorrent|qbit)\b")
+_BANNED = re.compile(r"(?i)\b(torrent|magnet|qbittorrent|qbit|aria2|aria2p|aria2c)\b")
 _REPO = pathlib.Path(__file__).resolve().parent.parent
 _SCOPE = ("tools", "plugins", "utils")
-_SINGLE_FILES = ("main.py", "config.py")
+_SINGLE_FILES = (
+    "main.py",
+    "config.py",
+    "requirements.txt",
+    "Aptfile",
+    "nixpacks.toml",
+)
 
 
-def _iter_python_files():
+def _iter_scan_files():
     for bucket in _SCOPE:
         root = _REPO / bucket
         if not root.exists():
@@ -34,7 +44,7 @@ def _iter_python_files():
 
 def test_no_banned_hoster_keywords():
     offenders: list[tuple[str, int, str]] = []
-    for path in _iter_python_files():
+    for path in _iter_scan_files():
         try:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -44,6 +54,6 @@ def test_no_banned_hoster_keywords():
                 offenders.append((str(path.relative_to(_REPO)), lineno, line))
     assert not offenders, (
         "Banned hoster keywords found (move those code paths to the "
-        "separate torrent-edition branch):\n"
+        "separate extended-edition branch):\n"
         + "\n".join(f"  {p}:{ln}: {src}" for p, ln, src in offenders[:25])
     )
