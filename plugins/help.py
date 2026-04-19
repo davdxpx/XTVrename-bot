@@ -35,7 +35,7 @@ from pyrogram.types import (
 )
 
 from config import Config
-from database import db
+from db import db
 from utils.help_builder import (
     CHILD_TO_HUB,
     DISABLED_TOOL_ALERT,

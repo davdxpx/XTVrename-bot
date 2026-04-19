@@ -25,7 +25,7 @@ from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 
 from config import Config
-from database import db
+from db import db
 from plugins.admin.core import admin_sessions, get_admin_main_menu, is_admin
 
 _PUBLIC_PANEL_TEXT = (

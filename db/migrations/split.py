@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import database_schema as schema
+from db import schema
 
 
 @dataclass

@@ -34,7 +34,7 @@ from pyrogram.types import (
 )
 
 from config import Config
-from database import db
+from db import db
 from tools.mirror_leech.UIChrome import format_bytes, progress_block
 from tools.mirror_leech.UIChrome import frame_plain as frame
 from utils.feature_gate import feature_enabled

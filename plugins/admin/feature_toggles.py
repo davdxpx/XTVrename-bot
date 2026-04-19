@@ -33,7 +33,7 @@ from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
-from database import db
+from db import db
 from plugins.admin.core import get_admin_access_limits_menu, is_admin
 from utils.log import get_logger
 

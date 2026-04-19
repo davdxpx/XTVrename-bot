@@ -3,7 +3,7 @@
 import pytest
 from mongomock_motor import AsyncMongoMockClient
 
-from db_migrations.helpers import backup_collection, copy_collection
+from db.migrations.helpers import backup_collection, copy_collection
 
 
 @pytest.fixture

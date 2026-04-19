@@ -12,7 +12,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import BOT_START_TIME, Config
-from database import db
+from db import db
 from utils.log import get_logger
 
 logger = get_logger("plugins.public_cmds")

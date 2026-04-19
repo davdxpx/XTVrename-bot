@@ -29,7 +29,7 @@ _GLOBAL_ONLY_KEYS = frozenset({
 async def feature_enabled(key: str, user_id: int | None = None) -> bool:
     """True iff the named feature is globally on and (optionally) the
     user's plan does not explicitly override it off."""
-    from database import db
+    from db import db
 
     if db is None or db.settings is None:
         return False
@@ -63,7 +63,7 @@ async def feature_enabled(key: str, user_id: int | None = None) -> bool:
 async def feature_many(keys: list[str], user_id: int | None = None) -> dict:
     """Bulk check — returns {key: bool} so a menu render can fetch the
     relevant toggles with one settings round-trip."""
-    from database import db
+    from db import db
 
     if db is None or db.settings is None:
         return {k: False for k in keys}

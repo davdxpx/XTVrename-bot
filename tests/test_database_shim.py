@@ -5,8 +5,8 @@ import logging
 import pytest
 from mongomock_motor import AsyncMongoMockClient
 
-import database_schema as schema
-from database_shim import SettingsCollectionShim
+from db import schema as schema
+from db.shim import SettingsCollectionShim
 
 
 @pytest.fixture

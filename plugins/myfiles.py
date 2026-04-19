@@ -9,7 +9,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config import Config
-from database import db
+from db import db
 from utils.log import get_logger
 
 logger = get_logger("plugins.myfiles")

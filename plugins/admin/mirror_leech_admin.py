@@ -26,7 +26,7 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
 )
 
-from database import db
+from db import db
 from plugins.admin.core import is_admin
 from tools.mirror_leech import Secrets
 from tools.mirror_leech.downloaders import all_downloaders

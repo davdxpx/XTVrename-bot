@@ -6,7 +6,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 from utils.dumb_channel import (
     ValidationResult,
     ValidationStatus,

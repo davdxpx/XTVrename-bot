@@ -12,7 +12,7 @@ logger.info("Loading plugins.start...")
 
 import contextlib
 
-from database import db
+from db import db
 from plugins.force_sub_handler import send_starter_setup_message
 from plugins.user_setup import perform_smart_swap_if_needed, send_user_tool_preferences_setup, track_tool_usage
 from utils.auth import check_force_sub

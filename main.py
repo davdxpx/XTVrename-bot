@@ -125,8 +125,8 @@ if __name__ == "__main__":
     # here must be fatal: booting half-migrated would let the shim route
     # writes into an incomplete layout and silently corrupt state.
     try:
-        from database import db
-        from db_migrations.mediastudio_layout import run_mediastudio_layout_migration
+        from db import db
+        from db.migrations.mediastudio_layout import run_mediastudio_layout_migration
 
         logger.info("Running DB migrations (mediastudio_layout)...")
         app.loop.run_until_complete(
@@ -143,8 +143,8 @@ if __name__ == "__main__":
     # here so a fresh deployment against an already-migrated DB still
     # provisions them on boot.
     try:
-        from database import db
-        from db_migrations.mediastudio_layout import ensure_indexes_v2
+        from db import db
+        from db.migrations.mediastudio_layout import ensure_indexes_v2
 
         logger.info("Ensuring database indexes...")
         app.loop.run_until_complete(ensure_indexes_v2(db.db))
@@ -156,8 +156,8 @@ if __name__ == "__main__":
     # backfills is_deleted/tags/parent_folder_id defaults, and recomputes
     # user quotas. Safe to run on every boot.
     try:
-        from database import db
-        from db_migrations.myfiles_extras_v1 import run_myfiles_extras_v1
+        from db import db
+        from db.migrations.myfiles_extras_v1 import run_myfiles_extras_v1
 
         logger.info("Running DB migration: myfiles_extras_v1 ...")
         app.loop.run_until_complete(run_myfiles_extras_v1(db))
@@ -168,8 +168,8 @@ if __name__ == "__main__":
     # Fixes admin panel showing an empty list of dumb channels while the
     # rename flow still has them: without this, two different docs coexist.
     try:
-        from database import db
-        from db_migrations.consolidate_nonpublic_settings import (
+        from db import db
+        from db.migrations.consolidate_nonpublic_settings import (
             run_consolidate_nonpublic_settings,
         )
 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
     # --- Channel peer caching ---
     try:
-        from database import db
+        from db import db
 
         async def cache_channels():
             links = await db.get_all_dumb_channel_links()
@@ -248,7 +248,7 @@ if __name__ == "__main__":
 
     # --- Background tasks ---
     try:
-        from database import db
+        from db import db
 
         async def db_cleanup():
             while True:
@@ -304,7 +304,7 @@ if __name__ == "__main__":
 
     # --- Recover stale flow sessions from DB ---
     try:
-        from database import db
+        from db import db
 
         async def recover_stale_sessions():
             cursor = db.users.find({"flow_session": {"$exists": True}})
@@ -344,7 +344,7 @@ if __name__ == "__main__":
 
     # --- XTV Pro userbot ---
     try:
-        from database import db
+        from db import db
 
         async def get_userbot_session():
             return await db.get_pro_session()

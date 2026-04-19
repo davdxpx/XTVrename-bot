@@ -5,7 +5,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 
 
 def is_public_mode():

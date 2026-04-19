@@ -9,7 +9,7 @@ from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from config import Config
-from database import db
+from db import db
 from plugins.admin.core import admin_sessions, edit_or_reply
 from utils.log import get_logger
 

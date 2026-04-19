@@ -79,7 +79,7 @@ register_expire_callback(_on_session_expired)
 
 async def _persist_session_to_db(user_id: int):
     """Save critical session data to DB for crash recovery."""
-    from database import db as _db
+    from db import db as _db
     data = get_data(user_id)
     if not data:
         return
@@ -95,7 +95,7 @@ async def _persist_session_to_db(user_id: int):
 
 async def _clear_persisted_session(user_id: int):
     """Clear persisted session from DB."""
-    from database import db as _db
+    from db import db as _db
     await _db.clear_flow_session(user_id)
 
 async def _schedule_expiry_warning(client, user_id: int, delay_seconds: int = 3300):
@@ -1389,7 +1389,7 @@ import random
 import time
 import uuid
 
-from database import db
+from db import db
 from utils.archive import check_password_protected, extract_archive, is_archive
 from utils.auth import check_force_sub
 from utils.gate import check_and_send_welcome, send_force_sub_gate

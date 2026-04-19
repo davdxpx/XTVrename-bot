@@ -184,7 +184,7 @@ async def restore_youtube_cookies_from_db() -> bool:
         # Disk file already exists — prefer it over DB to allow manual override.
         return False
     try:
-        from database import db
+        from db import db
         record = await db.get_youtube_cookies()
     except Exception as e:
         logger.warning(f"restore_youtube_cookies_from_db: DB lookup failed: {e}")
@@ -210,7 +210,7 @@ async def restore_youtube_cookies_from_db() -> bool:
 async def persist_youtube_cookies_to_db(cookies_text: str, uploaded_by: int | None = None) -> bool:
     """Save the cookies text to MongoDB so it survives container redeploys."""
     try:
-        from database import db
+        from db import db
         return await db.save_youtube_cookies(cookies_text, uploaded_by=uploaded_by)
     except Exception as e:
         logger.warning(f"persist_youtube_cookies_to_db failed: {e}")
@@ -229,7 +229,7 @@ async def delete_youtube_cookies() -> tuple[bool, bool]:
             logger.warning(f"delete_youtube_cookies: disk remove failed: {e}")
     db_removed = False
     try:
-        from database import db
+        from db import db
         db_removed = await db.delete_youtube_cookies()
     except Exception as e:
         logger.warning(f"delete_youtube_cookies: DB delete failed: {e}")
@@ -456,7 +456,7 @@ async def get_user_max_filesize(user_id: int) -> int:
     try:
         if not Config.PUBLIC_MODE:
             return MAX_SIZE_STANDARD
-        from database import db
+        from db import db
         user_doc = await db.get_user(user_id)
         if not user_doc or not user_doc.get("is_premium"):
             return MAX_SIZE_STANDARD
@@ -1781,7 +1781,7 @@ async def handle_yt_auto_detect(client, message):
 
     # Gate on feature toggles / premium access, same as the /yt shortcut.
     try:
-        from database import db
+        from db import db
         toggles = await db.get_feature_toggles()
         allowed = toggles.get("youtube_tool", True)
         if Config.PUBLIC_MODE and not allowed:
@@ -1912,7 +1912,7 @@ async def handle_ytcookies_cmd(client, message):
     has_disk = _get_cookies_file() is not None
     db_record = None
     try:
-        from database import db
+        from db import db
         db_record = await db.get_youtube_cookies()
     except Exception as e:
         logger.warning(f"handle_ytcookies_cmd: DB lookup failed: {e}")

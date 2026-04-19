@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import time
 
-import database_schema as schema
-from db_migrations.helpers import backup_collection, collection_exists, copy_collection
-from db_migrations.split import split_user_settings_doc
+from db import schema
+from db.migrations.helpers import backup_collection, collection_exists, copy_collection
+from db.migrations.split import split_user_settings_doc
 from utils.log import get_logger
 
-logger = get_logger("db_migrations.mediastudio_layout")
+logger = get_logger("db.migrations.mediastudio_layout")
 
 MIGRATION_ID = "mediastudio_layout"
 _LOCK_TTL_SECONDS = 30 * 60  # 30 minutes

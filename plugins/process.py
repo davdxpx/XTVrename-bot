@@ -18,7 +18,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import Message
 
 from config import Config
-from database import db
+from db import db
 from utils.detect import apply_autofill, probe_audio_streams
 from utils.ffmpeg_tools import execute_ffmpeg, generate_ffmpeg_command, probe_file
 from utils.progress import progress_for_pyrogram

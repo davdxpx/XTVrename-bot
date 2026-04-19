@@ -26,7 +26,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 from utils.log import get_logger
 

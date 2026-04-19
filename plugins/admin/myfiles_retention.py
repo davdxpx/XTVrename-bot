@@ -26,7 +26,7 @@ from pyrogram.types import (
     Message,
 )
 
-from database import db
+from db import db
 from utils.auth import is_admin
 from utils.log import get_logger
 

@@ -6,9 +6,9 @@ import time
 import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 
-import database_schema as _schema
 from config import Config
-from database_shim import SettingsCollectionShim
+from db import schema as _schema
+from db.shim import SettingsCollectionShim
 from utils.log import get_logger
 
 logger = get_logger("database")

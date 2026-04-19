@@ -12,7 +12,7 @@ from typing import Any
 
 from utils.log import get_logger
 
-logger = get_logger("db_migrations.helpers")
+logger = get_logger("db.migrations.helpers")
 
 _COPY_BATCH_SIZE = 500
 

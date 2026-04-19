@@ -21,7 +21,7 @@ import contextlib
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 from utils.log import get_logger
 
 logger = get_logger("plugins.admin.core")

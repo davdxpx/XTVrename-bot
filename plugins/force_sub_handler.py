@@ -4,7 +4,7 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 from plugins.admin import admin_sessions, is_admin
 from utils.log import get_logger
 from utils.state import get_data, update_data

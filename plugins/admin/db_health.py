@@ -30,8 +30,8 @@ from pyrogram.types import (
 )
 
 from config import Config
-from database import db
-from db_migrations.mediastudio_layout import (
+from db import db
+from db.migrations.mediastudio_layout import (
     MIGRATION_ID,
     run_mediastudio_layout_migration,
 )

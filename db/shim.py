@@ -25,7 +25,7 @@ import collections
 import time
 from typing import Any
 
-import database_schema as schema
+from db import schema
 from utils.log import get_logger
 
 logger = get_logger("database.shim")

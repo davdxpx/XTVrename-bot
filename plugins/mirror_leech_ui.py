@@ -187,7 +187,7 @@ async def ml_toggle_uploader(client: Client, callback_query: CallbackQuery) -> N
 
 
 async def _feature_enabled() -> bool:
-    from database import db
+    from db import db
 
     toggles = await db.get_setting("feature_toggles", {}) if db else {}
     if isinstance(toggles, dict):
@@ -935,7 +935,7 @@ async def _tg_ref_for_myfile(file_id: str) -> str | None:
     TelegramDownloader understands. Returns None when the file is gone."""
     from bson import ObjectId  # type: ignore
 
-    from database import db
+    from db import db
 
     try:
         record = await db.files.find_one({"_id": ObjectId(file_id)})
@@ -990,7 +990,7 @@ async def ml_opt_multi(client: Client, callback_query: CallbackQuery) -> None:
         await callback_query.answer("Mirror-Leech is disabled.", show_alert=True)
         return
 
-    from database import db
+    from db import db
 
     user_id = callback_query.from_user.id
     user = await db.users.find_one({"user_id": user_id})
