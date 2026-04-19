@@ -1,3 +1,15 @@
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# --------------------------------------------------------------------------
+"""plugins.public_cmds.handlers — /info, /settings, user_settings_callback.
+
+Mode: BOTH (public + non-public). ``/info`` is PUBLIC-ONLY and gates
+itself via ``is_public_mode()``. ``/settings`` and the callback router
+serve both modes; mode-specific sub-menus are gated inside each branch
+(Mirror-Leech credentials for example only appear in non-public mode).
+"""
+
 # --- Imports ---
 import datetime
 import io

@@ -8,6 +8,10 @@
 # --------------------------------------------------------------------------
 """`/help` command + every `help_*` callback page.
 
+Mode: BOTH (public + non-public). Per-mode content is rendered via
+``HelpContext`` from ``builder.py`` — there is no mode gate on the
+handler itself.
+
 Previously lived inside plugins/start.py (~1600 lines at the tail of
 the file). Consolidated into a single module so the help system can
 evolve without touching the start-command plugin.
