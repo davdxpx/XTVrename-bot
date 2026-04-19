@@ -179,7 +179,7 @@ async def _render_top_users(
 
     user_buttons: list[InlineKeyboardButton] = []
     if not users:
-        lines.append("_No usage tracked for this day._")
+        lines.append("__No usage tracked for this day.__")
     else:
         for i, user in enumerate(users):
             rank = skip + i + 1
@@ -299,7 +299,7 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
     day_buttons: list[InlineKeyboardButton] = []
 
     if not daily_stats:
-        lines.append("_No history available yet._")
+        lines.append("__No history available yet.__")
     else:
         ordered = sorted(daily_stats, key=lambda s: s["date"])
         peak_mb = max((float(s.get("egress_mb") or 0) for s in ordered), default=0.0)

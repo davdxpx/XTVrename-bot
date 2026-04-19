@@ -113,12 +113,12 @@ async def list_users(client, callback):
         "",
     ]
     if total > 0:
-        text_lines.append(f"_Total {noun}: `{total}`_")
+        text_lines.append(f"__Total {noun}: `{total}`__")
         text_lines.append("")
 
     markup = []
     if not users:
-        text_lines.append("_No users found._")
+        text_lines.append("__No users found.__")
     else:
         text_lines.append("> Tap a row to view profile.")
         for u in users:
