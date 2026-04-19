@@ -331,7 +331,7 @@ async def templates_cb(client, callback_query: CallbackQuery):
             stored_line = (
                 f"Current: `{current_val}`"
                 if current_val
-                else f"Current: _not set — using default_ `{default_val}`"
+                else f"Current: __not set — using default__ `{default_val}`"
             )
             await callback_query.message.edit_text(
                 f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
