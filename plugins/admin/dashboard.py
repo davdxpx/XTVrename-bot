@@ -30,7 +30,6 @@ from config import Config
 from db import db
 from utils.telegram.logger import debug
 
-
 SEPARATOR = "━━━━━━━━━━━━━━━━━━━━"
 
 

@@ -29,7 +29,6 @@ from config import Config
 from db import db
 from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
 
-
 SEPARATOR = "━━━━━━━━━━━━━━━━━━━━"
 
 
