@@ -19,11 +19,16 @@ logger = get_logger("plugins.admin.users")
 def is_admin(user_id):
     return user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS
 
+SEPARATOR = "━━━━━━━━━━━━━━━━━━━━"
+
+
 async def show_users_menu(client, update):
     text = (
-        "**👤 Global User Management**\n\n"
+        "**👤 Global User Management**\n"
+        f"{SEPARATOR}\n\n"
         "Manage all users across the network.\n"
-        "Search, filter, ban, and view detailed profiles."
+        "Search, filter, ban, and view detailed profiles.\n\n"
+        "> Tip: use 🔍 Search to find by name, username or numeric ID."
     )
 
     buttons = [
@@ -90,12 +95,32 @@ async def list_users(client, callback):
     users = await db.get_users_paginated(filter_dict, skip, limit, sort_by)
     total = await db.count_users(filter_dict)
 
-    text = f"**👤 User List ({mode.title()})**\nPage {page + 1} (Total: {total})\n\n"
+    mode_meta = {
+        "all":     ("👥 All Users",   "users"),
+        "banned":  ("🚫 Banned",      "users"),
+        "premium": ("💎 Premium",     "users"),
+        "recent":  ("🕒 Recent",      "users"),
+    }
+    title, noun = mode_meta.get(mode, ("👤 Users", "users"))
+    total_pages = max(1, (total + limit - 1) // limit) if total else 1
+    header_suffix = (
+        f"Page {page + 1}/{total_pages}" if total > 0 else f"0 {noun}"
+    )
+
+    text_lines = [
+        f"**{title} — {header_suffix}**",
+        SEPARATOR,
+        "",
+    ]
+    if total > 0:
+        text_lines.append(f"_Total {noun}: `{total}`_")
+        text_lines.append("")
 
     markup = []
     if not users:
-        text += "No users found."
+        text_lines.append("_No users found._")
     else:
+        text_lines.append("> Tap a row to view profile.")
         for u in users:
             uid = u.get("user_id")
             name = u.get("first_name") or "Unknown"
@@ -103,21 +128,22 @@ async def list_users(client, callback):
             uname = f"(@{u.get('username')})" if u.get("username") else ""
             status = "🚫" if u.get("banned") else ("💎" if u.get("is_premium") else "👤")
 
-            label = f"{status} {name} {uname}"
+            label = f"{status} {name} {uname}".rstrip()
             markup.append([InlineKeyboardButton(label, callback_data=f"view_user|{uid}")])
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"list_users|{mode}|{page-1}"))
+        nav.append(InlineKeyboardButton("‹ Prev", callback_data=f"list_users|{mode}|{page-1}"))
+    nav.append(InlineKeyboardButton(f"Page {page + 1}/{total_pages}", callback_data="noop"))
     if (skip + limit) < total:
-        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"list_users|{mode}|{page+1}"))
+        nav.append(InlineKeyboardButton("Next ›", callback_data=f"list_users|{mode}|{page+1}"))
 
-    if nav:
+    if len(nav) > 1:
         markup.append(nav)
 
     markup.append([InlineKeyboardButton("← Back to User Management", callback_data="admin_users_menu")])
 
-    await callback.edit_message_text(text, reply_markup=InlineKeyboardMarkup(markup))
+    await callback.edit_message_text("\n".join(text_lines), reply_markup=InlineKeyboardMarkup(markup))
 
 @Client.on_callback_query(filters.regex(r"^admin_user_search_start$"))
 async def start_user_search(client, callback):
@@ -126,9 +152,13 @@ async def start_user_search(client, callback):
     admin_sessions[callback.from_user.id] = "wait_search_query"
     with contextlib.suppress(Exception):
         await callback.message.edit_text(
-            "**🔍 User Search**\n\n"
-            "Send the **User ID**, **Username**, or **First Name** to search.\n"
-            "(Supports partial match for names)",
+            "**🔍 Find User**\n"
+            f"{SEPARATOR}\n\n"
+            "Send one of the following as plain text:\n\n"
+            "• `@username` or just `username`\n"
+            "• Full or partial first/last name\n"
+            "• Numeric Telegram ID\n\n"
+            "> Results are paginated. Tap any row to open the profile.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_users_menu")]])
         )
 
@@ -180,17 +210,21 @@ async def view_user_profile(client, callback):
     files_today = usage.get("file_count", 0) if usage.get("date") == current_utc_date else 0
     files_alltime = usage.get("file_count_alltime", 0)
 
+    name_display = user.get("first_name") or "Unknown"
     text = (
-        f"**👤 User Profile: {target_id}**\n\n"
-        f"📛 **Name:** {user.get('first_name') or 'Unknown'}\n"
-        f"🔗 **Username:** {username}\n"
-        f"📅 **Joined:** {joined_date}\n"
-        f"⏱ **Last Active:** {last_active}\n"
-        f"📊 **Status:** {status_emoji}\n"
-        f"💎 **Plan:** {prem_status}\n\n"
-        f"📈 **Stats:**\n"
-        f"• Files Today: `{files_today}`\n"
-        f"• Files All-Time: `{files_alltime}`\n"
+        f"**👤 User Profile**\n"
+        f"{SEPARATOR}\n\n"
+        f"<blockquote>"
+        f"🆔 ID: `{target_id}`\n"
+        f"📛 Name: `{name_display}`\n"
+        f"🔗 Username: `{username}`\n"
+        f"📅 Joined: `{joined_date}`\n"
+        f"⏱ Last active: `{last_active}`\n"
+        f"📊 Status: {status_emoji}\n"
+        f"💎 Plan: {prem_status}\n"
+        f"📈 Files today: `{files_today}` · all-time: `{files_alltime}`"
+        f"</blockquote>\n\n"
+        f"> Choose an action below."
     )
 
     markup = []
