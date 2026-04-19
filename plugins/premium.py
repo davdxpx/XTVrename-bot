@@ -11,7 +11,7 @@ from db import db
 def is_public_mode():
     return Config.PUBLIC_MODE
 from utils.currency import convert_to_usd_str
-from utils.help_builder import format_egress
+from plugins.help.builder import format_egress
 
 
 def get_features_display(settings, global_toggles):

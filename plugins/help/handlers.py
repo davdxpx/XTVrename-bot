@@ -36,7 +36,7 @@ from pyrogram.types import (
 
 from config import Config
 from db import db
-from utils.help_builder import (
+from plugins.help.builder import (
     CHILD_TO_HUB,
     DISABLED_TOOL_ALERT,
     PREMIUM_SUB_BUILDERS,
@@ -55,7 +55,7 @@ from utils.help_builder import (
 from utils.log import get_logger
 from utils.logger import debug
 
-logger = get_logger("plugins.help")
+logger = get_logger("plugins.help.handlers")
 
 
 # --- /help command ---------------------------------------------------------
