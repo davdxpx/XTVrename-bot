@@ -213,6 +213,10 @@ async def view_user_profile(client, callback):
             ])
 
     markup.append([
+        InlineKeyboardButton("🗑️ Reset Today's Quota", callback_data=f"act_reset_quota|{target_id}")
+    ])
+
+    markup.append([
         InlineKeyboardButton("🗑 Delete Data", callback_data=f"act_del_data_ask|{target_id}"),
         InlineKeyboardButton("📄 Export JSON", callback_data=f"act_export_json|{target_id}")
     ])
@@ -222,6 +226,21 @@ async def view_user_profile(client, callback):
     ])
 
     await callback.edit_message_text(text, reply_markup=InlineKeyboardMarkup(markup))
+
+
+@Client.on_callback_query(filters.regex(r"^act_reset_quota\|"))
+async def action_reset_quota(client, callback):
+    if not is_admin(callback.from_user.id):
+        return
+    try:
+        uid = int(callback.data.split("|")[1])
+    except Exception:
+        await callback.answer("Invalid User ID", show_alert=True)
+        return
+    await db.reset_user_quota(uid)
+    await db.add_log("reset_quota", callback.from_user.id, f"Reset today's quota for {uid}")
+    await callback.answer(f"✅ Today's quota reset for {uid}.", show_alert=True)
+    await view_user_profile(client, callback)
 
 @Client.on_callback_query(filters.regex(r"^act_ban\|"))
 async def action_ban_user(client, callback):

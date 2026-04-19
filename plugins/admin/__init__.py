@@ -53,7 +53,6 @@ from . import (
     thumbnails,  # noqa: F401
     tmdb_status,  # noqa: F401
     users,  # noqa: F401
-    users_mod,  # noqa: F401
 )
 
 __all__ = [
