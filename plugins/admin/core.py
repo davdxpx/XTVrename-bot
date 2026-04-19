@@ -97,7 +97,8 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
                     "📺 Dumb Channels", callback_data="admin_dumb_channels"
                 ),
                 InlineKeyboardButton(
-                    "⏱ Edit Dumb Channel Timeout", callback_data="admin_dumb_timeout"
+                    "📺 Dumb Channel Settings",
+                    callback_data="admin_dumb_user_defaults",
                 ),
             ]
         )
