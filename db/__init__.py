@@ -18,7 +18,8 @@ __all__ = ["Database", "db", "SettingsCollectionShim", "schema"]
 
 def __getattr__(name):
     if name in ("db", "Database"):
-        from db.core import Database as _Database, db as _db
+        from db.core import Database as _Database
+        from db.core import db as _db
 
         globals()["db"] = _db
         globals()["Database"] = _Database

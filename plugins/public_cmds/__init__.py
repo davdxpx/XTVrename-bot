@@ -15,7 +15,9 @@ their handlers.
 
 from plugins.public_cmds.handlers import is_public_mode
 
-from . import handlers  # noqa: F401  (registers @Client handlers)
-from . import usage     # noqa: F401  (registers @Client handlers)
+from . import (
+    handlers,  # noqa: F401  (registers @Client handlers)
+    usage,  # noqa: F401  (registers @Client handlers)
+)
 
 __all__ = ["is_public_mode"]

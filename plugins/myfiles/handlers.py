@@ -22,8 +22,6 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from config import Config
 from db import db
-from utils.telegram.log import get_logger
-
 from plugins.myfiles.core import (
     _debounce_mf,
     build_files_list_keyboard,
@@ -33,6 +31,7 @@ from plugins.myfiles.core import (
     safe_edit_or_send,
     set_myfiles_state,
 )
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.myfiles.handlers")
 

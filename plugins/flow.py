@@ -16,9 +16,9 @@ from plugins.user_setup import track_tool_usage
 from tools.AudioMetadataEditor import render_audio_menu
 from utils.auth import auth_filter
 from utils.media.detect import analyze_filename, auto_match_tmdb, template_key_for
-from utils.telegram.log import get_logger
 from utils.state import clear_session, get_data, get_state, mark_for_db_persist, set_state, update_data
 from utils.tasks import spawn as _spawn_task
+from utils.telegram.log import get_logger
 from utils.tmdb import tmdb
 
 logger = get_logger("plugins.flow")
@@ -1390,11 +1390,11 @@ import time
 import uuid
 
 from db import db
-from utils.media.archive import check_password_protected, extract_archive, is_archive
 from utils.auth import check_force_sub
 from utils.auth.gate import check_and_send_welcome, send_force_sub_gate
-from utils.telegram.progress import progress_for_pyrogram
+from utils.media.archive import check_password_protected, extract_archive, is_archive
 from utils.queue_manager import queue_manager
+from utils.telegram.progress import progress_for_pyrogram
 
 
 @Client.on_message(

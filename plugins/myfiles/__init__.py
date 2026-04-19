@@ -23,8 +23,10 @@ from plugins.myfiles.core import (
     set_myfiles_state,
 )
 
-from . import handlers  # noqa: F401  (registers @Client handlers)
-from . import extras    # noqa: F401  (registers @Client handlers)
+from . import (
+    extras,  # noqa: F401  (registers @Client handlers)
+    handlers,  # noqa: F401  (registers @Client handlers)
+)
 
 __all__ = [
     "build_files_list_keyboard",

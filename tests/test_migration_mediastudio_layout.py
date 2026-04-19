@@ -4,8 +4,8 @@ import pytest
 from mongomock_motor import AsyncMongoMockClient
 
 from db import schema as schema
-from db.shim import SettingsCollectionShim
 from db.migrations.mediastudio_layout import run_mediastudio_layout_migration
+from db.shim import SettingsCollectionShim
 
 
 @pytest.fixture
