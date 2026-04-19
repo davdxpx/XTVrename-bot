@@ -37,7 +37,7 @@ logger = get_logger("plugins.admin.mirror_leech")
 
 
 async def _feature_enabled() -> bool:
-    toggles = await db.get_setting("feature_toggles", {}) or {}
+    toggles = await db.get_feature_toggles() or {}
     return bool(toggles.get("mirror_leech", False))
 
 
@@ -256,11 +256,7 @@ async def ml_admin_toggle(client: Client, callback_query: CallbackQuery) -> None
         )
         return
 
-    toggles = await db.get_setting("feature_toggles", {}) or {}
-    if not isinstance(toggles, dict):
-        toggles = {}
-    toggles["mirror_leech"] = not current
-    await db.update_setting("feature_toggles", toggles)
+    await db.update_feature_toggle("mirror_leech", not current)
     await callback_query.answer(
         "Enabled." if not current else "Disabled."
     )

@@ -1359,14 +1359,14 @@ class Database:
         cursor = self.users.find(self._real_users_filter(filter_dict)).limit(limit)
         return await cursor.to_list(length=limit)
 
-    async def add_premium_user(self, user_id: int, days: float, plan: str = "standard"):
+    async def add_premium_user(self, user_id: int, days: float, plan: str = "standard") -> bool:
         if self.users is None:
-            return
+            return False
         now = time.time()
 
         user_doc = await self.get_user(user_id)
         if not user_doc:
-            return
+            return False
 
         current_exp = user_doc.get("premium_expiry", 0)
         current_plan = user_doc.get("premium_plan", "standard")
@@ -1383,6 +1383,7 @@ class Database:
                 "premium_expiry": new_exp
             }}
         )
+        return True
 
     async def reset_user_premium(self, user_id: int):
         if self.users is None:

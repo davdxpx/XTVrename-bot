@@ -33,24 +33,25 @@ from plugins.admin.core import (
 from . import (
     broadcast,  # noqa: F401
     dashboard,  # noqa: F401
-    db_health,  # noqa: F401  (torrent-edition only)
+    db_health,  # noqa: F401
     dumb_channels,  # noqa: F401
     feature_toggles,  # noqa: F401
     force_sub,  # noqa: F401
     general,  # noqa: F401
-    mirror_leech_admin,  # noqa: F401  (torrent-edition only)
+    mirror_leech_admin,  # noqa: F401
     myfiles,  # noqa: F401
+    myfiles_retention,  # noqa: F401
     noop,  # noqa: F401
     panel,  # noqa: F401
     payments,  # noqa: F401
     premium,  # noqa: F401
     public_settings,  # noqa: F401
     setup,  # noqa: F401
-    system_health,  # noqa: F401  (torrent-edition only)
+    system_health,  # noqa: F401
     templates,  # noqa: F401
     text_dispatcher,  # noqa: F401
     thumbnails,  # noqa: F401
-    tmdb_status,  # noqa: F401  (torrent-edition only)
+    tmdb_status,  # noqa: F401
     torrent_bridge,  # noqa: F401  (torrent-edition only)
     users,  # noqa: F401
     users_mod,  # noqa: F401

@@ -10,7 +10,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 
 from config import Config
 from database import db
-from plugins.admin.core import admin_sessions
+from plugins.admin.core import admin_sessions, edit_or_reply
 from utils.log import get_logger
 
 logger = get_logger("plugins.admin.users")
@@ -258,27 +258,51 @@ async def action_reset_prem(client, callback):
 
 @Client.on_callback_query(filters.regex(r"^act_add_prem_ask(_standard|_deluxe)?\|"))
 async def action_add_prem_ask(client, callback):
-    data = callback.data.split("|")[0]
-    uid = int(callback.data.split("|")[1])
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Not authorised.", show_alert=True)
+        return
 
-    plan = "standard"
+    data = callback.data.split("|")[0]
+    try:
+        uid = int(callback.data.split("|")[1])
+    except (ValueError, IndexError):
+        await callback.answer("Invalid target.", show_alert=True)
+        return
+
+    # Guard against targeting a user that isn't in the DB yet — the DB-level
+    # add_premium_user() silently no-ops on missing docs, which manifests as
+    # "bot doesn't react" after the admin types the duration.
+    target_doc = await db.get_user(uid)
+    if not target_doc:
+        await callback.answer(
+            "User not found in DB. Ask them to /start the bot first.",
+            show_alert=True,
+        )
+        return
+
     if data.endswith("_standard"):
         plan = "standard"
     elif data.endswith("_deluxe"):
         plan = "deluxe"
     else:
-        user = await db.get_user(uid)
-        plan = user.get("premium_plan", "standard") if user else "standard"
+        plan = target_doc.get("premium_plan", "standard") or "standard"
 
-    admin_sessions[callback.from_user.id] = {"state": "wait_add_prem_days", "target_id": uid, "plan": plan}
+    admin_sessions[callback.from_user.id] = {
+        "state": "wait_add_prem_days",
+        "target_id": uid,
+        "plan": plan,
+        "msg_id": callback.message.id,
+    }
 
     with contextlib.suppress(Exception):
         await callback.message.edit_text(
             f"**➕ Add Premium ({plan.capitalize()}) for User {uid}**\n\n"
             "Enter the duration in **DAYS** (e.g. `30`).\n"
-            "__Fractional values like `7.5` are accepted; negatives are rejected.__",
+            "_Fractional values like `7.5` are accepted; negatives are rejected._",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{uid}")]])
         )
+    with contextlib.suppress(Exception):
+        await callback.answer()
 
 @Client.on_callback_query(filters.regex(r"^act_del_data_ask\|"))
 async def action_del_data_ask(client, callback):
@@ -370,24 +394,91 @@ async def _handle_search_query(client, message, state, state_obj, msg_id):
 
 
 async def _handle_add_prem_days(client, message, state, state_obj, msg_id):
-    """Handle wait_add_prem_days dict state."""
-    user_id = message.from_user.id
-    try:
-        days = float(message.text.strip())
-        uid = state_obj["target_id"]
-        plan = state_obj.get("plan", "standard")
-        await db.add_premium_user(uid, days, plan=plan)
-        await db.add_log("add_premium", user_id, f"Added {days} days premium ({plan}) to {uid}")
+    """Handle wait_add_prem_days dict state.
 
-        await message.reply(
-            f"✅ **Success!**\nUser `{uid}` has received {days} days of Premium ({plan}).",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("← Back to Profile", callback_data=f"view_user|{uid}")]])
+    Mirrors the premium-extend / awaiting_premium_* flow: parses the value,
+    validates it, runs the DB op, edits the original anchor prompt with the
+    result, and always clears the admin session so a follow-up chat message
+    doesn't get misrouted to this handler.
+    """
+    user_id = message.from_user.id
+    uid = state_obj.get("target_id")
+    plan = state_obj.get("plan", "standard")
+    raw = (message.text or "").strip().replace(",", ".")
+
+    cancel_markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{uid}")]]
+    )
+
+    try:
+        days = float(raw)
+    except ValueError:
+        await edit_or_reply(
+            client, message, msg_id,
+            "❌ Invalid number. Enter days (e.g. `30` or `7.5`).",
+            reply_markup=cancel_markup,
+        )
+        return  # keep session open so they can retry
+
+    if days <= 0:
+        await edit_or_reply(
+            client, message, msg_id,
+            "❌ Duration must be greater than zero. Enter days (e.g. `30`).",
+            reply_markup=cancel_markup,
+        )
+        return
+
+    # Cap at ~100 years to catch fat-finger input that would otherwise push
+    # premium_expiry so far into the future it overflows time_t math on
+    # hosts with 32-bit time.
+    if days > 36500:
+        await edit_or_reply(
+            client, message, msg_id,
+            "❌ Duration too large. Use up to `36500` days.",
+            reply_markup=cancel_markup,
+        )
+        return
+
+    ok = False
+    try:
+        ok = bool(await db.add_premium_user(uid, days, plan=plan))
+    except Exception as exc:
+        logger.exception("add_premium_user failed for uid=%s plan=%s", uid, plan)
+        await edit_or_reply(
+            client, message, msg_id,
+            f"❌ Database error while granting premium: `{exc}`",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back to Profile", callback_data=f"view_user|{uid}")]]
+            ),
         )
         admin_sessions.pop(user_id, None)
-    except ValueError:
-        await message.reply("❌ Invalid number. Enter days (e.g. 30).",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{state_obj['target_id']}")]])
+        return
+
+    if not ok:
+        await edit_or_reply(
+            client, message, msg_id,
+            f"❌ User `{uid}` not found in DB. Ask them to /start the bot, "
+            "then try again.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back to Profile", callback_data=f"view_user|{uid}")]]
+            ),
         )
+        admin_sessions.pop(user_id, None)
+        return
+
+    with contextlib.suppress(Exception):
+        await db.add_log(
+            "add_premium", user_id, f"Added {days} days premium ({plan}) to {uid}"
+        )
+
+    await edit_or_reply(
+        client, message, msg_id,
+        f"✅ **Success!**\nUser `{uid}` has received `{days}` days of Premium ({plan}).",
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("← Back to Profile", callback_data=f"view_user|{uid}")]]
+        ),
+    )
+    admin_sessions.pop(user_id, None)
 
 
 def _check_add_prem_days(state, state_obj):
