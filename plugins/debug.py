@@ -1,10 +1,12 @@
 # --- Imports ---
 from pyrogram import Client, filters
+
 from utils.log import get_logger
 
 logger = get_logger("plugins.debug")
 
 from pyrogram import ContinuePropagation
+
 
 @Client.on_message(filters.all, group=-1)
 

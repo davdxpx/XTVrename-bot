@@ -1,12 +1,15 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
-from plugins.user_setup import track_tool_usage
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from utils.state import set_state, get_state, get_data, update_data, clear_session
-from utils.log import get_logger
 import asyncio
+import contextlib
+
+from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from plugins.user_setup import track_tool_usage
 from utils.ffmpeg_tools import execute_ffmpeg
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state, update_data
 
 logger = get_logger("tools.VideoTrimmer")
 
@@ -19,7 +22,7 @@ async def handle_video_trimmer_menu(client, callback_query):
     clear_session(user_id)
     set_state(user_id, "awaiting_trim_file")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "✂️ **Video Trimmer**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -30,8 +33,6 @@ async def handle_video_trimmer_menu(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 # === Functions ===
 async def trim(input_path: str, output_dir: str, safe_title: str, start_time: str, end_time: str, progress_callback=None) -> tuple[bool, bytes, str, str]:

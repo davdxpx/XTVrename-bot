@@ -1,14 +1,17 @@
 # --- Imports ---
-import json
+import contextlib
 import io
+import json
 import time
 from datetime import datetime
+
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+
 from config import Config
 from database import db
-from utils.log import get_logger
 from plugins.admin.core import admin_sessions
+from utils.log import get_logger
 
 logger = get_logger("plugins.admin.users")
 
@@ -61,7 +64,8 @@ async def admin_users_menu(client, callback):
 @Client.on_callback_query(filters.regex(r"^list_users\|"))
 async def list_users(client, callback):
 
-    if not is_admin(callback.from_user.id): return
+    if not is_admin(callback.from_user.id):
+        return
 
     try:
         _, mode, page = callback.data.split("|")
@@ -108,7 +112,8 @@ async def list_users(client, callback):
     if (skip + limit) < total:
         nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"list_users|{mode}|{page+1}"))
 
-    if nav: markup.append(nav)
+    if nav:
+        markup.append(nav)
 
     markup.append([InlineKeyboardButton("← Back to User Management", callback_data="admin_users_menu")])
 
@@ -116,21 +121,21 @@ async def list_users(client, callback):
 
 @Client.on_callback_query(filters.regex(r"^admin_user_search_start$"))
 async def start_user_search(client, callback):
-    if not is_admin(callback.from_user.id): return
+    if not is_admin(callback.from_user.id):
+        return
     admin_sessions[callback.from_user.id] = "wait_search_query"
-    try:
+    with contextlib.suppress(Exception):
         await callback.message.edit_text(
             "**🔍 User Search**\n\n"
             "Send the **User ID**, **Username**, or **First Name** to search.\n"
             "(Supports partial match for names)",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="admin_users_menu")]])
         )
-    except Exception:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^view_user\|"))
 async def view_user_profile(client, callback):
-    if not is_admin(callback.from_user.id): return
+    if not is_admin(callback.from_user.id):
+        return
 
     try:
         target_id = int(callback.data.split("|")[1])
@@ -267,13 +272,11 @@ async def action_add_prem_ask(client, callback):
 
     admin_sessions[callback.from_user.id] = {"state": "wait_add_prem_days", "target_id": uid, "plan": plan}
 
-    try:
+    with contextlib.suppress(Exception):
         await callback.message.edit_text(
             f"**➕ Add Premium ({plan.capitalize()}) for User {uid}**\n\nEnter the duration in **DAYS** (e.g. `30`):",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{uid}")]])
         )
-    except Exception:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^act_del_data_ask\|"))
 async def action_del_data_ask(client, callback):
@@ -390,6 +393,7 @@ def _check_add_prem_days(state, state_obj):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("wait_search_query", _handle_search_query)
 _register(_check_add_prem_days, _handle_add_prem_days)
 

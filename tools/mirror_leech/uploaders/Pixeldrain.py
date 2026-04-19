@@ -8,11 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utils.log import get_logger
-
-from tools.mirror_leech.uploaders import Uploader, register_uploader
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
+from tools.mirror_leech.uploaders import Uploader, register_uploader
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.pixeldrain")
 
@@ -31,16 +30,18 @@ class PixeldrainUploader(Uploader):
     async def test_connection(self, user_id: int) -> tuple[bool, str]:
         import aiohttp
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{PIXELDRAIN_API}/misc/viewer") as resp:
-                    resp.raise_for_status()
+            async with aiohttp.ClientSession() as session, session.get(
+                f"{PIXELDRAIN_API}/misc/viewer"
+            ) as resp:
+                resp.raise_for_status()
             return True, "Pixeldrain API reachable"
         except Exception as exc:
             return False, f"Pixeldrain unreachable: {exc}"
 
     async def upload(self, ctx: MLContext, local_path: Path) -> UploadResult:
-        import aiohttp
         from base64 import b64encode
+
+        import aiohttp
 
         ctx.status("uploading")
         api_key = await Accounts.get_secret(ctx.user_id, self.id, "api_key")

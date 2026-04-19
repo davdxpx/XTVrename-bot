@@ -24,6 +24,8 @@ Layout:
 
 from __future__ import annotations
 
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import (
@@ -108,30 +110,24 @@ async def handle_help_callbacks(client, callback_query):
 
     if data == "help_guide":
         text, markup = build_main_menu(ctx)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=markup)
-        except MessageNotModified:
-            pass
 
     elif data in PREMIUM_SUB_BUILDERS:
         builder = PREMIUM_SUB_BUILDERS[data]
         text, markup = builder(ctx)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
-        except MessageNotModified:
-            pass
 
     elif data in CHILD_TO_HUB:
         result = build_tool_child(data)
         if result is not None:
             text, markup = result
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
-            except MessageNotModified:
-                pass
 
     elif data == "help_dumb_channels":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**📺 Dumb Channels Guide**\n\n"
                 "> Automate your forwarded files.\n"
@@ -145,11 +141,9 @@ async def handle_help_callbacks(client, callback_query):
                 "You can specify a channel to automatically receive Movies, Series, or Everything (Standard). Once setup, you can select these channels as destinations during processing.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
-        except MessageNotModified:
-            pass
 
     elif data == "help_quickstart":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**🚀 Quick Start Guide**\n\n"
                 "> Get started in seconds.\n"
@@ -161,11 +155,9 @@ async def handle_help_callbacks(client, callback_query):
                 "That's it! For advanced features, explore the other topics in this guide.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
-        except MessageNotModified:
-            pass
 
     elif data == "help_templates":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**🏷️ Templates & Variables**\n\n"
                 "> Customize your output format.\n"
@@ -182,8 +174,6 @@ async def handle_help_callbacks(client, callback_query):
                     ]
                 )
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_tpl_"):
         tpl = data.replace("help_tpl_", "")
@@ -239,13 +229,11 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown template topic."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_tpl))
-        except MessageNotModified:
-            pass
 
     elif data == "help_commands":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**🔗 Bot Commands**\n\n"
                 "> Quick reference for all commands.\n"
@@ -260,8 +248,6 @@ async def handle_help_callbacks(client, callback_query):
                     ]
                 )
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_cmd_"):
         cmd = data.replace("help_cmd_", "")
@@ -306,17 +292,13 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown command category."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_cmd))
-        except MessageNotModified:
-            pass
 
     elif data == "help_tools":
         text, markup = build_tools_menu(ctx)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=markup)
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_tool_"):
         back_to_tools = [[InlineKeyboardButton("← Back to Tools", callback_data="help_tools")]]
@@ -325,7 +307,7 @@ async def handle_help_callbacks(client, callback_query):
         # static sub-menus (help_fc_*, help_yt_*, help_ml_*). Everything
         # else is rendered from utils/help_builder.TOOL_GUIDES.
         if data == "help_tool_convert":
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "**🔀 File Converter — Mega Edition**\n\n"
                     "> Your all-in-one media swiss-army knife.\n"
@@ -346,12 +328,10 @@ async def handle_help_callbacks(client, callback_query):
                     ),
                     disable_web_page_preview=True,
                 )
-            except MessageNotModified:
-                pass
             return
 
         if data == "help_tool_youtube":
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "**▶️ YouTube Tool**\n\n"
                     "> Professional YouTube downloader with anti-bot hardening.\n"
@@ -375,12 +355,10 @@ async def handle_help_callbacks(client, callback_query):
                     ),
                     disable_web_page_preview=True,
                 )
-            except MessageNotModified:
-                pass
             return
 
         if data == "help_tool_ml":
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "**☁️ Mirror-Leech**\n\n"
                     "> Fan any URL out to every cloud destination you've linked.\n"
@@ -403,8 +381,6 @@ async def handle_help_callbacks(client, callback_query):
                     ),
                     disable_web_page_preview=True,
                 )
-            except MessageNotModified:
-                pass
             return
 
         # Delegate the eight flat tools to their expanded guides.
@@ -414,28 +390,24 @@ async def handle_help_callbacks(client, callback_query):
                 "**🛠 Tool Info**\n\n"
                 "Sorry, no detailed guide is available for this tool yet."
             )
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     text,
                     reply_markup=InlineKeyboardMarkup(back_to_tools),
                     disable_web_page_preview=True,
                 )
-            except MessageNotModified:
-                pass
             return
 
         text, markup = result
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=markup,
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 
     elif data == "help_file_management":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**📁 File Management — /myfiles**\n\n"
                 "> Your personal cloud locker inside Telegram.\n"
@@ -458,11 +430,9 @@ async def handle_help_callbacks(client, callback_query):
                 ),
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 
     elif data == "help_auto_detect":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**🤖 Auto-Detect Magic**\n\n"
                 "> Automatic Metadata Lookup.\n"
@@ -473,11 +443,9 @@ async def handle_help_callbacks(client, callback_query):
                 "You always get a chance to confirm or correct the details before processing begins.",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
-        except MessageNotModified:
-            pass
 
     elif data == "help_general":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**📄 Personal & General Mode**\n\n"
                 "> Bypass the smart scanners.\n"
@@ -495,11 +463,9 @@ async def handle_help_callbacks(client, callback_query):
                 "__(Extensions are always added automatically)__",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
-        except MessageNotModified:
-            pass
 
     elif data == "help_formats":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**🎞️ Formats & Codecs**\n\n"
                 "> Supported media formats.\n"
@@ -513,22 +479,16 @@ async def handle_help_callbacks(client, callback_query):
                 "__(The bot can process any extension, but specific tools like the Converter or Audio Editor only work with media files!)__</blockquote>",
                 reply_markup=InlineKeyboardMarkup(back_button),
             )
-        except MessageNotModified:
-            pass
 
     elif data == "help_quotas":
         text, markup = build_quotas(ctx)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
-        except MessageNotModified:
-            pass
 
     elif data == "help_premium":
         text, markup = build_premium_landing(ctx)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
-        except MessageNotModified:
-            pass
 
     elif data in PREMIUM_SUB_BUILDERS:
         builder = PREMIUM_SUB_BUILDERS[data]
@@ -537,13 +497,11 @@ async def handle_help_callbacks(client, callback_query):
             await callback_query.answer("This section is currently unavailable.", show_alert=True)
             return
         text, markup = result
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=markup, disable_web_page_preview=True)
-        except MessageNotModified:
-            pass
 
     elif data == "help_troubleshooting":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**🔧 Troubleshooting & FAQ**\n\n"
                 "> Common issues and solutions.\n"
@@ -564,8 +522,6 @@ async def handle_help_callbacks(client, callback_query):
                     ]
                 )
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_ts_cat_"):
         cat = data.replace("help_ts_cat_", "")
@@ -631,13 +587,11 @@ async def handle_help_callbacks(client, callback_query):
             text = "Unknown category."
             buttons = []
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(buttons + back_to_ts)
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_ts_"):
         issue = data.replace("help_ts_", "")
@@ -896,13 +850,11 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown issue. Please go back and select a valid topic."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(back_to_cat))
-        except MessageNotModified:
-            pass
 
     elif data == "help_settings":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "**⚙️ Settings & Info**\n\n"
                 "> Customize your experience.\n"
@@ -924,8 +876,6 @@ async def handle_help_callbacks(client, callback_query):
                     ]
                 )
             )
-        except MessageNotModified:
-            pass
 
     elif data == "noop_help":
         # Used as a silent placeholder for row separators in help menus.
@@ -976,7 +926,7 @@ async def handle_help_callbacks(client, callback_query):
                 "• Perfect for personal files, documents, or non-media content."
             )
         elif setting == "dumb":
-            try:
+            with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "**📺 Dumb Channels — Auto-Routing**\n\n"
                     "> Automatically push processed files into the right channel.\n"
@@ -998,8 +948,6 @@ async def handle_help_callbacks(client, callback_query):
                     ),
                     disable_web_page_preview=True,
                 )
-            except MessageNotModified:
-                pass
             return
         elif setting == "info":
             try:
@@ -1090,14 +1038,12 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown setting."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(back_to_set),
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_fc_"):
         section = data.replace("help_fc_", "")
@@ -1208,14 +1154,12 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown File Converter topic."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(back_to_fc),
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_yt_"):
         section = data.replace("help_yt_", "")
@@ -1356,14 +1300,12 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown YouTube topic."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(back_to_yt),
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_mf_"):
         section = data.replace("help_mf_", "")
@@ -1504,14 +1446,12 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown MyFiles topic."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(back_to_mf),
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_dumb_"):
         section = data.replace("help_dumb_", "")
@@ -1618,14 +1558,12 @@ async def handle_help_callbacks(client, callback_query):
         else:
             text = "Unknown Dumb Channels topic."
 
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(back_to_dumb),
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 
     elif data.startswith("help_ml_"):
         # Per-subtopic pages for the Mirror-Leech guide reached via
@@ -1731,12 +1669,10 @@ async def handle_help_callbacks(client, callback_query):
             )
         else:
             text = "Unknown Mirror-Leech topic."
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(back_to_ml),
                 disable_web_page_preview=True,
             )
-        except MessageNotModified:
-            pass
 

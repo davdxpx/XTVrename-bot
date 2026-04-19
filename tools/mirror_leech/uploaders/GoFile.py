@@ -8,11 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from utils.log import get_logger
-
-from tools.mirror_leech.uploaders import Uploader, register_uploader
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
+from tools.mirror_leech.uploaders import Uploader, register_uploader
+from utils.log import get_logger
 
 logger = get_logger("mirror_leech.gofile")
 
@@ -32,10 +31,9 @@ class GoFileUploader(Uploader):
     async def test_connection(self, user_id: int) -> tuple[bool, str]:
         import aiohttp
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(f"{GOFILE_API}/servers") as resp:
-                    resp.raise_for_status()
-                    data = await resp.json()
+            async with aiohttp.ClientSession() as session, session.get(f"{GOFILE_API}/servers") as resp:
+                resp.raise_for_status()
+                data = await resp.json()
             if data.get("status") != "ok":
                 return False, f"GoFile returned status={data.get('status')}"
             return True, "GoFile API reachable"
@@ -59,7 +57,7 @@ class GoFileUploader(Uploader):
             url = f"https://{server}.gofile.io/uploadFile"
 
             data = aiohttp.FormData()
-            data.add_field("file", open(local_path, "rb"), filename=local_path.name)
+            data.add_field("file", open(local_path, "rb"), filename=local_path.name)  # noqa: SIM115
             if token:
                 data.add_field("token", token)
 

@@ -1,10 +1,13 @@
 # --- Imports ---
 import asyncio
+import contextlib
 import json
 import re
+
 from guessit import guessit
-from utils.tmdb import tmdb
+
 from utils.log import get_logger
+from utils.tmdb import tmdb
 
 logger = get_logger("utils.detect")
 
@@ -72,10 +75,8 @@ async def probe_audio_streams(filepath, timeout=20):
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
-            try:
+            with contextlib.suppress(Exception):
                 proc.kill()
-            except Exception:
-                pass
             logger.warning(f"ffprobe timeout on {filepath}")
             return None
     except FileNotFoundError:
@@ -187,9 +188,7 @@ def analyze_filename(filename):
 
         is_subtitle = False
         container = guess.get("container")
-        if container in ["srt", "ass", "sub", "vtt"]:
-            is_subtitle = True
-        elif filename.lower().endswith((".srt", ".ass", ".sub", ".vtt")):
+        if container in ["srt", "ass", "sub", "vtt"] or filename.lower().endswith((".srt", ".ass", ".sub", ".vtt")):
             is_subtitle = True
 
         quality = str(guess.get("screen_size", "720p"))
@@ -205,15 +204,11 @@ def analyze_filename(filename):
 
         language = "en"
         if guess.get("language"):
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 language = str(guess.get("language"))
-            except (TypeError, ValueError):
-                pass
         elif guess.get("subtitle_language"):
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 language = str(guess.get("subtitle_language"))
-            except (TypeError, ValueError):
-                pass
 
         extracted_specials = []
         extracted_codec = []
@@ -221,43 +216,44 @@ def analyze_filename(filename):
 
         orig_name_upper = filename.upper()
 
-        specials_keywords = ["BLURAY", "BLUERAY", "BDRIP", "WEB-DL", "WEBRIP", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT"]
-        for kw in specials_keywords:
+        specials_map = {
+            "WEB-DL": "WEB-DL",
+            "WEBRIP": "WEBRip",
+            "HDR": "HDR",
+            "REMUX": "REMUX",
+            "PROPER": "PROPER",
+            "REPACK": "REPACK",
+            "UNCUT": "UNCUT",
+            "BDRIP": "BDRip",
+            "BLURAY": "BluRay",
+            "BLUERAY": "BluRay",
+        }
+        for kw, label in specials_map.items():
             if kw in orig_name_upper:
-                if kw == "WEB-DL": extracted_specials.append("WEB-DL")
-                elif kw == "WEBRIP": extracted_specials.append("WEBRip")
-                elif kw == "HDR": extracted_specials.append("HDR")
-                elif kw == "REMUX": extracted_specials.append("REMUX")
-                elif kw == "PROPER": extracted_specials.append("PROPER")
-                elif kw == "REPACK": extracted_specials.append("REPACK")
-                elif kw == "UNCUT": extracted_specials.append("UNCUT")
-                elif kw == "BDRIP": extracted_specials.append("BDRip")
-                else: extracted_specials.append("BluRay")
+                extracted_specials.append(label)
 
         extracted_specials = list(dict.fromkeys(extracted_specials))
 
-        codec_keywords = ["X264", "X265", "HEVC"]
-        for kw in codec_keywords:
+        codec_map = {"X264": "x264", "X265": "x265", "HEVC": "HEVC"}
+        for kw, label in codec_map.items():
             if kw in orig_name_upper:
-                if kw == "X264": extracted_codec.append("x264")
-                elif kw == "X265": extracted_codec.append("x265")
-                elif kw == "HEVC": extracted_codec.append("HEVC")
+                extracted_codec.append(label)
 
-        audio_keywords = ["DUAL", "DL", "DUBBED", "MULTI", "MICDUB", "LINEDUB", "DTS", "AC3", "ATMOS"]
-        for kw in audio_keywords:
-            if kw == "DL":
-                if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
-                    extracted_audio.append("DL")
-            else:
-                if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
-                    if kw == "DUAL": extracted_audio.append("DUAL")
-                    elif kw == "DUBBED": extracted_audio.append("Dubbed")
-                    elif kw == "MULTI": extracted_audio.append("Multi")
-                    elif kw == "MICDUB": extracted_audio.append("MicDub")
-                    elif kw == "LINEDUB": extracted_audio.append("LineDub")
-                    elif kw == "DTS": extracted_audio.append("DTS")
-                    elif kw == "AC3": extracted_audio.append("AC3")
-                    elif kw == "ATMOS": extracted_audio.append("Atmos")
+        audio_map = {
+            "DUAL": "DUAL",
+            "DUBBED": "Dubbed",
+            "MULTI": "Multi",
+            "MICDUB": "MicDub",
+            "LINEDUB": "LineDub",
+            "DTS": "DTS",
+            "AC3": "AC3",
+            "ATMOS": "Atmos",
+        }
+        if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
+            extracted_audio.append("DL")
+        for kw, label in audio_map.items():
+            if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
+                extracted_audio.append(label)
 
         season_val = guess.get("season")
         episode_val = guess.get("episode")
@@ -305,7 +301,6 @@ async def auto_match_tmdb(metadata, language="en-US"):
         return None
 
     title = metadata.get("title")
-    year = metadata.get("year")
     media_type = metadata.get("type")
 
     if not title:

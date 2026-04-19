@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import time
 
 _STATE_TTL = 3600  # 1 hour — sessions expire after inactivity
@@ -100,10 +101,8 @@ def cleanup_expired():
         _session_locks.pop(uid, None)
         _db_persist_pending.discard(uid)
         for cb in _on_expire_callbacks:
-            try:
+            with contextlib.suppress(Exception):
                 cb(uid)
-            except Exception:
-                pass
     return len(expired)
 
 
@@ -127,7 +126,7 @@ def requires_state(*expected_states):
             try:
                 user_id = message.from_user.id if message.from_user else message.chat.id
             except Exception:
-                raise ContinuePropagation
+                raise ContinuePropagation from None
             state = get_state(user_id)
             if state not in expected_states:
                 raise ContinuePropagation

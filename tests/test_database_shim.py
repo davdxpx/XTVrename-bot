@@ -211,3 +211,137 @@ async def test_insert_one_virtual_doc_routes_fields(shim):
     assert (
         await settings_coll.find_one({"_id": schema.DOC_PAYMENTS})
     )["base_currency"] == "USD"
+
+
+# ---------------------------------------------------------------------------
+# Non-public mode: PERSONAL_KEYS on virtual global_settings route to CEO
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def ceo_shim():
+    """Shim configured for a non-public, single-tenant deployment with a CEO."""
+    client = AsyncMongoMockClient()
+    db = client["test-maindb"]
+    settings_coll = db[schema.SETTINGS_COLLECTION]
+    users_coll = db[schema.USERS_COLLECTION]
+    return (
+        SettingsCollectionShim(
+            settings_coll, users_coll, ceo_id=999, public_mode=False
+        ),
+        settings_coll,
+        users_coll,
+    )
+
+
+async def test_nonpublic_templates_write_lands_in_ceo_personal_settings(ceo_shim):
+    s, settings_coll, users_coll = ceo_shim
+    await s.update_one(
+        {"_id": "global_settings"},
+        {"$set": {"templates.title": "{title}"}},
+        upsert=True,
+    )
+    ceo = await users_coll.find_one({"user_id": 999})
+    assert ceo is not None
+    assert ceo["personal_settings"]["templates"]["title"] == "{title}"
+    # Nothing leaked to legacy_misc.
+    assert await settings_coll.find_one({"_id": schema.LEGACY_MISC_DOC_ID}) is None
+
+
+async def test_nonpublic_dumb_channels_write_lands_in_ceo_personal_settings(ceo_shim):
+    s, settings_coll, users_coll = ceo_shim
+    await s.update_one(
+        {"_id": "global_settings"},
+        {
+            "$set": {
+                "dumb_channels.-100123": "MoviesHub",
+                "dumb_channel_links.-100123": "https://t.me/x",
+            }
+        },
+        upsert=True,
+    )
+    ceo = await users_coll.find_one({"user_id": 999})
+    assert ceo["personal_settings"]["dumb_channels"]["-100123"] == "MoviesHub"
+    assert (
+        ceo["personal_settings"]["dumb_channel_links"]["-100123"]
+        == "https://t.me/x"
+    )
+    # Not written to the global dumb_channels doc.
+    assert (
+        await settings_coll.find_one({"_id": schema.DOC_DUMB_CHANNELS_GLOBAL})
+        is None
+    )
+
+
+async def test_nonpublic_read_merges_ceo_personal_into_global_view(ceo_shim):
+    s, settings_coll, users_coll = ceo_shim
+    # Simulate migration output: CEO personal_settings holds PERSONAL_KEYS,
+    # per-concern global docs hold the rest.
+    await settings_coll.insert_one(
+        {"_id": schema.DOC_BRANDING, "bot_name": "TestBot"}
+    )
+    await users_coll.insert_one(
+        {
+            "user_id": 999,
+            "personal_settings": {
+                "templates": {"title": "{title}"},
+                "dumb_channels": {"-100": "Movies"},
+                "channel": -100777,
+                "thumbnail_file_id": "CEO-THUMB",
+            },
+        }
+    )
+    merged = await s.find_one({"_id": "global_settings"})
+    assert merged is not None
+    assert merged["bot_name"] == "TestBot"  # from settings
+    assert merged["templates"] == {"title": "{title}"}  # from CEO personal
+    assert merged["dumb_channels"] == {"-100": "Movies"}
+    assert merged["channel"] == -100777
+    assert merged["thumbnail_file_id"] == "CEO-THUMB"
+
+
+async def test_nonpublic_unset_personal_key_routes_to_ceo(ceo_shim):
+    s, _, users_coll = ceo_shim
+    await s.update_one(
+        {"_id": "global_settings"},
+        {"$set": {"default_dumb_channel": "-100"}},
+        upsert=True,
+    )
+    await s.update_one(
+        {"_id": "global_settings"},
+        {"$unset": {"default_dumb_channel": ""}},
+    )
+    ceo = await users_coll.find_one({"user_id": 999})
+    assert "default_dumb_channel" not in ceo.get("personal_settings", {})
+
+
+async def test_nonpublic_roundtrip_templates_via_shim(ceo_shim):
+    """End-to-end: write templates via virtual global_settings, read them
+    back via the same virtual doc. This is the exact path Templates/Dumb
+    Channels admin handlers take."""
+    s, _, _ = ceo_shim
+    await s.update_one(
+        {"_id": "global_settings"},
+        {"$set": {"templates.title": "{title} ({year})"}},
+        upsert=True,
+    )
+    merged = await s.find_one({"_id": "global_settings"})
+    assert merged["templates"]["title"] == "{title} ({year})"
+
+
+async def test_public_mode_personal_key_still_uses_global_routing(shim):
+    """In public mode (no CEO routing), personal-looking keys on
+    global_settings continue to go through GLOBAL_KEY_TO_DOC / legacy_misc
+    as before — so admin defaults don't accidentally leak into any user's
+    personal_settings."""
+    s, settings_coll, users_coll = shim  # default shim has no ceo_id
+    await s.update_one(
+        {"_id": "global_settings"},
+        {"$set": {"default_dumb_channel": "-100"}},
+        upsert=True,
+    )
+    # Went to the global dumb_channels doc, NOT to any user doc.
+    assert (
+        await settings_coll.find_one({"_id": schema.DOC_DUMB_CHANNELS_GLOBAL})
+    )["default_dumb_channel"] == "-100"
+    assert await users_coll.count_documents({}) == 0

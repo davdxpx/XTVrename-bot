@@ -1,16 +1,16 @@
 """UIChrome — divider/frame/progress-block formatting contract."""
 
 from tools.mirror_leech.UIChrome import (
-    DIVIDER,
     BAR_LENGTH,
-    BLOCK_FILLED,
     BLOCK_EMPTY,
+    BLOCK_FILLED,
+    DIVIDER,
+    format_bytes,
+    format_elapsed,
+    format_eta,
     frame,
     frame_plain,
     progress_block,
-    format_bytes,
-    format_eta,
-    format_elapsed,
 )
 
 

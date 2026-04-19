@@ -1,10 +1,11 @@
 # --- Imports ---
 from pyrogram import Client, filters
 from pyrogram.enums import ChatMemberStatus
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from config import Config
 from database import db
 from plugins.admin_legacy import admin_sessions, is_admin
-from config import Config
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils.log import get_logger
 from utils.state import get_data, update_data
 
@@ -100,7 +101,7 @@ async def handle_bot_added_to_channel(client, update):
             logger.error(f"Force sub setup error during chat_member_updated: {e}")
             await client.send_message(
                 chat_id=user_id,
-                text=f"❌ **Failed to verify channel.**\n\nI was added to the channel, but I don't have permission to create invite links. Please grant me the 'Invite Users via Link' permission.",
+                text="❌ **Failed to verify channel.**\n\nI was added to the channel, but I don't have permission to create invite links. Please grant me the 'Invite Users via Link' permission.",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_force_sub_menu")]]
                 ),
@@ -146,9 +147,7 @@ async def on_user_join_channel(client, update):
     chat_username = f"@{update.chat.username}" if update.chat.username else None
 
     is_force_sub_channel = False
-    if chat_id_str in channels_to_check:
-        is_force_sub_channel = True
-    elif chat_username and chat_username in channels_to_check:
+    if chat_id_str in channels_to_check or chat_username and chat_username in channels_to_check:
         is_force_sub_channel = True
 
     if not is_force_sub_channel:

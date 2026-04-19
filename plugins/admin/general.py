@@ -21,6 +21,8 @@ Text-input flows (awaiting_admin_channel) are registered with the shared
 ``text_dispatcher`` and handled here via ``handle_text``.
 """
 
+import contextlib
+
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -34,7 +36,7 @@ async def _render_workflow(callback_query: CallbackQuery):
     """Build and display the workflow mode settings."""
     current_mode = await db.get_workflow_mode(None)
     mode_str = "🧠 Smart Media Mode" if current_mode == "smart_media_mode" else "⚡ Quick Rename Mode"
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"⚙️ **Global Workflow Mode Settings**\n\n"
             f"Current Mode: `{mode_str}`\n\n"
@@ -59,14 +61,12 @@ async def _render_workflow(callback_query: CallbackQuery):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 
 async def _render_language(callback_query: CallbackQuery):
     """Build and display the language settings."""
     current_language = await db.get_preferred_language(None)
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             f"🌍 **Global Preferred Language Settings**\n\n"
             f"Current Preferred Language: `{current_language}`\n\n"
@@ -83,8 +83,6 @@ async def _render_language(callback_query: CallbackQuery):
                 ]
             ),
         )
-    except MessageNotModified:
-        pass
 
 
 @Client.on_callback_query(
@@ -104,9 +102,9 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
 
     # --- General settings menu ---
     if data == "admin_general_settings_menu":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                f"⚙️ **Global General Settings**\n\n"
+                "⚙️ **Global General Settings**\n\n"
                 "Select a setting to configure:",
                 reply_markup=InlineKeyboardMarkup(
                     [
@@ -129,8 +127,6 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Workflow mode ---
@@ -148,7 +144,7 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
     # --- Channel username ---
     if data == "admin_general_channel":
         current_channel = await db.get_channel(None)
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 f"📢 **Global Channel Username Settings**\n\n"
                 f"Current Channel Variable: `{current_channel}`\n\n"
@@ -164,21 +160,17 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data == "prompt_admin_channel":
         admin_sessions[user_id] = {"state": "awaiting_admin_channel", "msg_id": callback_query.message.id}
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "⚙️ **Send the new Global Channel name variable to use in templates (e.g. `@MyChannel`):**",
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("❌ Cancel", callback_data="admin_general_channel")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     # --- Preferred language ---
@@ -187,7 +179,7 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
         return
 
     if data == "prompt_admin_language":
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 "🌍 **Select global preferred language for TMDb Metadata:**\n\n"
                 "__(Default is English)__",
@@ -225,8 +217,6 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
                     ]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
     if data.startswith("admin_set_lang_"):
@@ -256,7 +246,7 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
         elif thumb_mode == "custom":
             mode_str = "Custom Thumbnail"
 
-        text = f"👀 **Current Settings**\n\n"
+        text = "👀 **Current Settings**\n\n"
         text += f"**Thumbnail Mode:** `{mode_str}`\n"
         text += f"**Custom Thumbnail Set:** {has_thumb}\n\n"
         text += "**Metadata Templates:**\n"
@@ -276,15 +266,13 @@ async def general_settings_cb(client, callback_query: CallbackQuery):
         else:
             text += "No filename templates set.\n"
         text += f"\n**Channel Variable:** `{settings.get('channel', Config.DEFAULT_CHANNEL) if settings else Config.DEFAULT_CHANNEL}`\n"
-        try:
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")]]
                 ),
             )
-        except MessageNotModified:
-            pass
         return
 
 
@@ -310,4 +298,5 @@ async def handle_text(client, message, state, state_obj, msg_id):
 
 
 from plugins.admin.text_dispatcher import register as _register
+
 _register("awaiting_admin_channel", handle_text)

@@ -19,13 +19,14 @@ Both use the shared get_admin_main_menu builder from core.py, so the
 menu layout stays in one place.
 """
 
+import contextlib
+
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
 
 from config import Config
 from database import db
 from plugins.admin.core import admin_sessions, get_admin_main_menu, is_admin
-
 
 _PUBLIC_PANEL_TEXT = (
     "⚙️ **Control Center** · __Public Mode__\n\n"
@@ -81,10 +82,8 @@ async def admin_main_cb(client, callback_query):
 
     text = _PUBLIC_PANEL_TEXT if Config.PUBLIC_MODE else _PRIVATE_PANEL_TEXT
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text,
             reply_markup=get_admin_main_menu(pro_session, Config.PUBLIC_MODE, myfiles_enabled),
         )
-    except MessageNotModified:
-        pass

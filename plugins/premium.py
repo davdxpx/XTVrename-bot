@@ -1,10 +1,12 @@
 import time
 from datetime import datetime
+
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from database import db
 from config import Config
+from database import db
+
 
 def is_public_mode():
     return Config.PUBLIC_MODE
@@ -134,10 +136,10 @@ async def generate_premium_dashboard(user_id, client):
     global_toggles = await db.get_feature_toggles()
 
     text = (
-        f"💎 **UPGRADE TO PREMIUM** 💎\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Unlock the full power of 𝕏TV. Say goodbye to limits!\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        "💎 **UPGRADE TO PREMIUM** 💎\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "Unlock the full power of 𝕏TV. Say goodbye to limits!\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
     )
 
     text += (
@@ -152,7 +154,7 @@ async def generate_premium_dashboard(user_id, client):
     std_perks = get_features_display(standard_settings, global_toggles)
     text += f"{std_perks}\n\n"
     text += f"**Price:** `{std_usd}`\n"
-    text += f"━━━━━━━━━━━━━━━━━━━━\n"
+    text += "━━━━━━━━━━━━━━━━━━━━\n"
 
     if deluxe_enabled:
         dlx_mb = deluxe_settings.get('daily_egress_mb', 0)
@@ -178,7 +180,7 @@ async def generate_premium_dashboard(user_id, client):
             text += "\n".join(dlx_only_perks) + "\n"
 
         text += f"\n**Price:** `{dlx_usd}`\n"
-        text += f"━━━━━━━━━━━━━━━━━━━━\n"
+        text += "━━━━━━━━━━━━━━━━━━━━\n"
 
     buttons = []
 

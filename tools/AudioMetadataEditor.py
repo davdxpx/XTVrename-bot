@@ -1,13 +1,16 @@
 # --- Imports ---
-from pyrogram.errors import MessageNotModified
-from plugins.user_setup import track_tool_usage
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
-from utils.state import set_state, get_state, get_data, clear_session
-from utils.log import get_logger
 import asyncio
+import contextlib
 import logging
-from utils.ffmpeg_tools import generate_ffmpeg_command, execute_ffmpeg
+
+from pyrogram import Client, filters
+from pyrogram.errors import MessageNotModified
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+
+from plugins.user_setup import track_tool_usage
+from utils.ffmpeg_tools import execute_ffmpeg, generate_ffmpeg_command
+from utils.log import get_logger
+from utils.state import clear_session, get_data, get_state, set_state
 
 logger = get_logger("tools.AudioMetadataEditor")
 
@@ -20,7 +23,7 @@ async def handle_audio_editor_menu(client, callback_query):
     clear_session(user_id)
     set_state(user_id, "awaiting_audio_file")
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "🎵 **Audio Metadata Editor**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -31,8 +34,6 @@ async def handle_audio_editor_menu(client, callback_query):
                 [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(
     filters.regex(r"^audio_edit_(title|artist|album|thumb|process)$")
@@ -95,15 +96,13 @@ async def handle_audio_edit_callbacks(client, callback_query):
             f"> Send `—` to clear the current value."
         )
 
-    try:
+    with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("🔙 Back", callback_data="audio_menu_back")]]
             ),
         )
-    except MessageNotModified:
-        pass
 
 @Client.on_callback_query(filters.regex(r"^audio_menu_back$"))
 async def handle_audio_menu_back(client, callback_query):
@@ -156,10 +155,8 @@ async def render_audio_menu(client, message, user_id):
     if isinstance(message, Message):
         await message.reply_text(text, reply_markup=markup)
     else:
-        try:
+        with contextlib.suppress(MessageNotModified):
             await message.edit_text(text, reply_markup=markup)
-        except MessageNotModified:
-            pass
 
 # === Functions ===
 async def edit_audio_metadata(input_path: str, output_dir: str, safe_title: str, ext: str, metadata: dict, thumb_path: str = None, progress_callback=None) -> tuple[bool, bytes, str, str]:

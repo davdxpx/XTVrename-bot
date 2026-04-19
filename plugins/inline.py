@@ -1,10 +1,20 @@
 # --- Imports ---
+import math
+
 from pyrogram import Client, filters
-from pyrogram.types import InlineQuery, InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultCachedDocument, InlineQueryResultCachedVideo
+from pyrogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InlineQuery,
+    InlineQueryResultArticle,
+    InlineQueryResultCachedDocument,
+    InlineQueryResultCachedVideo,
+    InputTextMessageContent,
+)
+
 from config import Config
 from database import db
 from utils.log import get_logger
-import math
 
 logger = get_logger("plugins.inline")
 
