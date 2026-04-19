@@ -20,6 +20,7 @@ legacy monolith; this extraction is a pure move.
 """
 
 import contextlib
+import datetime
 
 from pyrogram import Client, filters
 from pyrogram.errors import MessageNotModified
@@ -28,6 +29,24 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 from config import Config
 from db import db
 from utils.telegram.logger import debug
+
+
+SEPARATOR = "━━━━━━━━━━━━━━━━━━━━"
+
+
+def _format_egress(mb: float) -> str:
+    mb = float(mb or 0)
+    if mb >= 1048576:
+        return f"{mb / 1048576:.2f} TB"
+    if mb >= 1024:
+        return f"{mb / 1024:.2f} GB"
+    return f"{mb:.2f} MB"
+
+
+def _bar(filled: int, total: int = 10) -> str:
+    filled = max(0, min(total, filled))
+    return "■" * filled + "□" * (total - filled)
+
 
 debug("✅ Loaded handler: admin_dashboard_overview_cb")
 
@@ -44,78 +63,84 @@ async def admin_dashboard_overview_cb(client: Client, callback_query: CallbackQu
     for phase in ["download", "process", "upload"]:
         for user_sems in _SEMAPHORES.values():
             if phase in user_sems and user_sems[phase] is not None:
-
                 active_slots += 3 - user_sems[phase]._value
 
-    def format_egress(mb):
-        if mb >= 1048576:
-            return f"{mb / 1048576:.2f} TB"
-        elif mb >= 1024:
-            return f"{mb / 1024:.2f} GB"
-        else:
-            return f"{mb:.2f} MB"
+    now = datetime.datetime.utcnow()
+    cutoff_7d = now - datetime.timedelta(days=7)
+    new_users_7d = await db.count_users({"joined_at": {"$gte": cutoff_7d}})
 
-    import datetime
+    cap_mb = 0.0
+    if Config.PUBLIC_MODE:
+        public_config = await db.get_public_config()
+        cap_mb = float(public_config.get("daily_egress_mb", 0) or 0)
 
-    current_time_str = datetime.datetime.utcnow().strftime("%d %b %Y, %H:%M UTC")
+    today_str = now.strftime("%d %b %Y")
+    refresh_str = now.strftime("%H:%M UTC")
     start_date_obj = datetime.datetime.strptime(stats.get("bot_start_date"), "%Y-%m-%d")
     start_date_str = start_date_obj.strftime("%d %b %Y")
+    egress_today_mb = float(stats.get("egress_today_mb") or 0)
 
-    text = (
-        f"📊 **𝕏TV Usage Dashboard**\n"
-        f"Updated: {current_time_str}\n"
-        f"═════════════════════════\n"
-        f"👥 Total Users: `{stats.get('total_users')}`\n"
-        f"📁 Files Processed Today: `{stats.get('files_today')}`\n"
-        f"📦 Egress Today: `{format_egress(stats.get('egress_today_mb'))}`\n"
-    )
+    today_block_lines = [
+        f"**Today — {today_str}**",
+        f"📁 Files processed: `{stats.get('files_today', 0)}`",
+        f"📦 Egress: `{_format_egress(egress_today_mb)}`",
+    ]
+    if Config.PUBLIC_MODE:
+        today_block_lines.append(f"⚡ Active slots: `{active_slots}`")
+        if cap_mb > 0:
+            pct = min(egress_today_mb / cap_mb * 100, 100)
+            filled = int(round(pct / 10))
+            today_block_lines.append(f"`{_bar(filled)}` {pct:.0f}% of daily cap")
+
+    all_time_block_lines = [
+        "**All-Time**",
+        f"📁 Files processed: `{stats.get('total_files', 0)}`",
+        f"📦 Egress: `{_format_egress(stats.get('total_egress_mb'))}`",
+        f"👥 Total users: `{stats.get('total_users', 0)}`",
+        f"🆕 New users (7d): `{new_users_7d}`",
+        f"🗓 Bot running since: `{start_date_str}`",
+    ]
+
+    lines = [
+        "**📊 Usage Dashboard**",
+        SEPARATOR,
+        "",
+        "<blockquote>" + "\n".join(today_block_lines) + "</blockquote>",
+        "",
+        "<blockquote>" + "\n".join(all_time_block_lines) + "</blockquote>",
+        "",
+    ]
 
     if Config.PUBLIC_MODE:
-        text += f"⚡ Active Right Now: `{active_slots}`\n"
+        warn_block_lines = [
+            f"⚠️ Quota hits today: `{stats.get('quota_hits_today', 0)}`",
+            f"🚫 Blocked users: `{stats.get('blocked_users', 0)}`",
+        ]
+        lines.append("<blockquote>" + "\n".join(warn_block_lines) + "</blockquote>")
+        lines.append("")
 
-    text += (
-        f"─────────────────────────\n"
-        f"📈 **All-Time**\n"
-        f"─────────────────────────\n"
-        f"📁 Total Files: `{stats.get('total_files')}`\n"
-        f"📦 Total Egress: `{format_egress(stats.get('total_egress_mb'))}`\n"
-        f"🗓️ Bot Running Since: `{start_date_str}`\n"
-    )
+    lines.append(f"> Last refresh: {refresh_str} · tap 🔄 to update")
 
-    if Config.PUBLIC_MODE:
-        text += (
-            f"─────────────────────────\n"
-            f"⚠️ Quota Hits Today: `{stats.get('quota_hits_today')}`\n"
-            f"🚫 Blocked Users: `{stats.get('blocked_users')}`\n"
-        )
+    text = "\n".join(lines)
 
-    text += "─────────────────────────"
+    buttons = [
+        [
+            InlineKeyboardButton("🔝 Top Users", callback_data="admin_dashboard_top_0"),
+            InlineKeyboardButton("📅 Daily Breakdown", callback_data="admin_dashboard_daily"),
+        ],
+        [
+            InlineKeyboardButton("📈 Weekly Trend", callback_data="admin_dashboard_trend"),
+            InlineKeyboardButton("🔍 Find User", callback_data="admin_user_search_start"),
+        ],
+        [
+            InlineKeyboardButton("🔄 Refresh", callback_data="admin_usage_dashboard"),
+            InlineKeyboardButton("← Back", callback_data="admin_main"),
+        ],
+    ]
 
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🔝 Top Users", callback_data="admin_dashboard_top_0"
-                        ),
-                        InlineKeyboardButton(
-                            "📅 Daily Breakdown", callback_data="admin_dashboard_daily"
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "🔍 User Lookup", callback_data="prompt_user_lookup"
-                        ),
-                    ],
-                    [
-                        InlineKeyboardButton(
-                            "← Back to Admin Panel", callback_data="admin_main"
-                        )
-                    ],
-                ]
-            ),
+            text, reply_markup=InlineKeyboardMarkup(buttons)
         )
 
 debug("✅ Loaded handler: admin_dashboard_top_cb")
@@ -246,6 +271,58 @@ async def admin_dashboard_daily_cb(client: Client, callback_query: CallbackQuery
                     [
                         InlineKeyboardButton(
                             "← Back to Dashboard", callback_data="admin_usage_dashboard"
+                        )
+                    ]
+                ]
+            ),
+        )
+
+debug("✅ Loaded handler: admin_dashboard_trend_cb")
+
+@Client.on_callback_query(
+    filters.regex("^admin_dashboard_trend$") & filters.user(Config.CEO_ID)
+)
+async def admin_dashboard_trend_cb(client: Client, callback_query: CallbackQuery):
+    await callback_query.answer()
+    daily_stats = await db.get_daily_stats(limit=7)
+
+    lines = ["**📈 Weekly Trend**", SEPARATOR, ""]
+
+    if not daily_stats:
+        lines.append("No history available yet.")
+    else:
+        ordered = sorted(daily_stats, key=lambda s: s["date"])
+        peak_mb = max((float(s.get("egress_mb") or 0) for s in ordered), default=0.0)
+        total_mb = sum(float(s.get("egress_mb") or 0) for s in ordered)
+        avg_mb = total_mb / len(ordered) if ordered else 0.0
+
+        lines.append("Last 7 days · bar = egress relative to peak")
+        lines.append("")
+
+        bar_lines = []
+        for stat in ordered:
+            date_obj = datetime.datetime.strptime(stat["date"], "%Y-%m-%d")
+            day_str = date_obj.strftime("%a %d %b")
+            mb = float(stat.get("egress_mb") or 0)
+            filled = int(round(mb / peak_mb * 10)) if peak_mb > 0 else 0
+            peak_marker = "  ← peak" if peak_mb > 0 and mb == peak_mb else ""
+            bar_lines.append(f"`{day_str}  {_bar(filled)}  {_format_egress(mb)}`{peak_marker}")
+
+        lines.append("\n".join(bar_lines))
+        lines.append("")
+        lines.append(
+            f"> 7-day total: {_format_egress(total_mb)} · daily avg: {_format_egress(avg_mb)}"
+        )
+
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "← Back to Dashboard",
+                            callback_data="admin_usage_dashboard",
                         )
                     ]
                 ]
