@@ -442,6 +442,11 @@ class TaskProcessor:
                     )
                     return False
 
+                # Pro telemetry: a successful tunnel resolution means the file
+                # has flowed through the userbot. Best-effort, never blocks.
+                with contextlib.suppress(Exception):
+                    await db.log_pro_upload(file_size)
+
                 self.tunneled_message_id = tunnel_msg.id
 
             except Exception as e:
