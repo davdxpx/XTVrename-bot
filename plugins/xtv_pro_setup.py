@@ -46,7 +46,7 @@ def _format_bytes(n) -> str:
 
 def _format_dt(value) -> str:
     if not value:
-        return "_never_"
+        return "__never__"
     if isinstance(value, datetime.datetime):
         return value.strftime("%d %b %Y · %H:%M UTC")
     if isinstance(value, str):
@@ -56,7 +56,7 @@ def _format_dt(value) -> str:
 
 def _mask_phone(phone) -> str:
     if not phone:
-        return "_unknown_"
+        return "__unknown__"
     s = str(phone)
     if len(s) <= 6:
         return f"`{s}`"
@@ -88,10 +88,10 @@ async def pro_menu(client, callback_query):
 
 
 def _render_active(session: dict, user_bot) -> tuple[str, list]:
-    name = session.get("userbot_first_name") or "_unknown_"
+    name = session.get("userbot_first_name") or "__unknown__"
     if session.get("userbot_username"):
         name = f"{name} (@{session['userbot_username']})"
-    uid = session.get("userbot_user_id") or "_unknown_"
+    uid = session.get("userbot_user_id") or "__unknown__"
     phone = _mask_phone(session.get("phone_number"))
     is_premium = session.get("is_premium")
     if is_premium is True:
@@ -139,7 +139,7 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
         else:
             tunnel_lines.append("🔗 Link: _not set_")
     else:
-        tunnel_lines.append("_No tunnel configured yet._")
+        tunnel_lines.append("__No tunnel configured yet.__")
 
     upload_count = int(session.get("upload_count_total") or 0)
     upload_bytes = int(session.get("upload_bytes_total") or 0)
@@ -183,7 +183,7 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
         ],
         [
             InlineKeyboardButton("🔄 Refresh", callback_data="pro_setup_menu"),
-            InlineKeyboardButton("🗑 Delete Session", callback_data="pro_setup_delete"),
+            InlineKeyboardButton("🗑 Delete Session", callback_data="pro_setup_delete_ask"),
         ],
         [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
     ]
@@ -362,8 +362,49 @@ async def pro_change_tunnel(client, callback_query):
         )
 
 
-@Client.on_callback_query(filters.regex(r"^pro_setup_delete$"))
-async def delete_setup(client, callback_query):
+@Client.on_callback_query(filters.regex(r"^pro_setup_delete(_ask)?$"))
+async def delete_setup_ask(client, callback_query):
+    """Confirm screen before destroying the Pro session.
+
+    Both the new `pro_setup_delete_ask` callback and the legacy
+    `pro_setup_delete` callback land here, so any stale inline keyboard
+    still goes through confirmation instead of nuking the session.
+    """
+    await callback_query.answer()
+    if callback_query.from_user.id != Config.CEO_ID:
+        return
+    text = (
+        "**🗑 Delete 𝕏TV Pro™ Session?**\n"
+        f"{SEPARATOR}\n\n"
+        "This will:\n\n"
+        "  • Stop the running userbot\n"
+        "  • Erase the session string and credentials from the database\n"
+        "  • Reset all upload telemetry counters\n\n"
+        "> The 4 GB tunnel will stop working immediately. Re-Setup is "
+        "the only way back.\n"
+        "> __This cannot be undone.__"
+    )
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "❌ Cancel", callback_data="pro_setup_menu"
+                        ),
+                        InlineKeyboardButton(
+                            "🗑 Yes, delete it",
+                            callback_data="pro_setup_delete_confirm",
+                        ),
+                    ]
+                ]
+            ),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^pro_setup_delete_confirm$"))
+async def delete_setup_confirm(client, callback_query):
     await callback_query.answer()
     user_id = callback_query.from_user.id
     if user_id != Config.CEO_ID:
