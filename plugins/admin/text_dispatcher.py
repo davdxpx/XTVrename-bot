@@ -54,7 +54,7 @@ def register(prefix_or_check, handler):
 # Handler
 # ---------------------------------------------------------------------------
 # group=-3 is intentionally ahead of every other text handler in the codebase:
-#   -2 myfiles, -1 debug, 0 xtv_pro_setup, 1 admin-setup/users_mod, …
+#   -2 myfiles, -1 debug, 0 xtv_pro_setup, 1 admin-setup, …
 # so an active admin_sessions state is always the first thing considered.
 # The handler raises ContinuePropagation whenever it has nothing to do,
 # which lets downstream handlers run normally.

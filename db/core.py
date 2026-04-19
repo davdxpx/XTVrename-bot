@@ -519,18 +519,21 @@ class Database:
             logger.error(f"Error updating dumb channel timeout: {e}")
 
     async def get_pro_session(self):
+        """Return the full xtv_pro_settings document, or None if absent.
+
+        Callers expect a flat dict with at least the legacy keys
+        (session_string, api_id, api_hash, tunnel_id, tunnel_link). New
+        operational fields (phone_number, userbot_user_id, etc.) are also
+        passed through transparently — no field is dropped.
+        """
         if self.settings is None:
             return None
         doc = await self.settings.find_one({"_id": "xtv_pro_settings"})
-        if doc:
-            return {
-                "session_string": doc.get("session_string"),
-                "api_id": doc.get("api_id"),
-                "api_hash": doc.get("api_hash"),
-                "tunnel_id": doc.get("tunnel_id"),
-                "tunnel_link": doc.get("tunnel_link"),
-            }
-        return None
+        if not doc:
+            return None
+        result = dict(doc)
+        result.pop("_id", None)
+        return result
 
     async def save_pro_tunnel(self, tunnel_id: int, tunnel_link: str):
         if self.settings is None:
@@ -542,18 +545,83 @@ class Database:
         )
 
     async def save_pro_session(
-        self, session_string: str, api_id: int = None, api_hash: str = None
+        self,
+        session_string: str,
+        api_id: int = None,
+        api_hash: str = None,
+        *,
+        phone_number: str = None,
+        userbot_user_id: int = None,
+        userbot_first_name: str = None,
+        userbot_username: str = None,
+        is_premium: bool = None,
+        premium_expires_at=None,
     ):
         if self.settings is None:
             return
+
+        now = datetime.datetime.utcnow()
         update_doc = {"session_string": session_string}
         if api_id and api_hash:
             update_doc["api_id"] = api_id
             update_doc["api_hash"] = api_hash
+        if phone_number is not None:
+            update_doc["phone_number"] = phone_number
+        if userbot_user_id is not None:
+            update_doc["userbot_user_id"] = userbot_user_id
+        if userbot_first_name is not None:
+            update_doc["userbot_first_name"] = userbot_first_name
+        if userbot_username is not None:
+            update_doc["userbot_username"] = userbot_username
+        if is_premium is not None:
+            update_doc["is_premium"] = bool(is_premium)
+        if premium_expires_at is not None:
+            update_doc["premium_expires_at"] = premium_expires_at
 
         await self.settings.update_one(
-            {"_id": "xtv_pro_settings"}, {"$set": update_doc}, upsert=True
+            {"_id": "xtv_pro_settings"},
+            {
+                "$set": update_doc,
+                "$setOnInsert": {"authorised_at": now},
+            },
+            upsert=True,
         )
+        # Always refresh authorised_at on a fresh login (covers re-auth) by
+        # checking whether session_string changed via a separate touch.
+        await self.settings.update_one(
+            {"_id": "xtv_pro_settings"}, {"$set": {"authorised_at": now}}
+        )
+
+    async def update_pro_session(self, **fields):
+        """Partial update for the xtv_pro_settings doc — used by the admin
+        Manage screen for Health Check / Change Tunnel / clearing flags.
+        """
+        if self.settings is None or not fields:
+            return
+        await self.settings.update_one(
+            {"_id": "xtv_pro_settings"}, {"$set": fields}, upsert=False
+        )
+
+    async def log_pro_upload(self, bytes_count: int):
+        """Increment Pro tunnel telemetry counters after a successful upload.
+        Best-effort: errors are swallowed at the call site.
+        """
+        if self.settings is None:
+            return
+        try:
+            await self.settings.update_one(
+                {"_id": "xtv_pro_settings"},
+                {
+                    "$inc": {
+                        "upload_count_total": 1,
+                        "upload_bytes_total": int(bytes_count or 0),
+                    },
+                    "$set": {"last_upload_at": datetime.datetime.utcnow()},
+                },
+                upsert=False,
+            )
+        except Exception as e:
+            logger.warning(f"log_pro_upload failed: {e}")
 
     async def delete_pro_session(self):
         if self.settings is None:
@@ -1075,16 +1143,16 @@ class Database:
             logger.error(f"Error fetching daily stats: {e}")
             return []
 
-    async def get_top_users_today(self, limit=10, skip=0):
+    async def get_top_users_today(self, limit=10, skip=0, date: str | None = None):
         if self.settings is None:
             return [], 0
 
-        current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+        target_date = date or datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
             query = {
                 "_id": {"$regex": "^user_"},
-                "usage.date": current_utc_date,
+                "usage.date": target_date,
                 "usage.egress_mb": {"$gt": 0}
             }
 

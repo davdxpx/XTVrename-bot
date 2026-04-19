@@ -86,6 +86,123 @@ async def _render_dumb_menu(callback_query, page: int = 1):
         await callback_query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 
+DUD_DEFAULTS = {
+    "dumb_channel_timeout": 3600,
+    "dumb_channel_send_delay_s": 2,
+    "dumb_channel_retry_on_error": True,
+    "dumb_channel_caption_style": "clean",
+    "dumb_channel_auto_thumbnail": True,
+    "dumb_channel_anonymous_default": False,
+    "dumb_channel_forwarding_default": False,
+    "dumb_channel_default_movie_id": None,
+    "dumb_channel_default_series_id": None,
+    "dumb_channel_default_fallback_id": None,
+}
+
+
+def _fmt_seconds(s: int) -> str:
+    s = int(s or 0)
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m"
+    h = s // 3600
+    m = (s % 3600) // 60
+    return f"{h}h {m}m" if m else f"{h}h"
+
+
+def _on_off(b: bool) -> str:
+    return "on" if b else "off"
+
+
+def _channel_value(value):
+    if value in (None, "", 0):
+        return "_not set_"
+    return f"`{value}`"
+
+
+async def _render_dumb_user_defaults(callback_query):
+    cfg = await db.get_public_config()
+
+    timeout_s = int(cfg.get("dumb_channel_timeout") or DUD_DEFAULTS["dumb_channel_timeout"])
+    send_delay_s = int(cfg.get("dumb_channel_send_delay_s") or DUD_DEFAULTS["dumb_channel_send_delay_s"])
+    retry = bool(cfg.get("dumb_channel_retry_on_error", DUD_DEFAULTS["dumb_channel_retry_on_error"]))
+    caption_style = cfg.get("dumb_channel_caption_style") or DUD_DEFAULTS["dumb_channel_caption_style"]
+    auto_thumb = bool(cfg.get("dumb_channel_auto_thumbnail", DUD_DEFAULTS["dumb_channel_auto_thumbnail"]))
+    anon_default = bool(cfg.get("dumb_channel_anonymous_default", DUD_DEFAULTS["dumb_channel_anonymous_default"]))
+    forward_default = bool(cfg.get("dumb_channel_forwarding_default", DUD_DEFAULTS["dumb_channel_forwarding_default"]))
+    movie_id = cfg.get("dumb_channel_default_movie_id")
+    series_id = cfg.get("dumb_channel_default_series_id")
+    fallback_id = cfg.get("dumb_channel_default_fallback_id")
+
+    timing_lines = [
+        "**Timing**",
+        f"⏱ Auto-delete timeout: `{_fmt_seconds(timeout_s)}`",
+        f"🕒 Send delay: `{send_delay_s}s`",
+        f"🔁 Retry on Telegram errors: `{_on_off(retry)}`",
+    ]
+    routing_lines = [
+        "**Routing defaults**",
+        f"🎬 Default movie channel: {_channel_value(movie_id)}",
+        f"📺 Default series channel: {_channel_value(series_id)}",
+        f"📦 Fallback for everything else: {_channel_value(fallback_id)}",
+    ]
+    behaviour_lines = [
+        "**Behaviour defaults**",
+        f"🏷 Caption style: `{caption_style}`",
+        f"🖼 Auto-thumbnail: `{_on_off(auto_thumb)}`",
+        f"👻 Anonymous mode default: `{_on_off(anon_default)}`",
+        f"📥 Forwarding allowed by default: `{_on_off(forward_default)}`",
+    ]
+
+    text = "\n".join(
+        [
+            "**📺 Dumb Channel Settings**",
+            "━━━━━━━━━━━━━━━━━━━━",
+            "",
+            "These defaults apply to every user in public mode",
+            "until they change them in their own /settings.",
+            "",
+            "<blockquote>" + "\n".join(timing_lines) + "</blockquote>",
+            "",
+            "<blockquote>" + "\n".join(routing_lines) + "</blockquote>",
+            "",
+            "<blockquote>" + "\n".join(behaviour_lines) + "</blockquote>",
+            "",
+            "> Tap a row to edit. Changes apply immediately to new users.",
+        ]
+    )
+
+    buttons = [
+        [
+            InlineKeyboardButton("⏱ Timeout", callback_data="admin_dud_timeout"),
+            InlineKeyboardButton("🕒 Send Delay", callback_data="admin_dud_send_delay"),
+        ],
+        [
+            InlineKeyboardButton(f"🔁 Retry: {_on_off(retry)}", callback_data="admin_dud_retry"),
+            InlineKeyboardButton(f"🏷 Caption: {caption_style}", callback_data="admin_dud_caption"),
+        ],
+        [
+            InlineKeyboardButton(f"🖼 Auto-Thumb: {_on_off(auto_thumb)}", callback_data="admin_dud_thumb"),
+            InlineKeyboardButton(f"👻 Anon: {_on_off(anon_default)}", callback_data="admin_dud_anon"),
+        ],
+        [
+            InlineKeyboardButton(f"📥 Forward: {_on_off(forward_default)}", callback_data="admin_dud_forward"),
+            InlineKeyboardButton("🎬 Movie Default", callback_data="admin_dud_movie"),
+        ],
+        [
+            InlineKeyboardButton("📺 Series Default", callback_data="admin_dud_series"),
+            InlineKeyboardButton("📦 Fallback Default", callback_data="admin_dud_fallback"),
+        ],
+        [InlineKeyboardButton("← Back", callback_data="admin_main")],
+    ]
+
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            text, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+
+
 async def _render_dumb_opt(callback_query, ch_id: str):
     channels = await db.get_dumb_channels()
     if ch_id not in channels:
@@ -134,8 +251,9 @@ async def _render_dumb_opt(callback_query, ch_id: str):
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(admin_dumb_channels|admin_dumb_timeout|prompt_admin_dumb_timeout|"
-        r"dumb_menu|dumb_opt_|dumb_ren_|dumb_def_(?:std|mov|ser)_|dumb_add|dumb_del_)"
+        r"^(admin_dumb_channels|admin_dumb_user_defaults|admin_dumb_timeout|"
+        r"prompt_admin_dumb_timeout|dumb_menu|dumb_opt_|dumb_ren_|"
+        r"dumb_def_(?:std|mov|ser)_|dumb_add|dumb_del_)"
     )
 )
 async def dumb_channels_callback(client, callback_query):
@@ -155,6 +273,14 @@ async def dumb_channels_callback(client, callback_query):
                 with contextlib.suppress(ValueError, IndexError):
                     page = int(parts[2])
         await _render_dumb_menu(callback_query, page=page)
+        return
+
+    # `admin_dumb_user_defaults` is the new public-mode "Dumb Channel Settings"
+    # menu. `admin_dumb_timeout` is kept as a back-compat alias so any stale
+    # inline keyboards in flight from a previous deploy still land somewhere
+    # sensible instead of going dead.
+    if data in ("admin_dumb_user_defaults", "admin_dumb_timeout"):
+        await _render_dumb_user_defaults(callback_query)
         return
 
     # --- Per-channel settings --------------------------------------------------
@@ -226,35 +352,11 @@ async def dumb_channels_callback(client, callback_query):
         await _render_dumb_menu(callback_query, page=1)
         return
 
-    # --- Global timeout --------------------------------------------------------
-    if data == "admin_dumb_timeout":
-        current_val = await db.get_dumb_channel_timeout()
-        with contextlib.suppress(MessageNotModified):
-            await callback_query.message.edit_text(
-                f"⏱ **Edit Dumb Channel Timeout**\n\n"
-                f"This is the max time (in seconds) the bot will wait for earlier files before uploading to the Dumb Channel.\n\n"
-                f"Current: `{current_val}` seconds\n\nClick below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [InlineKeyboardButton("✏️ Change", callback_data="prompt_admin_dumb_timeout")],
-                        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
-                    ]
-                ),
-            )
-        return
-
+    # `prompt_admin_dumb_timeout` was the "✏️ Change" step from the legacy
+    # timeout-only screen. Since that screen no longer exists, redirect any
+    # stale callback to the new Settings menu instead of dropping it.
     if data == "prompt_admin_dumb_timeout":
-        admin_sessions[user_id] = {
-            "state": "awaiting_dumb_timeout",
-            "msg_id": callback_query.message.id,
-        }
-        with contextlib.suppress(MessageNotModified):
-            await callback_query.message.edit_text(
-                "⏱ **Send the new timeout in seconds (e.g., 3600 for 1 hour):**",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_main")]]
-                ),
-            )
+        await _render_dumb_user_defaults(callback_query)
         return
 
 
@@ -357,6 +459,155 @@ async def handle_text(client, message, state, state_obj, msg_id):
         return
 
 
+_DUD_TOGGLES = {
+    "retry":   ("dumb_channel_retry_on_error",   DUD_DEFAULTS["dumb_channel_retry_on_error"]),
+    "thumb":   ("dumb_channel_auto_thumbnail",   DUD_DEFAULTS["dumb_channel_auto_thumbnail"]),
+    "anon":    ("dumb_channel_anonymous_default",DUD_DEFAULTS["dumb_channel_anonymous_default"]),
+    "forward": ("dumb_channel_forwarding_default",DUD_DEFAULTS["dumb_channel_forwarding_default"]),
+}
+
+_DUD_TEXT_PROMPTS = {
+    "timeout": (
+        "awaiting_dud_timeout",
+        "⏱ **Auto-delete timeout**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Send the new value in seconds (e.g., `3600` for 1 hour).\n\n"
+        "__(Send `disable` to cancel)__",
+    ),
+    "send_delay": (
+        "awaiting_dud_send_delay",
+        "🕒 **Send delay**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Send the new delay in seconds between uploads (e.g., `2`).\n\n"
+        "__(Send `disable` to cancel)__",
+    ),
+    "movie": (
+        "awaiting_dud_movie",
+        "🎬 **Default movie channel**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Send `@username` or numeric ID (`-100…`) of the channel.\n"
+        "Send `none` to clear, or `disable` to cancel.",
+    ),
+    "series": (
+        "awaiting_dud_series",
+        "📺 **Default series channel**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Send `@username` or numeric ID (`-100…`) of the channel.\n"
+        "Send `none` to clear, or `disable` to cancel.",
+    ),
+    "fallback": (
+        "awaiting_dud_fallback",
+        "📦 **Fallback channel**\n━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Send `@username` or numeric ID (`-100…`) of the channel.\n"
+        "Send `none` to clear, or `disable` to cancel.",
+    ),
+}
+
+
+@Client.on_callback_query(
+    filters.regex(
+        r"^admin_dud_(timeout|send_delay|retry|caption|thumb|anon|forward|movie|series|fallback)$"
+    )
+)
+async def admin_dud_callback(client, callback_query):
+    await callback_query.answer()
+    user_id = callback_query.from_user.id
+    if not is_admin(user_id):
+        raise ContinuePropagation
+
+    action = callback_query.matches[0].group(1)
+    cfg = await db.get_public_config()
+
+    if action in _DUD_TOGGLES:
+        key, default = _DUD_TOGGLES[action]
+        new_val = not bool(cfg.get(key, default))
+        await db.update_public_config(key, new_val)
+        await _render_dumb_user_defaults(callback_query)
+        return
+
+    if action == "caption":
+        cur = cfg.get("dumb_channel_caption_style") or DUD_DEFAULTS["dumb_channel_caption_style"]
+        new_val = "verbose" if cur == "clean" else "clean"
+        await db.update_public_config("dumb_channel_caption_style", new_val)
+        await _render_dumb_user_defaults(callback_query)
+        return
+
+    state, prompt = _DUD_TEXT_PROMPTS[action]
+    admin_sessions[user_id] = {"state": state, "msg_id": callback_query.message.id}
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            prompt,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="admin_dumb_user_defaults")]]
+            ),
+        )
+
+
+_DUD_CHANNEL_KEYS = {
+    "awaiting_dud_movie":    "dumb_channel_default_movie_id",
+    "awaiting_dud_series":   "dumb_channel_default_series_id",
+    "awaiting_dud_fallback": "dumb_channel_default_fallback_id",
+}
+
+
+async def handle_dud_text(client, message, state, state_obj, msg_id):
+    """Handle awaiting_dud_* text inputs from the Dumb Channel Settings menu."""
+    user_id = message.from_user.id
+    val = (message.text or "").strip()
+
+    back_kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("← Back", callback_data="admin_dumb_user_defaults")]]
+    )
+
+    if val.lower() == "disable":
+        admin_sessions.pop(user_id, None)
+        await edit_or_reply(client, message, msg_id, "Cancelled.", reply_markup=back_kb)
+        return
+
+    if state in ("awaiting_dud_timeout", "awaiting_dud_send_delay"):
+        if not val.isdigit() or int(val) < 0:
+            await edit_or_reply(
+                client, message, msg_id,
+                "❌ Invalid number. Send a non-negative integer or `disable` to cancel.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_dumb_user_defaults")]]
+                ),
+            )
+            return
+        n = int(val)
+        if state == "awaiting_dud_timeout":
+            await db.update_dumb_channel_timeout(n)
+            label = f"timeout updated to `{_fmt_seconds(n)}`"
+        else:
+            await db.update_public_config("dumb_channel_send_delay_s", n)
+            label = f"send delay updated to `{n}s`"
+        await edit_or_reply(client, message, msg_id, f"✅ Dumb channel {label}.", reply_markup=back_kb)
+        admin_sessions.pop(user_id, None)
+        return
+
+    if state in _DUD_CHANNEL_KEYS:
+        key = _DUD_CHANNEL_KEYS[state]
+        if val.lower() == "none":
+            await db.update_public_config(key, None)
+            await edit_or_reply(client, message, msg_id, "✅ Channel cleared.", reply_markup=back_kb)
+            admin_sessions.pop(user_id, None)
+            return
+        try:
+            chat = await client.get_chat(val if not val.lstrip("-").isdigit() else int(val))
+            stored = chat.id
+        except Exception as e:
+            await edit_or_reply(
+                client, message, msg_id,
+                f"❌ Could not resolve `{val}`: {e}\nSend `@username`, numeric ID, `none`, or `disable`.",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("❌ Cancel", callback_data="admin_dumb_user_defaults")]]
+                ),
+            )
+            return
+        await db.update_public_config(key, stored)
+        title = chat.title or chat.username or str(stored)
+        await edit_or_reply(client, message, msg_id, f"✅ Saved channel **{title}** (`{stored}`).", reply_markup=back_kb)
+        admin_sessions.pop(user_id, None)
+        return
+
+
 from plugins.admin.text_dispatcher import register as _register
 
 _register("awaiting_dumb_", handle_text)
+_register("awaiting_dud_", handle_dud_text)

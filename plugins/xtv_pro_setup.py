@@ -1,6 +1,7 @@
 # --- Imports ---
 import asyncio
 import contextlib
+import datetime
 import os
 import random
 import string
@@ -22,12 +23,45 @@ from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.xtv_pro_setup")
 pro_setup_sessions = {}
+pro_change_sessions = {}  # user_id → {"action": "tunnel", "msg_id": ...}
+
+SEPARATOR = "━━━━━━━━━━━━━━━━━━━━"
+
 
 # === Helper Functions ===
 def get_pro_session_data(user_id):
     if user_id not in pro_setup_sessions:
         pro_setup_sessions[user_id] = {}
     return pro_setup_sessions[user_id]
+
+
+def _format_bytes(n) -> str:
+    n = int(n or 0)
+    units = [("TB", 1024**4), ("GB", 1024**3), ("MB", 1024**2), ("KB", 1024)]
+    for unit, scale in units:
+        if n >= scale:
+            return f"{n / scale:.2f} {unit}"
+    return f"{n} B"
+
+
+def _format_dt(value) -> str:
+    if not value:
+        return "_never_"
+    if isinstance(value, datetime.datetime):
+        return value.strftime("%d %b %Y · %H:%M UTC")
+    if isinstance(value, str):
+        return f"`{value}`"
+    return f"`{value}`"
+
+
+def _mask_phone(phone) -> str:
+    if not phone:
+        return "_unknown_"
+    s = str(phone)
+    if len(s) <= 6:
+        return f"`{s}`"
+    return f"`{s[:3]} ••• ••• {s[-4:]}`"
+
 
 @Client.on_callback_query(filters.regex(r"^pro_setup_menu$"))
 
@@ -38,37 +72,295 @@ async def pro_menu(client, callback_query):
         return await callback_query.answer("Not authorized.", show_alert=True)
 
     pro_setup_sessions.pop(user_id, None)
+    pro_change_sessions.pop(user_id, None)
 
     session = await db.get_pro_session()
 
     if session:
-        status = "✅ **𝕏TV Pro™ is Active**\n\nThe 4GB tunnel Userbot is fully setup and running."
-        buttons = [
-            [
-                InlineKeyboardButton(
-                    "🗑 Delete Session", callback_data="pro_setup_delete"
-                )
-            ],
-            [InlineKeyboardButton("🔄 Re-Setup", callback_data="pro_setup_start")],
-            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
-        ]
+        text, buttons = _render_active(session, getattr(client, "user_bot", None))
     else:
-        status = (
-            "❌ **𝕏TV Pro™ is Disabled**\n\nThe 4GB tunnel Userbot is not configured."
-        )
-        buttons = [
-            [
-                InlineKeyboardButton(
-                    "🚀 Setup 𝕏TV Pro™", callback_data="pro_setup_start"
-                )
-            ],
-            [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
-        ]
+        text, buttons = _render_inactive()
 
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            status, reply_markup=InlineKeyboardMarkup(buttons)
+            text, reply_markup=InlineKeyboardMarkup(buttons)
         )
+
+
+def _render_active(session: dict, user_bot) -> tuple[str, list]:
+    name = session.get("userbot_first_name") or "_unknown_"
+    if session.get("userbot_username"):
+        name = f"{name} (@{session['userbot_username']})"
+    uid = session.get("userbot_user_id") or "_unknown_"
+    phone = _mask_phone(session.get("phone_number"))
+    is_premium = session.get("is_premium")
+    if is_premium is True:
+        prem_line = "💎 Premium: `yes`"
+        if session.get("premium_expires_at"):
+            prem_line += f" · expires {_format_dt(session['premium_expires_at'])}"
+    elif is_premium is False:
+        prem_line = "💎 Premium: `no`"
+    else:
+        prem_line = "💎 Premium: _unknown_"
+    auth_line = f"📅 Authorised: {_format_dt(session.get('authorised_at'))}"
+
+    last_check = session.get("last_auth_check_at")
+    last_status = session.get("last_auth_status")
+    if last_check is None:
+        health_line = "Health: ⚪ `not yet checked` — tap 🩺 Health Check"
+    elif last_status == "ok":
+        health_line = f"Health: 🟢 `connected` — last check {_format_dt(last_check)}"
+    elif last_status == "error":
+        health_line = f"Health: 🔴 `error` — last check {_format_dt(last_check)}"
+    else:
+        health_line = f"Health: 🟡 `{last_status or 'unknown'}` — last check {_format_dt(last_check)}"
+
+    runtime = "🟢 `running`" if user_bot is not None else "🔴 `not started`"
+
+    account_lines = [
+        "**Userbot Account**",
+        f"👤 Name: `{name}`",
+        f"🆔 ID: `{uid}`",
+        f"📞 Phone: {phone}",
+        prem_line,
+        auth_line,
+    ]
+    runtime_lines = [
+        "**Runtime**",
+        f"⚙️ Userbot process: {runtime}",
+        health_line,
+    ]
+    tunnel_lines = ["**Tunnel Channel**"]
+    if session.get("tunnel_id"):
+        tunnel_lines.append(f"🆔 ID: `{session['tunnel_id']}`")
+        link = session.get("tunnel_link")
+        if link:
+            tunnel_lines.append(f"🔗 Link: `{link}`")
+        else:
+            tunnel_lines.append("🔗 Link: _not set_")
+    else:
+        tunnel_lines.append("_No tunnel configured yet._")
+
+    upload_count = int(session.get("upload_count_total") or 0)
+    upload_bytes = int(session.get("upload_bytes_total") or 0)
+    avg = (upload_bytes / upload_count) if upload_count else 0
+    last_upload = _format_dt(session.get("last_upload_at"))
+    stats_lines = [
+        "**Upload Stats — Lifetime**",
+        f"📦 Files routed: `{upload_count}`",
+        f"📊 Volume: `{_format_bytes(upload_bytes)}`",
+        f"⚡ Avg per file: `{_format_bytes(avg)}`",
+        f"🕒 Last upload: {last_upload}",
+    ]
+
+    text = "\n".join(
+        [
+            "**🚀 Manage 𝕏TV Pro™**",
+            SEPARATOR,
+            "",
+            "Status: ✅ `Active`",
+            "",
+            "<blockquote>" + "\n".join(account_lines) + "</blockquote>",
+            "",
+            "<blockquote>" + "\n".join(runtime_lines) + "</blockquote>",
+            "",
+            "<blockquote>" + "\n".join(tunnel_lines) + "</blockquote>",
+            "",
+            "<blockquote>" + "\n".join(stats_lines) + "</blockquote>",
+            "",
+            "> Use Health Check before relying on the userbot. Test Send proves the tunnel.",
+        ]
+    )
+
+    buttons = [
+        [
+            InlineKeyboardButton("🩺 Health Check", callback_data="pro_health_check"),
+            InlineKeyboardButton("📤 Test Send", callback_data="pro_test_send"),
+        ],
+        [
+            InlineKeyboardButton("🔁 Re-Authorise", callback_data="pro_re_auth"),
+            InlineKeyboardButton("🆔 Change Tunnel", callback_data="pro_change_tunnel"),
+        ],
+        [
+            InlineKeyboardButton("🔄 Refresh", callback_data="pro_setup_menu"),
+            InlineKeyboardButton("🗑 Delete Session", callback_data="pro_setup_delete"),
+        ],
+        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
+    ]
+    return text, buttons
+
+
+def _render_inactive() -> tuple[str, list]:
+    text = "\n".join(
+        [
+            "**🚀 Setup 𝕏TV Pro™**",
+            SEPARATOR,
+            "",
+            "Pro extends Telegram's 4 GB cap by routing uploads through",
+            "a userbot session. You'll need:",
+            "",
+            "  1. A spare Telegram account",
+            "  2. Its `api_id` + `api_hash` from my.telegram.org",
+            "  3. Access to receive its login code",
+            "",
+            "> The session string is stored in your database — do not share it.",
+        ]
+    )
+    buttons = [
+        [
+            InlineKeyboardButton("🆕 Start Setup", callback_data="pro_setup_start"),
+            InlineKeyboardButton("📖 What is XTV Pro?", callback_data="pro_setup_what"),
+        ],
+        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
+    ]
+    return text, buttons
+
+
+@Client.on_callback_query(filters.regex(r"^pro_setup_what$"))
+async def pro_setup_what(client, callback_query):
+    if callback_query.from_user.id != Config.CEO_ID:
+        return await callback_query.answer("Not authorized.", show_alert=True)
+    await callback_query.answer()
+    text = "\n".join(
+        [
+            "**📖 About 𝕏TV Pro™**",
+            SEPARATOR,
+            "",
+            "Standard Telegram bots can only upload files up to **2 GB**.",
+            "Telegram **Premium** users can upload up to **4 GB**.",
+            "",
+            "𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
+            "file >2 GB through it. The bot copies the file to a private",
+            "tunnel channel where the userbot picks it up and re-sends it",
+            "to the destination — all transparently.",
+            "",
+            "> Setup is one-time. After authorisation everything happens",
+            "> automatically.",
+        ]
+    )
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back", callback_data="pro_setup_menu")]]
+            ),
+        )
+
+@Client.on_callback_query(filters.regex(r"^pro_health_check$"))
+async def pro_health_check(client, callback_query):
+    if callback_query.from_user.id != Config.CEO_ID:
+        return await callback_query.answer("Not authorized.", show_alert=True)
+    await callback_query.answer("Pinging userbot…")
+
+    user_bot = getattr(client, "user_bot", None)
+    if user_bot is None:
+        await db.update_pro_session(
+            last_auth_check_at=datetime.datetime.utcnow(),
+            last_auth_status="error",
+        )
+    else:
+        try:
+            await asyncio.wait_for(user_bot.get_me(), timeout=5)
+            await db.update_pro_session(
+                last_auth_check_at=datetime.datetime.utcnow(),
+                last_auth_status="ok",
+            )
+        except Exception as e:
+            logger.warning(f"Pro health check failed: {e}")
+            await db.update_pro_session(
+                last_auth_check_at=datetime.datetime.utcnow(),
+                last_auth_status="error",
+            )
+
+    session = await db.get_pro_session()
+    if session:
+        text, buttons = _render_active(session, getattr(client, "user_bot", None))
+    else:
+        text, buttons = _render_inactive()
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            text, reply_markup=InlineKeyboardMarkup(buttons)
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^pro_test_send$"))
+async def pro_test_send(client, callback_query):
+    if callback_query.from_user.id != Config.CEO_ID:
+        return await callback_query.answer("Not authorized.", show_alert=True)
+    await callback_query.answer("Sending test message…")
+
+    session = await db.get_pro_session()
+    user_bot = getattr(client, "user_bot", None)
+    tunnel_id = (session or {}).get("tunnel_id")
+
+    if user_bot is None or not tunnel_id:
+        await callback_query.answer(
+            "Userbot not running or tunnel not configured.", show_alert=True
+        )
+        return
+
+    try:
+        msg = await user_bot.send_message(
+            tunnel_id, "🩺 𝕏TV Pro health check — auto-deleting", disable_notification=True
+        )
+        await asyncio.sleep(2)
+        with contextlib.suppress(Exception):
+            await msg.delete()
+        await callback_query.answer("✅ Test send succeeded.", show_alert=True)
+    except Exception as e:
+        logger.warning(f"Pro test send failed: {e}")
+        await callback_query.answer(f"❌ Test send failed: {e}", show_alert=True)
+
+
+@Client.on_callback_query(filters.regex(r"^pro_re_auth$"))
+async def pro_re_auth(client, callback_query):
+    if callback_query.from_user.id != Config.CEO_ID:
+        return await callback_query.answer("Not authorized.", show_alert=True)
+    await callback_query.answer()
+
+    # Stop running userbot, clear stored session, then jump straight into the
+    # setup wizard. We do not pre-fill anything to keep the wizard logic
+    # straightforward — admins re-enter all three credentials.
+    await db.delete_pro_session()
+    if getattr(client, "user_bot", None):
+        with contextlib.suppress(Exception):
+            await client.user_bot.stop()
+        client.user_bot = None
+
+    pro_setup_sessions[callback_query.from_user.id] = {"state": "awaiting_api_id"}
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            "🔁 **Re-Authorise 𝕏TV Pro™**\n"
+            f"{SEPARATOR}\n\n"
+            "Old session cleared. Send the new **API ID** to begin.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
+            ),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^pro_change_tunnel$"))
+async def pro_change_tunnel(client, callback_query):
+    if callback_query.from_user.id != Config.CEO_ID:
+        return await callback_query.answer("Not authorized.", show_alert=True)
+    await callback_query.answer()
+
+    pro_change_sessions[callback_query.from_user.id] = {
+        "action": "tunnel",
+        "msg_id": callback_query.message.id,
+    }
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            "🆔 **Change Tunnel Channel**\n"
+            f"{SEPARATOR}\n\n"
+            "Send the new tunnel as `@username`, numeric ID (`-100…`), "
+            "or send `none` to clear.\n\n"
+            "__The userbot must already be a member with post permissions.__",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
+            ),
+        )
+
 
 @Client.on_callback_query(filters.regex(r"^pro_setup_delete$"))
 async def delete_setup(client, callback_query):
@@ -113,6 +405,15 @@ async def start_setup(client, callback_query):
 @Client.on_message(filters.private & filters.user(Config.CEO_ID), group=0)
 async def pro_setup_handler(client, message):
     user_id = message.from_user.id
+
+    # --- Change-tunnel one-shot text capture (independent of the wizard) ---
+    if user_id in pro_change_sessions:
+        info = pro_change_sessions[user_id]
+        if info.get("action") == "tunnel":
+            await _handle_change_tunnel_text(client, message, info)
+        from pyrogram import StopPropagation
+        raise StopPropagation
+
     if user_id not in pro_setup_sessions:
         raise ContinuePropagation
 
@@ -370,7 +671,22 @@ async def finalize_setup(userbot, user_id, msg):
         session_string = await userbot.export_session_string()
         data = pro_setup_sessions[user_id]
 
-        await db.save_pro_session(session_string, data["api_id"], data["api_hash"])
+        # Capture rich userbot metadata so the Manage screen can show real
+        # account details instead of a generic "Active" line.
+        prem_expires = getattr(me, "premium_expire_date", None) or getattr(
+            me, "premium_expires_date", None
+        )
+        await db.save_pro_session(
+            session_string,
+            data["api_id"],
+            data["api_hash"],
+            phone_number=data.get("phone"),
+            userbot_user_id=getattr(me, "id", None),
+            userbot_first_name=getattr(me, "first_name", None),
+            userbot_username=getattr(me, "username", None),
+            is_premium=bool(getattr(me, "is_premium", False)),
+            premium_expires_at=prem_expires,
+        )
 
         main_app = msg._client
         if not getattr(main_app, "user_bot", None):
@@ -412,6 +728,77 @@ async def finalize_setup(userbot, user_id, msg):
                 ),
             )
         del pro_setup_sessions[user_id]
+
+async def _handle_change_tunnel_text(client, message, info):
+    """Resolve admin's reply for `🆔 Change Tunnel` and persist the new id."""
+    user_id = message.from_user.id
+    val = (message.text or "").strip()
+
+    if not val:
+        await message.reply_text("Send a channel `@username`, numeric ID, `none`, or `cancel`.")
+        return
+
+    if val.lower() in ("cancel", "/cancel"):
+        pro_change_sessions.pop(user_id, None)
+        await message.reply_text(
+            "Cancelled.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back to 𝕏TV Pro™", callback_data="pro_setup_menu")]]
+            ),
+        )
+        return
+
+    if val.lower() == "none":
+        await db.update_pro_session(tunnel_id=None, tunnel_link=None)
+        pro_change_sessions.pop(user_id, None)
+        await message.reply_text(
+            "✅ Tunnel cleared.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back to 𝕏TV Pro™", callback_data="pro_setup_menu")]]
+            ),
+        )
+        return
+
+    # Resolve the channel via the userbot — it has to be a member to post,
+    # so resolution from the userbot is the authoritative check.
+    user_bot = getattr(client, "user_bot", None)
+    if user_bot is None:
+        await message.reply_text(
+            "❌ Userbot not running. Run a Health Check first.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back", callback_data="pro_setup_menu")]]
+            ),
+        )
+        pro_change_sessions.pop(user_id, None)
+        return
+
+    target = val
+    if val.lstrip("-").isdigit():
+        target = int(val)
+
+    try:
+        chat = await user_bot.get_chat(target)
+        link = getattr(chat, "invite_link", None) or (
+            f"https://t.me/{chat.username}" if getattr(chat, "username", None) else None
+        )
+        await db.save_pro_tunnel(chat.id, link)
+        pro_change_sessions.pop(user_id, None)
+        title = chat.title or chat.username or str(chat.id)
+        await message.reply_text(
+            f"✅ Tunnel set to **{title}** (`{chat.id}`).",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back to 𝕏TV Pro™", callback_data="pro_setup_menu")]]
+            ),
+        )
+    except Exception as e:
+        logger.warning(f"Change tunnel failed for {val}: {e}")
+        await message.reply_text(
+            f"❌ Could not resolve `{val}`: {e}\nMake sure the userbot is a member.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
+            ),
+        )
+
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
