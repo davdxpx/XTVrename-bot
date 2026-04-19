@@ -53,11 +53,19 @@ def register(prefix_or_check, handler):
 # ---------------------------------------------------------------------------
 # Handler
 # ---------------------------------------------------------------------------
+# group=-3 is intentionally ahead of every other text handler in the codebase:
+#   -2 myfiles, -1 debug, 0 xtv_pro_setup, 1 admin-setup/users_mod, …
+# so an active admin_sessions state is always the first thing considered.
+# The handler raises ContinuePropagation whenever it has nothing to do,
+# which lets downstream handlers run normally.
 @Client.on_message(
     (filters.text | filters.forwarded) & filters.private & ~filters.regex(r"^/"),
-    group=1,
+    group=-3,
 )
 async def admin_text_dispatcher(client, message):
+    if not message.from_user:
+        raise ContinuePropagation
+
     user_id = message.from_user.id
     if not is_admin(user_id):
         raise ContinuePropagation

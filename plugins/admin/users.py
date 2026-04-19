@@ -274,7 +274,9 @@ async def action_add_prem_ask(client, callback):
 
     with contextlib.suppress(Exception):
         await callback.message.edit_text(
-            f"**➕ Add Premium ({plan.capitalize()}) for User {uid}**\n\nEnter the duration in **DAYS** (e.g. `30`):",
+            f"**➕ Add Premium ({plan.capitalize()}) for User {uid}**\n\n"
+            "Enter the duration in **DAYS** (e.g. `30`).\n"
+            "__Fractional values like `7.5` are accepted; negatives are rejected.__",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data=f"view_user|{uid}")]])
         )
 

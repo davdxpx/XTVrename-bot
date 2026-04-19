@@ -35,7 +35,7 @@ admin_sessions: dict = {}
 
 # --- Access check ------------------------------------------------------------
 def is_admin(user_id):
-    return user_id == Config.CEO_ID
+    return user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS
 
 
 # --- Message edit helper -----------------------------------------------------
