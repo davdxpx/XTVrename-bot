@@ -74,7 +74,7 @@ async def _render_feature_toggles(callback_query: CallbackQuery):
     tmdb_row = (
         "🎬 **TMDb:** ✅ Configured"
         if tmdb_on
-        else "🎬 **TMDb:** ❌ Missing (optional — tap _TMDb Status_ in the main menu)"
+        else "🎬 **TMDb:** ❌ Missing (optional — tap __TMDb Status__ in the main menu)"
     )
     text = (
         "⚙️ **Global Feature Toggles**\n"
