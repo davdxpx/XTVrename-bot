@@ -204,8 +204,6 @@ _MYFILES_SUBFEATURES: list[tuple[str, str, str]] = [
 _MIRROR_LEECH_SUBFEATURES: list[tuple[str, str, str]] = [
     ("mirror_leech",            "☁️ Mirror-Leech Master",
      "Enables the /ml entrypoint and the whole Mirror-Leech stack."),
-    ("mirror_leech_aria2",      "⚡ Aria2 Multi-Connection",
-     "Route HTTP(S) / FTP through a local aria2c daemon for parallel pulls."),
     ("mirror_leech_gallery_dl", "🖼 Gallery-DL / Social",
      "Fetch social-media galleries (Instagram, Reddit, Twitter, …)."),
     ("mirror_leech_mediaplat",  "☁ Cloud-Host Scraper",
