@@ -40,7 +40,7 @@ from tools.mirror_leech.UIChrome import frame_plain as frame
 from utils.feature_gate import feature_enabled
 from utils.log import get_logger
 
-logger = get_logger("plugins.myfiles_extras")
+logger = get_logger("plugins.myfiles.extras")
 
 # Pending text-input states keyed by user id: {"kind": "tag_add"|"search"|
 # "share_pwd"|..., "file_id": str | None, "meta": dict}
@@ -917,7 +917,7 @@ async def _extras_text_router_v2(client: Client, message: Message) -> None:
 async def _selected_file_oids(user_id: int) -> list[ObjectId]:
     """Read the multi-select list from the user's MyFiles state."""
     try:
-        from plugins.myfiles import get_myfiles_state
+        from plugins.myfiles.core import get_myfiles_state
     except Exception:
         return []
     state = await get_myfiles_state(user_id)
