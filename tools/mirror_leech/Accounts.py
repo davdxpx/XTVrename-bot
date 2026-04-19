@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from database import db
+from db import db
 from tools.mirror_leech import Secrets
 
 

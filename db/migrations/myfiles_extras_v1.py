@@ -23,8 +23,8 @@ from typing import Any
 
 from pymongo import ASCENDING, DESCENDING
 
-import database_schema as _schema
-from utils.log import get_logger
+from db import schema as _schema
+from utils.telegram.log import get_logger
 
 logger = get_logger("migrations.myfiles_extras_v1")
 

@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("utils.dumb_channel")
 

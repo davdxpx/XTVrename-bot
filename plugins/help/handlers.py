@@ -8,6 +8,10 @@
 # --------------------------------------------------------------------------
 """`/help` command + every `help_*` callback page.
 
+Mode: BOTH (public + non-public). Per-mode content is rendered via
+``HelpContext`` from ``builder.py`` — there is no mode gate on the
+handler itself.
+
 Previously lived inside plugins/start.py (~1600 lines at the tail of
 the file). Consolidated into a single module so the help system can
 evolve without touching the start-command plugin.
@@ -35,8 +39,8 @@ from pyrogram.types import (
 )
 
 from config import Config
-from database import db
-from utils.help_builder import (
+from db import db
+from plugins.help.builder import (
     CHILD_TO_HUB,
     DISABLED_TOOL_ALERT,
     PREMIUM_SUB_BUILDERS,
@@ -52,10 +56,10 @@ from utils.help_builder import (
     is_callback_tool_available,
     is_tool_available,
 )
-from utils.log import get_logger
-from utils.logger import debug
+from utils.telegram.log import get_logger
+from utils.telegram.logger import debug
 
-logger = get_logger("plugins.help")
+logger = get_logger("plugins.help.handlers")
 
 
 # --- /help command ---------------------------------------------------------

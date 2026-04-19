@@ -27,9 +27,9 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 from plugins.admin.core import admin_sessions, is_admin
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.admin.thumbnails")
 

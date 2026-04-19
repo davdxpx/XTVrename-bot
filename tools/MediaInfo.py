@@ -6,8 +6,8 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from plugins.user_setup import track_tool_usage
-from utils.log import get_logger
 from utils.state import clear_session, get_data, get_state, set_state
+from utils.telegram.log import get_logger
 
 logger = get_logger("tools.MediaInfo")
 

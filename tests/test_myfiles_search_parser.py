@@ -2,7 +2,7 @@
 
 import datetime
 
-from utils.myfiles_search import build_query
+from utils.myfiles.search import build_query
 
 
 def test_user_scope_and_soft_delete_filter_default():

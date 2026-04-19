@@ -4,7 +4,7 @@ import contextlib
 
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from database import db
+from db import db
 from utils.state import update_data
 
 

@@ -6,7 +6,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 from utils.dumb_channel import (
     ValidationResult,
     ValidationStatus,
@@ -14,8 +14,8 @@ from utils.dumb_channel import (
     resolve_channel,
     validate_bot_admin,
 )
-from utils.log import get_logger
 from utils.state import clear_session, get_data, get_state, set_state, update_data
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.dumb_channel")
 

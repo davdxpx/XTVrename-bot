@@ -30,13 +30,13 @@ from pyrogram.types import (
 )
 
 from config import Config
-from database import db
-from db_migrations.mediastudio_layout import (
+from db import db
+from db.migrations.mediastudio_layout import (
     MIGRATION_ID,
     run_mediastudio_layout_migration,
 )
 from plugins.admin.core import is_admin
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.admin.db_health")
 

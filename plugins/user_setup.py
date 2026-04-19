@@ -5,8 +5,8 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
-from utils.log import get_logger
+from db import db
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.user_setup")
 
@@ -177,7 +177,7 @@ async def handle_user_preferences(client, callback_query: CallbackQuery):
     # --- Finish and return to settings menu ---
     elif data == "pref_finish_return":
         await callback_query.answer("Preferences Saved!")
-        from plugins.public_cmds import user_settings_callback
+        from plugins.public_cmds.handlers import user_settings_callback
         callback_query.data = "user_general_settings_menu"
         await user_settings_callback(client, callback_query)
 

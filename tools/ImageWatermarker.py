@@ -9,9 +9,9 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from plugins.user_setup import track_tool_usage
-from utils.ffmpeg_tools import execute_ffmpeg
-from utils.log import get_logger
+from utils.media.ffmpeg_tools import execute_ffmpeg
 from utils.state import clear_session, get_data, get_state, set_state, update_data
+from utils.telegram.log import get_logger
 
 logger = get_logger("tools.ImageWatermarker")
 

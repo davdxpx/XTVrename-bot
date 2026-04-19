@@ -3,8 +3,8 @@ from pyrogram import filters
 from pyrogram.errors import PeerIdInvalid, UserNotParticipant
 
 from config import Config
-from database import db
-from utils.log import get_logger
+from db import db
+from utils.telegram.log import get_logger
 
 logger = get_logger("utils.auth")
 

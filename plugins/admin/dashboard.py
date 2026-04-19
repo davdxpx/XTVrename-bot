@@ -26,8 +26,8 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
-from utils.logger import debug
+from db import db
+from utils.telegram.logger import debug
 
 debug("✅ Loaded handler: admin_dashboard_overview_cb")
 

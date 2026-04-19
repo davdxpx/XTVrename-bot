@@ -1,3 +1,15 @@
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# --------------------------------------------------------------------------
+"""plugins.public_cmds.handlers — /info, /settings, user_settings_callback.
+
+Mode: BOTH (public + non-public). ``/info`` is PUBLIC-ONLY and gates
+itself via ``is_public_mode()``. ``/settings`` and the callback router
+serve both modes; mode-specific sub-menus are gated inside each branch
+(Mirror-Leech credentials for example only appear in non-public mode).
+"""
+
 # --- Imports ---
 import datetime
 import io
@@ -12,10 +24,10 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import BOT_START_TIME, Config
-from database import db
-from utils.log import get_logger
+from db import db
+from utils.telegram.log import get_logger
 
-logger = get_logger("plugins.public_cmds")
+logger = get_logger("plugins.public_cmds.handlers")
 
 user_sessions = {}
 
@@ -160,7 +172,7 @@ async def settings_panel(client, message):
 
 import contextlib
 
-from utils.logger import debug
+from utils.telegram.logger import debug
 
 debug("✅ Loaded handler: user_settings_callback")
 
@@ -1290,134 +1302,6 @@ async def handle_user_text(client, message):
 
     else:
         raise ContinuePropagation
-
-async def _send_usage(client, target, user_id, is_callback=False):
-    is_admin_user = (user_id == Config.CEO_ID or user_id in Config.ADMIN_IDS)
-
-    config = await db.get_public_config()
-    daily_egress_mb_limit = config.get("daily_egress_mb", 0)
-    daily_file_count_limit = config.get("daily_file_count", 0)
-    global_limit_mb = await db.get_global_daily_egress_limit()
-
-    usage = await db.get_user_usage(user_id)
-
-
-    current_utc = datetime.datetime.now(datetime.timezone.utc)
-    current_utc_date = current_utc.strftime("%Y-%m-%d")
-    current_date_display = current_utc.strftime("%d %b %Y")
-
-    tomorrow = current_utc + datetime.timedelta(days=1)
-    midnight = datetime.datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=datetime.timezone.utc)
-    time_to_midnight = midnight - current_utc
-    hours, remainder = divmod(int(time_to_midnight.total_seconds()), 3600)
-    minutes, _ = divmod(remainder, 60)
-
-    files_today = 0
-    egress_today_mb = 0.0
-    if usage.get("date") == current_utc_date:
-        files_today = usage.get("file_count", 0)
-        egress_today_mb = usage.get("egress_mb", 0.0)
-
-    files_alltime = usage.get("file_count_alltime", 0)
-    egress_alltime_mb = usage.get("egress_mb_alltime", 0.0)
-
-    def format_egress(mb):
-        if mb >= 1048576:
-            return f"{mb / 1048576:.2f} TB"
-        elif mb >= 1024:
-            return f"{mb / 1024:.2f} GB"
-        else:
-            return f"{mb:.2f} MB"
-
-    if is_admin_user:
-        files_limit_str = "Unlimited"
-        if global_limit_mb > 0:
-            egress_limit_str = format_egress(global_limit_mb) + " (Global)"
-            limit_to_check = global_limit_mb
-        else:
-            egress_limit_str = "Unlimited"
-            limit_to_check = 0
-
-        percent_files = 0
-        percent_egress = (egress_today_mb / global_limit_mb) * 100 if global_limit_mb > 0 else 0
-    else:
-        files_limit_str = (
-            f"{daily_file_count_limit}" if daily_file_count_limit > 0 else "Unlimited"
-        )
-
-        limit_to_check = daily_egress_mb_limit
-        if global_limit_mb > 0 and (daily_egress_mb_limit <= 0 or global_limit_mb < daily_egress_mb_limit):
-            limit_to_check = global_limit_mb
-
-        egress_limit_str = (
-            format_egress(limit_to_check)
-            if limit_to_check > 0
-            else "Unlimited"
-        )
-
-        percent_files = (
-            (files_today / daily_file_count_limit) * 100
-            if daily_file_count_limit > 0
-            else 0
-        )
-        percent_egress = (
-            (egress_today_mb / limit_to_check) * 100
-            if limit_to_check > 0
-            else 0
-        )
-
-    max_percent = max(percent_files, percent_egress)
-    if max_percent > 100:
-        max_percent = 100
-
-    filled_blocks = int((max_percent / 100) * 10)
-    empty_blocks = 10 - filled_blocks
-    progress_bar = ("■" * filled_blocks) + ("□" * empty_blocks)
-
-    text = "👑 **Admin Account**\n──────────────────────────\n" if is_admin_user else ""
-
-    text += (
-        f"📊 **Your Usage — {current_date_display}**\n\n"
-        f"**Today**\n"
-        f"📁 Files: `{files_today} / {files_limit_str}`\n"
-        f"📦 Egress: `{format_egress(egress_today_mb)} / {egress_limit_str}`\n"
-    )
-
-    if limit_to_check > 0 or (not is_admin_user and daily_file_count_limit > 0):
-        text += f"`{progress_bar}` {max_percent:.1f}%\n\n"
-    else:
-        text += "__(No limits currently applied)__\n\n"
-
-    text += (
-        f"**All-Time**\n"
-        f"📁 Files: `{files_alltime}`\n"
-        f"📦 Egress: `{format_egress(egress_alltime_mb)}`\n\n"
-        f"Resets at midnight UTC (in ~{hours}h {minutes}m)"
-    )
-
-    markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🔄 Refresh", callback_data="refresh_usage")]]
-    )
-
-    if is_callback:
-        with contextlib.suppress(MessageNotModified):
-            await target.edit_message_text(text, reply_markup=markup)
-    else:
-        await target.reply_text(text, reply_markup=markup)
-
-@Client.on_message(filters.command("usage") & filters.private, group=0)
-async def usage_command(client, message):
-    if not is_public_mode():
-        return
-    await _send_usage(client, message, message.from_user.id, False)
-
-@Client.on_callback_query(filters.regex("^refresh_usage$"))
-async def refresh_usage_cb(client, callback_query):
-    with contextlib.suppress(Exception):
-        await callback_query.answer("Refreshed!")
-    if not is_public_mode():
-        return
-    await _send_usage(client, callback_query.message, callback_query.from_user.id, True)
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

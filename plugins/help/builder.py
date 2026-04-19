@@ -30,7 +30,7 @@ from typing import Any
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
+from db import db
 
 # ---------------------------------------------------------------------------
 # Formatting helpers (shared with plugins/premium.py)

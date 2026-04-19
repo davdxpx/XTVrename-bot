@@ -2,8 +2,8 @@ from pyrogram import Client, filters
 from pyrogram.raw.types import LabeledPrice
 
 from config import Config
-from database import db
-from utils.log import get_logger
+from db import db
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.payments")
 

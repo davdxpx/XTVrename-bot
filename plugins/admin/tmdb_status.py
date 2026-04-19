@@ -26,7 +26,7 @@ from pyrogram.types import (
 )
 
 from plugins.admin.core import is_admin
-from utils.tmdb_gate import TMDB_DOCS_URL, is_tmdb_available
+from utils.tmdb.gate import TMDB_DOCS_URL, is_tmdb_available
 
 
 def _status_text_configured() -> str:

@@ -1,7 +1,7 @@
 """Tests for db_migrations.split.split_user_settings_doc."""
 
-import database_schema as schema
-from db_migrations.split import split_user_settings_doc
+from db import schema as schema
+from db.migrations.split import split_user_settings_doc
 
 
 def test_public_mode_config_splits_into_per_concern_docs():

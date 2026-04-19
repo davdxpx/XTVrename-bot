@@ -21,8 +21,8 @@ import contextlib
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
-from database import db
-from utils.log import get_logger
+from db import db
+from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.admin.core")
 

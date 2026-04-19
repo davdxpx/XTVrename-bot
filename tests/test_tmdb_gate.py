@@ -1,9 +1,9 @@
-"""Unit tests for utils.tmdb_gate.is_tmdb_available / tmdb_required_message."""
+"""Unit tests for utils.tmdb.gate.is_tmdb_available / tmdb_required_message."""
 
 import pytest
 
 from config import Config
-from utils.tmdb_gate import is_tmdb_available, tmdb_required_message
+from utils.tmdb.gate import is_tmdb_available, tmdb_required_message
 
 
 @pytest.fixture

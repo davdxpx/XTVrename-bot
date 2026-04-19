@@ -38,7 +38,7 @@ import contextlib
 from typing import Any
 
 from config import Config
-from utils.log import get_logger
+from utils.telegram.log import get_logger
 
 logger = get_logger("migrations.consolidate_nonpublic_settings")
 
