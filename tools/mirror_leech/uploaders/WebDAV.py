@@ -52,6 +52,7 @@ class WebDAVUploader(Uploader):
             "url": (account.get("url") or "").rstrip("/"),
             "username": account.get("username") or "",
             "folder": (account.get("folder") or "").strip().strip("/"),
+            "folder_template": (account.get("folder_template") or "").strip(),
             "password": await Accounts.get_secret(user_id, self.id, "password"),
         }
 
@@ -88,8 +89,11 @@ class WebDAVUploader(Uploader):
             return UploadResult(self.id, ok=False, message="WebDAV not configured")
 
         ctx.status("uploading")
+        folder = c["folder"]
+        if c["folder_template"]:
+            folder = ctx.resolve_path(c["folder_template"], local_path).strip("/")
         rel = (
-            f"{c['folder']}/{local_path.name}" if c["folder"] else local_path.name
+            f"{folder}/{local_path.name}" if folder else local_path.name
         )
         target = _join_url(c["url"], rel)
         size = local_path.stat().st_size

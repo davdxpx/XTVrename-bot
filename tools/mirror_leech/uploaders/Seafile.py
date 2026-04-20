@@ -38,6 +38,7 @@ class SeafileUploader(Uploader):
             "server_url": (account.get("server_url") or "").rstrip("/"),
             "library_id": account.get("library_id") or "",
             "parent_dir": (account.get("parent_dir") or "/").strip() or "/",
+            "folder_template": (account.get("folder_template") or "").strip(),
             "api_token": await Accounts.get_secret(user_id, self.id, "api_token"),
         }
 
@@ -73,6 +74,14 @@ class SeafileUploader(Uploader):
 
         ctx.status("uploading")
 
+        parent_dir = c["parent_dir"]
+        if c["folder_template"]:
+            rendered = ctx.resolve_path(c["folder_template"], local_path).strip()
+            if rendered:
+                if not rendered.startswith("/"):
+                    rendered = "/" + rendered
+                parent_dir = rendered.rstrip("/") or "/"
+
         # Seafile's two-step upload: first fetch a per-library upload link,
         # then POST the file as multipart/form-data. Upload links are
         # single-use and short-lived, so we can't cache them.
@@ -94,7 +103,7 @@ class SeafileUploader(Uploader):
                     upload_url = (await link_resp.json()).strip('"')
 
                 form = aiohttp.FormData()
-                form.add_field("parent_dir", c["parent_dir"])
+                form.add_field("parent_dir", parent_dir)
                 form.add_field("replace", "1")
                 with open(local_path, "rb") as f:
                     form.add_field(
@@ -125,7 +134,7 @@ class SeafileUploader(Uploader):
         if file_id:
             web_url = (
                 f"{c['server_url']}/lib/{c['library_id']}/file"
-                f"{c['parent_dir'].rstrip('/')}/{local_path.name}"
+                f"{parent_dir.rstrip('/')}/{local_path.name}"
             )
             return UploadResult(self.id, ok=True, url=web_url)
         return UploadResult(self.id, ok=True, url=c["server_url"])

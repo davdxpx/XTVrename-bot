@@ -220,6 +220,7 @@ PERSONAL_KEYS = frozenset(
         "series_dumb_channel",
         # Phase D (Mirror-Leech)
         "mirror_leech_accounts",
+        "mirror_leech_presets",
     }
 )
 

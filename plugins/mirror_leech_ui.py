@@ -20,6 +20,9 @@ Callback-data grammar (see Phase D plan for the full table):
     ml_cfg_paste_<provider>        → prompt user to paste token
     ml_cfg_guide_<provider>        → open guide page 1 for provider
     ml_cfg_guide_<provider>_<page> → jump to page N (1-indexed)
+    ml_cfg_tmpl_<provider>         → folder-template editor for provider
+    ml_cfg_tmpledit_<provider>     → enter paste flow for new template
+    ml_cfg_tmplclr_<provider>      → clear folder template for provider
     ml_opt_single_<file_id>        → MyFiles single-file entry
     ml_opt_multi_<state_key>       → MyFiles multi-select entry
     ml_prov_<uploader>_<ctx_id>    → pick uploader for picker context
@@ -27,6 +30,15 @@ Callback-data grammar (see Phase D plan for the full table):
     ml_cancel_<task_id>            → cancel running task
     ml_queue                       → user queue
     ml_admin                       → CEO admin screen
+    ml_preset_list                 → list / manage destination presets
+    ml_preset_new                  → start "new preset" wizard (label first)
+    ml_preset_edit_<slug>          → open edit draft for existing preset
+    ml_preset_delete_<slug>        → delete-with-confirm
+    ml_preset_delconf_<slug>       → confirm delete
+    ml_preset_tgl_<provider>       → toggle provider in current draft
+    ml_preset_save                 → commit current draft
+    ml_preset_cancel               → discard current draft
+    ml_preset_use_<slug>_<ctx_id>  → apply preset to active /ml picker
 """
 
 from __future__ import annotations
@@ -114,7 +126,26 @@ async def _render_uploader_picker(
         return
 
     rows: list[list[InlineKeyboardButton]] = []
+    from tools.mirror_leech import Presets
     from tools.mirror_leech.uploaders import uploader_by_id
+
+    # Preset quick-select row(s): only show presets that reference at
+    # least one provider this user has actually configured — an "archive"
+    # preset that lists s3+b2 is pointless while s3 is unlinked.
+    presets = await Presets.get_presets(user_id)
+    configured_set = set(configured)
+    for preset in presets.values():
+        usable = [p for p in preset.providers if p in configured_set]
+        if not usable:
+            continue
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"🎯 {preset.label} ({len(usable)})",
+                    callback_data=f"ml_preset_use_{preset.slug}_{cid}",
+                )
+            ]
+        )
 
     selected = set(ctx.selected_uploaders)
     for up_id in configured:
@@ -589,6 +620,19 @@ async def _render_cfg_root(
         rows = [[InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")]]
         text = frame("☁️ **Mirror-Leech — Destinations**", body)
     else:
+        # Presets entry only makes sense once the user has at least 2
+        # configured providers — otherwise a "group" is just the provider.
+        from tools.mirror_leech import Presets
+
+        preset_count = len(await Presets.get_presets(user_id))
+        preset_label = (
+            f"🎯 Presets ({preset_count}/{Presets.MAX_PRESETS_PER_USER})"
+            if preset_count
+            else "🎯 Presets"
+        )
+        rows.append(
+            [InlineKeyboardButton(preset_label, callback_data="ml_preset_list")]
+        )
         rows.append([InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")])
         rows.append([InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")])
 
@@ -625,6 +669,13 @@ async def ml_cfg_close(client: Client, callback_query: CallbackQuery) -> None:
 # ---------------------------------------------------------------------------
 
 # Short hints shown under the provider name so the user knows what to paste.
+# Providers that honor the `folder_template` field on upload.
+# Only uploaders with a plain-string destination folder concept are in here —
+# gdrive uses folder ids, telegram uses chat ids, etc., and those don't map
+# to a path template.
+_FOLDER_TEMPLATE_PROVIDERS: set[str] = {"webdav", "seafile", "s3", "b2"}
+
+
 _PROVIDER_HINTS: dict[str, str] = {
     "gdrive": (
         "Needs an OAuth refresh token + client_id + client_secret. Generate "
@@ -747,6 +798,15 @@ async def _render_provider_screen(
                 )
             ]
         )
+        if provider in _FOLDER_TEMPLATE_PROVIDERS and configured:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "📁 Folder template",
+                        callback_data=f"ml_cfg_tmpl_{provider}",
+                    )
+                ]
+            )
         if cls.needs_credentials or provider in {"gofile", "pixeldrain", "telegram"}:
             paste_label = "📝 Paste / update credentials"
             rows.append(
@@ -1105,6 +1165,17 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
     if not state:
         return  # not a ML paste message; let other handlers run
 
+    # Preset wizards hijack the paste-state dispatcher — they only need a
+    # single free-text line (the label).
+    if state.get("provider") == "__preset__":
+        await _ml_preset_label_text(client, message, state)
+        return
+
+    # Folder-template editor: single free-text step too.
+    if state.get("provider") == "__tmpl__":
+        await _ml_tmpl_text(client, message, state)
+        return
+
     provider = state["provider"]
     fmt = _PROVIDER_PASTE_FORMAT.get(provider, {})
     mode = fmt.get("mode", "")
@@ -1201,6 +1272,637 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
     with contextlib.suppress(Exception):
         await message.delete()
     await message.reply_text(f"✅ `{provider}` linked. Use **Test connection** to verify.")
+
+
+# ---------------------------------------------------------------------------
+# Destination presets — user-defined fan-out groups
+# ---------------------------------------------------------------------------
+#
+# Drafts live in memory while the user is editing — they only reach Mongo
+# once the user taps "💾 Save preset". That way we never persist an
+# invalid state (zero providers, unresolved rename, etc.).
+_preset_drafts: dict[int, dict] = {}  # user_id -> {slug, label, providers, existing}
+
+
+def _slugify_label(label: str) -> str:
+    """Turn a human label into a preset slug. Lowercase, strip non-alnum,
+    collapse runs of `_`. Callers must still ensure uniqueness."""
+    cleaned = "".join(
+        (c.lower() if c.isalnum() else "_") for c in label.strip()
+    ).strip("_")
+    while "__" in cleaned:
+        cleaned = cleaned.replace("__", "_")
+    return cleaned or "preset"
+
+
+async def _unique_slug(user_id: int, base: str) -> str:
+    """Return `base` if free, else `base_2`, `base_3`, …"""
+    from tools.mirror_leech import Presets
+
+    existing = await Presets.get_presets(user_id)
+    if base not in existing:
+        return base
+    n = 2
+    while f"{base}_{n}" in existing:
+        n += 1
+    return f"{base}_{n}"
+
+
+async def _render_preset_list(
+    client: Client, chat_id: int, message_id: int, user_id: int
+) -> None:
+    from tools.mirror_leech import Presets
+
+    presets = await Presets.get_presets(user_id)
+    rows: list[list[InlineKeyboardButton]] = []
+    if presets:
+        for slug, preset in presets.items():
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"🎯 {preset.label} ({len(preset.providers)})",
+                        callback_data=f"ml_preset_edit_{slug}",
+                    ),
+                    InlineKeyboardButton(
+                        "🗑", callback_data=f"ml_preset_delete_{slug}"
+                    ),
+                ]
+            )
+
+    if len(presets) < Presets.MAX_PRESETS_PER_USER:
+        rows.append(
+            [InlineKeyboardButton("➕ New preset", callback_data="ml_preset_new")]
+        )
+    rows.append([InlineKeyboardButton("← Back", callback_data="ml_cfg")])
+
+    if presets:
+        body = (
+            "> Group your destinations so one tap in `/ml` fans out to all\n"
+            "> of them at once. Up to "
+            f"{Presets.MAX_PRESETS_PER_USER} presets, "
+            f"{Presets.MAX_PROVIDERS_PER_PRESET} providers each."
+        )
+    else:
+        body = (
+            "> No presets yet. A preset is a named group of destinations —\n"
+            "> tap it in `/ml` to fan a single file out to every provider\n"
+            "> in the group without toggling checkboxes each time."
+        )
+
+    text = frame("🎯 **Mirror-Leech — Presets**", body)
+    with contextlib.suppress(Exception):
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_list$"))
+async def ml_preset_list(client: Client, callback_query: CallbackQuery) -> None:
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_new$"))
+async def ml_preset_new(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    user_id = callback_query.from_user.id
+    existing = await Presets.get_presets(user_id)
+    if len(existing) >= Presets.MAX_PRESETS_PER_USER:
+        await callback_query.answer(
+            f"Preset limit reached ({Presets.MAX_PRESETS_PER_USER}). "
+            "Delete one first.",
+            show_alert=True,
+        )
+        return
+
+    _paste_state[user_id] = {
+        "provider": "__preset__",
+        "step": "await_label",
+        "tmp": {},
+    }
+    await callback_query.answer()
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            "🎯 **New preset — label**\n\n"
+            "Send a short label for this preset (e.g. `Media Hosts`, "
+            "`Cold Storage`). Max 40 characters.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="ml_preset_cancel")]]
+            ),
+        )
+
+
+async def _ml_tmpl_text(client: Client, message: Message, state: dict) -> None:
+    from tools.mirror_leech import Accounts
+    from tools.mirror_leech.TemplateEngine import render_template
+
+    user_id = message.from_user.id
+    provider = state.get("tmp", {}).get("target") or ""
+    if provider not in _FOLDER_TEMPLATE_PROVIDERS:
+        _paste_state.pop(user_id, None)
+        await message.reply_text("⚠️ Editor target lost — try again.")
+        return
+
+    raw = (message.text or "").strip()
+    if raw.lower() == "clear" or not raw:
+        await Accounts.set_plain(user_id, provider, "folder_template", "")
+        _paste_state.pop(user_id, None)
+        sent = await message.reply_text("🗑 Folder template cleared.")
+        await _render_template_editor(client, sent.chat.id, sent.id, user_id, provider)
+        return
+
+    # Validate by rendering once with dummy vars; surfaces unclosed braces
+    # and format-spec errors before we persist a broken template.
+    try:
+        render_template(
+            raw,
+            {"year": 2026, "month": 1, "day": 1, "hour": 0, "minute": 0,
+             "source_kind": "yt", "user_id": user_id, "task_id": "test",
+             "original_name": "x", "ext": "mp4"},
+        )
+    except ValueError as exc:
+        await message.reply_text(f"⚠️ Invalid template: {exc}")
+        return
+
+    await Accounts.set_plain(user_id, provider, "folder_template", raw)
+    _paste_state.pop(user_id, None)
+    sent = await message.reply_text(f"✅ Folder template saved for `{provider}`.")
+    await _render_template_editor(client, sent.chat.id, sent.id, user_id, provider)
+
+
+async def _ml_preset_label_text(
+    client: Client, message: Message, state: dict
+) -> None:
+    user_id = message.from_user.id
+    label = (message.text or "").strip()
+    if not label:
+        await message.reply_text("⚠️ Label can't be empty.")
+        return
+    if len(label) > 40:
+        await message.reply_text("⚠️ Label too long (max 40 chars).")
+        return
+
+    base_slug = _slugify_label(label)
+    slug = await _unique_slug(user_id, base_slug)
+    _preset_drafts[user_id] = {
+        "slug": slug,
+        "label": label,
+        "providers": [],
+        "existing": False,
+    }
+    _paste_state.pop(user_id, None)
+    with contextlib.suppress(Exception):
+        await message.delete()
+    sent = await message.reply_text("✅ Label stored. Now pick providers.")
+    await _render_preset_edit(client, sent.chat.id, sent.id, user_id)
+
+
+async def _render_preset_edit(
+    client: Client, chat_id: int, message_id: int, user_id: int
+) -> None:
+    from tools.mirror_leech import Presets
+
+    draft = _preset_drafts.get(user_id)
+    if not draft:
+        await _render_preset_list(client, chat_id, message_id, user_id)
+        return
+
+    configured = await _configured_uploader_ids(user_id)
+    if not configured:
+        body = (
+            "> ⚠️ You need at least one configured destination before\n"
+            "> building a preset. Link providers first, then come back."
+        )
+        rows = [[InlineKeyboardButton("← Back", callback_data="ml_preset_cancel")]]
+        text = frame("🎯 **Preset — no destinations**", body)
+        with contextlib.suppress(Exception):
+            await client.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=InlineKeyboardMarkup(rows),
+            )
+        return
+
+    from tools.mirror_leech.uploaders import uploader_by_id
+
+    rows: list[list[InlineKeyboardButton]] = []
+    selected = set(draft["providers"])
+    for pid in configured:
+        cls = uploader_by_id(pid)
+        display = cls.display_name if cls else pid
+        mark = "✅" if pid in selected else "▫️"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"{mark} {display}",
+                    callback_data=f"ml_preset_tgl_{pid}",
+                )
+            ]
+        )
+
+    max_p = Presets.MAX_PROVIDERS_PER_PRESET
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "💾 Save preset" if selected else "💾 (pick ≥1 provider)",
+                callback_data="ml_preset_save",
+            ),
+            InlineKeyboardButton("❌ Cancel", callback_data="ml_preset_cancel"),
+        ]
+    )
+
+    body = (
+        f"> **Label:** {draft['label']}\n"
+        f"> **Selected:** {len(selected)}/{max_p}\n\n"
+        "> Tap providers to toggle. Save when you're done."
+    )
+    text = frame("🎯 **Preset — edit**", body)
+    with contextlib.suppress(Exception):
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_edit_([a-z0-9_-]+)$"))
+async def ml_preset_edit(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    slug = callback_query.data.removeprefix("ml_preset_edit_")
+    user_id = callback_query.from_user.id
+    preset = await Presets.get_preset(user_id, slug)
+    if not preset:
+        await callback_query.answer("Preset not found.", show_alert=True)
+        return
+    _preset_drafts[user_id] = {
+        "slug": preset.slug,
+        "label": preset.label,
+        "providers": list(preset.providers),
+        "existing": True,
+    }
+    await _render_preset_edit(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_tgl_([a-z0-9_]+)$"))
+async def ml_preset_toggle(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    provider = callback_query.data.removeprefix("ml_preset_tgl_")
+    user_id = callback_query.from_user.id
+    draft = _preset_drafts.get(user_id)
+    if not draft:
+        await callback_query.answer("Draft expired — start again.", show_alert=True)
+        return
+
+    if provider in draft["providers"]:
+        draft["providers"].remove(provider)
+    else:
+        if len(draft["providers"]) >= Presets.MAX_PROVIDERS_PER_PRESET:
+            await callback_query.answer(
+                f"Max {Presets.MAX_PROVIDERS_PER_PRESET} providers per preset.",
+                show_alert=True,
+            )
+            return
+        draft["providers"].append(provider)
+
+    await _render_preset_edit(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_save$"))
+async def ml_preset_save(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    user_id = callback_query.from_user.id
+    draft = _preset_drafts.get(user_id)
+    if not draft:
+        await callback_query.answer("No draft to save.", show_alert=True)
+        return
+    if not draft["providers"]:
+        await callback_query.answer(
+            "Pick at least one provider first.", show_alert=True
+        )
+        return
+
+    try:
+        await Presets.set_preset(
+            user_id, draft["slug"], draft["label"], draft["providers"]
+        )
+    except ValueError as exc:
+        await callback_query.answer(f"Save failed: {exc}", show_alert=True)
+        return
+
+    _preset_drafts.pop(user_id, None)
+    await callback_query.answer("Saved.")
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_cancel$"))
+async def ml_preset_cancel(client: Client, callback_query: CallbackQuery) -> None:
+    user_id = callback_query.from_user.id
+    _preset_drafts.pop(user_id, None)
+    _paste_state.pop(user_id, None)
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(
+    filters.regex(r"^ml_preset_use_([a-z0-9_-]+)_([A-Za-z0-9_-]{4,10})$")
+)
+async def ml_preset_use(client: Client, callback_query: CallbackQuery) -> None:
+    """Apply a preset to the current /ml picker: set the provider
+    selection to every preset provider the user has configured, then
+    re-render the picker so the user can still tweak before Start."""
+    from tools.mirror_leech import Presets
+
+    match = callback_query.matches[0]
+    slug = match.group(1)
+    cid = match.group(2)
+
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await callback_query.answer(
+            "Picker expired — run /ml again.", show_alert=True
+        )
+        return
+    if ctx.user_id != callback_query.from_user.id:
+        await callback_query.answer(
+            "This picker belongs to another user.", show_alert=True
+        )
+        return
+
+    preset = await Presets.get_preset(callback_query.from_user.id, slug)
+    if not preset:
+        await callback_query.answer("Preset not found.", show_alert=True)
+        return
+
+    configured = set(await _configured_uploader_ids(ctx.user_id))
+    ctx.selected_uploaders = [p for p in preset.providers if p in configured]
+    await callback_query.answer(
+        f"🎯 {preset.label}: {len(ctx.selected_uploaders)} selected"
+    )
+    await _render_uploader_picker(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        cid,
+        ctx.user_id,
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_delete_([a-z0-9_-]+)$"))
+async def ml_preset_delete(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    slug = callback_query.data.removeprefix("ml_preset_delete_")
+    preset = await Presets.get_preset(callback_query.from_user.id, slug)
+    if not preset:
+        await callback_query.answer("Preset not found.", show_alert=True)
+        return
+
+    body = (
+        f"> Delete preset **{preset.label}** ({len(preset.providers)} "
+        "providers)?\n\n> This cannot be undone."
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                "🗑 Delete", callback_data=f"ml_preset_delconf_{slug}"
+            ),
+            InlineKeyboardButton("← Back", callback_data="ml_preset_list"),
+        ]
+    ]
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame("🎯 **Preset — confirm delete**", body),
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_delconf_([a-z0-9_-]+)$"))
+async def ml_preset_delete_confirm(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Presets
+
+    slug = callback_query.data.removeprefix("ml_preset_delconf_")
+    await Presets.delete_preset(callback_query.from_user.id, slug)
+    await callback_query.answer("Deleted.")
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Folder template editor
+# ---------------------------------------------------------------------------
+
+_TEMPLATE_VARIABLES_HELP = (
+    "> **Variables**\n"
+    "> `{year}` `{month}` `{day}` — today's date\n"
+    "> `{month:02d}` — format specs work too\n"
+    "> `{source_kind}` — http / yt / telegram / rss\n"
+    "> `{user_id}` `{task_id}` — per-task\n"
+    "> `{original_name}` `{ext}` — filename parts\n"
+    "\n"
+    "> **Example**\n"
+    "> `/MirrorLeech/{year}/{month:02d}/{source_kind}/`"
+)
+
+
+async def _render_template_editor(
+    client: Client,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+    provider: str,
+) -> None:
+    from tools.mirror_leech import Accounts
+    from tools.mirror_leech.TemplateEngine import render_template
+    from tools.mirror_leech.uploaders import uploader_by_id
+
+    cls = uploader_by_id(provider)
+    if cls is None or provider not in _FOLDER_TEMPLATE_PROVIDERS:
+        with contextlib.suppress(Exception):
+            await client.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=frame(
+                    "📁 **Folder template — unsupported**",
+                    "> This provider doesn't use path-style destinations.",
+                ),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back", callback_data=f"ml_cfg_up_{provider}")]]
+                ),
+            )
+        return
+
+    account = await Accounts.get_account(user_id, provider)
+    current = (account.get("folder_template") or "").strip()
+    if current:
+        # Preview what it renders to right now, so the user catches typos
+        # before the next upload goes to the wrong folder.
+        try:
+            from pathlib import Path
+
+            preview_vars = {
+                "user_id": user_id,
+                "task_id": "abcd1234",
+                "source_kind": "yt",
+                "original_name": "example",
+                "ext": "mp4",
+            }
+            from tools.mirror_leech.TemplateEngine import now_vars
+
+            preview_vars.update(now_vars())
+            preview = render_template(current, preview_vars)
+        except Exception as exc:
+            preview = f"⚠️ {exc}"
+        body_lines = [
+            f"> **Current:** `{current}`",
+            f"> **Preview:** `{preview or '(empty)'}`",
+            "",
+            _TEMPLATE_VARIABLES_HELP,
+        ]
+    else:
+        body_lines = [
+            "> No folder template set — uploads use the static folder\n"
+            "> you configured when linking this provider.",
+            "",
+            _TEMPLATE_VARIABLES_HELP,
+        ]
+
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                "📝 Edit template", callback_data=f"ml_cfg_tmpledit_{provider}"
+            )
+        ]
+    ]
+    if current:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "🗑 Clear template",
+                    callback_data=f"ml_cfg_tmplclr_{provider}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton("← Back", callback_data=f"ml_cfg_up_{provider}")]
+    )
+
+    text = frame(f"📁 **{cls.display_name} — folder template**", "\n".join(body_lines))
+    with contextlib.suppress(Exception):
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_tmpl_([a-z0-9_]+)$"))
+async def ml_cfg_tmpl(client: Client, callback_query: CallbackQuery) -> None:
+    provider = callback_query.data.removeprefix("ml_cfg_tmpl_")
+    await _render_template_editor(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+        provider,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_tmpledit_([a-z0-9_]+)$"))
+async def ml_cfg_tmpl_edit(client: Client, callback_query: CallbackQuery) -> None:
+    provider = callback_query.matches[0].group(1)
+    if provider not in _FOLDER_TEMPLATE_PROVIDERS:
+        await callback_query.answer("Not supported for this provider.", show_alert=True)
+        return
+
+    _paste_state[callback_query.from_user.id] = {
+        "provider": "__tmpl__",
+        "step": "await_template",
+        "tmp": {"target": provider},
+    }
+    await callback_query.answer()
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            "📁 **Set folder template**\n\n"
+            "Send the new template (plain text). Example:\n"
+            "`/MirrorLeech/{year}/{month:02d}/{source_kind}/`\n\n"
+            "Leading/trailing slashes are normalised automatically.\n"
+            "Reply with `clear` to remove the current template.\n\n"
+            + _TEMPLATE_VARIABLES_HELP,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "❌ Cancel", callback_data=f"ml_cfg_tmpl_{provider}"
+                        )
+                    ]
+                ]
+            ),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_tmplclr_([a-z0-9_]+)$"))
+async def ml_cfg_tmpl_clear(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Accounts
+
+    provider = callback_query.data.removeprefix("ml_cfg_tmplclr_")
+    await Accounts.set_plain(
+        callback_query.from_user.id, provider, "folder_template", ""
+    )
+    await callback_query.answer("Template cleared.")
+    await _render_template_editor(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+        provider,
+    )
 
 
 # ---------------------------------------------------------------------------

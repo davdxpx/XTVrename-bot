@@ -68,6 +68,7 @@ class BackblazeB2Uploader(Uploader):
         return {
             "bucket": account.get("bucket") or "",
             "prefix": (account.get("prefix") or "").strip().strip("/"),
+            "folder_template": (account.get("folder_template") or "").strip(),
             "app_key_id": await Accounts.get_secret(user_id, self.id, "app_key_id"),
             "app_key": await Accounts.get_secret(user_id, self.id, "app_key"),
         }
@@ -94,8 +95,11 @@ class BackblazeB2Uploader(Uploader):
             return UploadResult(self.id, ok=False, message="B2 not configured")
 
         ctx.status("uploading")
+        prefix = c["prefix"]
+        if c["folder_template"]:
+            prefix = ctx.resolve_path(c["folder_template"], local_path).strip("/")
         remote_key = (
-            f"{c['prefix']}/{local_path.name}" if c["prefix"] else local_path.name
+            f"{prefix}/{local_path.name}" if prefix else local_path.name
         )
 
         try:

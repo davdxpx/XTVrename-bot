@@ -53,6 +53,7 @@ class MLContext:
     cancel_event: asyncio.Event
     report_progress: Callable[[float, float, float], None]  # (done_bytes, total_bytes, speed_bps)
     report_status: Callable[[TaskStatus], None]
+    source_kind: Optional[str] = None
 
     def cancelled(self) -> bool:
         return self.cancel_event.is_set()
@@ -62,6 +63,34 @@ class MLContext:
 
     def status(self, new_status: TaskStatus) -> None:
         self.report_status(new_status)
+
+    def template_vars(self, local_path: Optional[Path] = None) -> dict:
+        """Return the variable dict for folder-template rendering.
+
+        Bundles per-task metadata (user / task / source kind) with the
+        time-dependent snapshot and, when `local_path` is provided, the
+        filename parts. Keeps uploaders from having to repeat the
+        bookkeeping every time they resolve a destination path.
+        """
+        from tools.mirror_leech.TemplateEngine import now_vars
+
+        vars: dict = {
+            "user_id": self.user_id,
+            "task_id": self.task_id,
+            "source_kind": self.source_kind or "",
+        }
+        vars.update(now_vars())
+        if local_path is not None:
+            vars["original_name"] = local_path.stem
+            vars["ext"] = local_path.suffix.lstrip(".").lower()
+        return vars
+
+    def resolve_path(self, template: str, local_path: Optional[Path] = None) -> str:
+        """Render `template` with this context's variable set. Shortcut
+        for `render_template(template, ctx.template_vars(...))`."""
+        from tools.mirror_leech.TemplateEngine import render_template
+
+        return render_template(template, self.template_vars(local_path))
 
 
 @dataclass

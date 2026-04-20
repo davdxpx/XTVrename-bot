@@ -71,6 +71,7 @@ class S3Uploader(Uploader):
             "region": account.get("region") or None,
             "bucket": account.get("bucket") or "",
             "prefix": (account.get("prefix") or "").strip().strip("/"),
+            "folder_template": (account.get("folder_template") or "").strip(),
             "access_key": await Accounts.get_secret(user_id, self.id, "access_key"),
             "secret_key": await Accounts.get_secret(user_id, self.id, "secret_key"),
         }
@@ -102,7 +103,10 @@ class S3Uploader(Uploader):
             return UploadResult(self.id, ok=False, message="S3 not configured")
 
         ctx.status("uploading")
-        key = f"{c['prefix']}/{local_path.name}" if c["prefix"] else local_path.name
+        prefix = c["prefix"]
+        if c["folder_template"]:
+            prefix = ctx.resolve_path(c["folder_template"], local_path).strip("/")
+        key = f"{prefix}/{local_path.name}" if prefix else local_path.name
 
         def _upload_sync() -> None:
             client = _client(
