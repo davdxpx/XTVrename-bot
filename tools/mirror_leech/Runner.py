@@ -60,6 +60,7 @@ def _make_context(task: MLTask, client: Any, temp_dir: Path) -> MLContext:
         cancel_event=task.cancel_event,
         report_progress=_progress,
         report_status=_status,
+        source_kind=task.downloader_id or None,
     )
     # Some providers (TelegramDownloader / TelegramUploader) need the bot
     # client; attach it as an out-of-band attribute so the typed MLContext
