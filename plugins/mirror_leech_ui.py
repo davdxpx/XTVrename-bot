@@ -639,6 +639,18 @@ _PROVIDER_HINTS: dict[str, str] = {
     "pixeldrain": "Optional API key — anonymous upload works without linking.",
     "telegram": "Defaults to DM. Paste a channel id to override.",
     "ddl": "Set DDL_BASE_URL on the bot host to enable one-time download links.",
+    "dropbox": (
+        "Needs a refresh token + app_key + app_secret from a scoped Dropbox "
+        "app at dropbox.com/developers/apps."
+    ),
+    "onedrive": (
+        "Needs a refresh token + client_id + tenant from an Azure/Entra app "
+        "registration with Files.ReadWrite + offline_access."
+    ),
+    "box": (
+        "Needs a refresh token + client_id + client_secret from a Box custom "
+        "app with Read/Write-all-files scopes."
+    ),
 }
 
 
@@ -896,6 +908,28 @@ _PROVIDER_PASTE_FORMAT: dict[str, dict[str, str]] = {
     "ddl": {
         "prompt": "DDL is host-configured via `DDL_BASE_URL`. Nothing to paste.",
         "mode": "noop",
+    },
+    "dropbox": {
+        "prompt": (
+            "Send your Dropbox credentials as three lines:\n"
+            "```\n<refresh_token>\n<app_key>\n<app_secret>\n```"
+        ),
+        "mode": "three_secrets:refresh_token,app_key,app_secret",
+    },
+    "onedrive": {
+        "prompt": (
+            "Send your OneDrive credentials as three lines:\n"
+            "```\n<refresh_token>\n<client_id>\n<tenant>\n```\n"
+            "Use `common` as tenant for personal Microsoft accounts."
+        ),
+        "mode": "three_secrets:refresh_token,client_id,tenant",
+    },
+    "box": {
+        "prompt": (
+            "Send your Box credentials as three lines:\n"
+            "```\n<refresh_token>\n<client_id>\n<client_secret>\n```"
+        ),
+        "mode": "three_secrets:refresh_token,client_id,client_secret",
     },
 }
 

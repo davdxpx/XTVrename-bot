@@ -568,6 +568,341 @@ _TELEGRAM = DestinationGuide(
 
 
 # ---------------------------------------------------------------------------
+# Dropbox — 3 pages (app console, refresh token, paste) + troubleshooting
+# ---------------------------------------------------------------------------
+_DROPBOX = DestinationGuide(
+    provider_id="dropbox",
+    display_name="Dropbox",
+    summary=(
+        "OAuth-based upload to your own Dropbox. "
+        "Needs three values: refresh_token, app_key, app_secret."
+    ),
+    required_values=["refresh_token", "app_key", "app_secret"],
+    pages=[
+        GuidePage(
+            title="Step 1 / 3 — Create a Dropbox app",
+            body=(
+                "> Register a scoped app on Dropbox's developer console so\n"
+                "> the bot gets its own `app_key` and `app_secret`.\n\n"
+                "**1.** Open https://www.dropbox.com/developers/apps\n"
+                "**2.** **Create app** → choose **Scoped access**.\n"
+                "**3.** Access type: **Full Dropbox** (or **App folder**\n"
+                "    for sandboxed uploads).\n"
+                "**4.** Pick a unique app name.\n"
+                "**5.** In the app's **Permissions** tab, enable\n"
+                "    `files.content.write` and `files.content.read`\n"
+                "    (plus `sharing.write` if you want shared links).\n"
+                "    Press **Submit** at the bottom.\n"
+                "**6.** The **Settings** tab shows `App key` and\n"
+                "    `App secret` — you'll paste them in Step 3.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 2 / 3 — Get the refresh token",
+            body=(
+                "> Dropbox refresh tokens are minted by exchanging a\n"
+                "> one-time authorization code. rclone automates this.\n\n"
+                "**Easiest path — via rclone:**\n"
+                "```\n"
+                "rclone authorize \"dropbox\" \"<app_key>\" \"<app_secret>\"\n"
+                "```\n"
+                "A browser opens; after **Allow** you'll see a JSON blob\n"
+                "containing `refresh_token` (and `access_token` — ignore).\n\n"
+                "**Manual path** (no rclone): follow\n"
+                "https://developers.dropbox.com/oauth-guide with\n"
+                "`token_access_type=offline` and exchange the returned\n"
+                "`code` against `/oauth2/token` for a `refresh_token`.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 3 / 3 — Link to the bot",
+            body=(
+                "> Paste all three values in a single message. The bot\n"
+                "> encrypts them with Fernet and deletes your message.\n\n"
+                "Tap **📝 Paste / update credentials** below, then send:\n"
+                "```\n"
+                "<refresh_token>\n"
+                "<app_key>\n"
+                "<app_secret>\n"
+                "```\n"
+                "One value per line, in that exact order.\n\n"
+                "Verify the link afterwards with **🔌 Test connection** —\n"
+                "the bot replies `linked as <your name>` on success."
+            ),
+        ),
+        _trouble_page(
+            "Dropbox",
+            [
+                (
+                    "`invalid_grant` / `expired_refresh_token`",
+                    "The refresh token was revoked (password change, app "
+                    "removed from connected-apps, or manually regenerated "
+                    "app secret). Re-run Step 2 to mint a new one and "
+                    "paste the three values again.",
+                ),
+                (
+                    "`missing_scope` / `insufficient_permissions`",
+                    "The Dropbox app doesn't have the right permission "
+                    "scopes. Open the app in Dropbox's developer console, "
+                    "enable `files.content.write` + `files.content.read` "
+                    "(and `sharing.write` for shared links), press Submit, "
+                    "then re-run Step 2 — scopes are baked into the "
+                    "refresh token.",
+                ),
+                (
+                    "`path/conflict/file`",
+                    "A file with the same name already exists at the "
+                    "destination. The bot uploads in overwrite mode, so "
+                    "this usually means two concurrent uploads collided. "
+                    "Wait a few seconds and retry.",
+                ),
+                (
+                    "`upload.write_failed` on large files",
+                    "A resumable chunk failed mid-upload. The bot doesn't "
+                    "auto-resume across restarts for Dropbox — just "
+                    "re-queue the upload. For repeatable failures, check "
+                    "free quota in the Dropbox account.",
+                ),
+                (
+                    "Shared link shows `dropbox://…`",
+                    "The app lacks `sharing.write` and the bot fell back "
+                    "to a path-style reference. Add the scope in the app "
+                    "console, re-mint the refresh token, and re-link.",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
+# OneDrive — 3 pages (Azure app, refresh token, paste) + troubleshooting
+# ---------------------------------------------------------------------------
+_ONEDRIVE = DestinationGuide(
+    provider_id="onedrive",
+    display_name="OneDrive",
+    summary=(
+        "Microsoft Graph upload to your own OneDrive. "
+        "Needs three values: refresh_token, client_id, tenant."
+    ),
+    required_values=["refresh_token", "client_id", "tenant"],
+    pages=[
+        GuidePage(
+            title="Step 1 / 3 — Register an Azure app",
+            body=(
+                "> The Graph API needs an app registration in Entra ID\n"
+                "> (Azure AD) so the bot can sign in on your behalf.\n\n"
+                "**1.** Open https://entra.microsoft.com → **Identity** →\n"
+                "    **Applications** → **App registrations**.\n"
+                "**2.** **New registration** → pick a name.\n"
+                "**3.** Supported account types:\n"
+                "    • *Personal Microsoft accounts* → tenant = `common`\n"
+                "    • *Your organization only* → tenant = directory id\n"
+                "**4.** Redirect URI → **Public client / native** →\n"
+                "    `http://localhost`.\n"
+                "**5.** **Register**. Copy the **Application (client) ID** —\n"
+                "    that's `client_id` for Step 3.\n"
+                "**6.** **API permissions** → **Add a permission** →\n"
+                "    Microsoft Graph → **Delegated permissions** →\n"
+                "    enable `Files.ReadWrite` and `offline_access`.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 2 / 3 — Get the refresh token",
+            body=(
+                "> MSAL's refresh-token flow is easiest to drive through\n"
+                "> rclone, which speaks the same OAuth 2.0 authorization-\n"
+                "> code dance the bot needs.\n\n"
+                "**Easiest path — via rclone:**\n"
+                "```\n"
+                "rclone authorize \"onedrive\"\n"
+                "```\n"
+                "Pick **OneDrive Personal** or **OneDrive for Business**\n"
+                "when prompted, paste the `client_id` from Step 1, then\n"
+                "allow in the browser. The JSON blob it prints contains\n"
+                "`refresh_token`.\n\n"
+                "**Manual path:** hit `https://login.microsoftonline.com/\n"
+                "<tenant>/oauth2/v2.0/authorize` with\n"
+                "`scope=Files.ReadWrite%20offline_access` and exchange the\n"
+                "returned `code` against `/oauth2/v2.0/token`.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 3 / 3 — Link to the bot",
+            body=(
+                "> Paste all three values in a single message. The bot\n"
+                "> encrypts them with Fernet and deletes your message.\n\n"
+                "Tap **📝 Paste / update credentials** below, then send:\n"
+                "```\n"
+                "<refresh_token>\n"
+                "<client_id>\n"
+                "<tenant>\n"
+                "```\n"
+                "One value per line, in that exact order.\n\n"
+                "Use `common` as `tenant` for personal Microsoft accounts;\n"
+                "for org accounts paste the directory (tenant) ID.\n\n"
+                "Verify afterwards with **🔌 Test connection** — the bot\n"
+                "replies with the remaining OneDrive free space on success."
+            ),
+        ),
+        _trouble_page(
+            "OneDrive",
+            [
+                (
+                    "`AADSTS70008` / `refresh token is expired`",
+                    "Personal-account refresh tokens expire after 90 days "
+                    "of inactivity; org tokens can be revoked by admin "
+                    "policy sooner. Re-run Step 2 and paste the new "
+                    "values — no need to recreate the Azure app.",
+                ),
+                (
+                    "`AADSTS65001` / `consent required`",
+                    "The app is missing a permission the scope requests. "
+                    "In Azure → API permissions, grant admin consent for "
+                    "`Files.ReadWrite` and `offline_access`, then re-run "
+                    "Step 2 so the new scopes end up in the token.",
+                ),
+                (
+                    "`AADSTS700016` / `application not found`",
+                    "Wrong `client_id` or the Azure app was deleted. "
+                    "Verify the **Application (client) ID** in Azure's "
+                    "app overview and re-paste.",
+                ),
+                (
+                    "`quotaLimitReached`",
+                    "OneDrive free plans cap at 5 GB; paid plans at 1 TB. "
+                    "The bot surfaces free space in **🔌 Test connection**. "
+                    "Clear space or move to a different account — there's "
+                    "no bot-side workaround.",
+                ),
+                (
+                    "Uploads stall on files > 4 MB",
+                    "The upload-session endpoint requires chunks that are "
+                    "a multiple of 320 KiB. The bot already uses 10 MiB "
+                    "chunks. If stalls persist, check that no corporate "
+                    "proxy is stripping `Content-Range` headers.",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
+# Box — 3 pages (custom app, refresh token, paste) + troubleshooting
+# ---------------------------------------------------------------------------
+_BOX = DestinationGuide(
+    provider_id="box",
+    display_name="Box",
+    summary=(
+        "OAuth-based upload to your own Box account. "
+        "Needs three values: refresh_token, client_id, client_secret."
+    ),
+    required_values=["refresh_token", "client_id", "client_secret"],
+    pages=[
+        GuidePage(
+            title="Step 1 / 3 — Create a Box custom app",
+            body=(
+                "> Box calls its OAuth apps *Custom Apps*; you create one\n"
+                "> on the Box developer console.\n\n"
+                "**1.** Open https://app.box.com/developers/console\n"
+                "**2.** **Create New App** → **Custom App**.\n"
+                "**3.** Authentication method → **User Authentication\n"
+                "    (OAuth 2.0)**.\n"
+                "**4.** Pick a unique app name → **Create App**.\n"
+                "**5.** In the app's **Configuration** tab:\n"
+                "    • Redirect URI → `http://localhost`\n"
+                "    • Application Scopes → tick **Write all files** and\n"
+                "      **Read all files**.\n"
+                "    • Save changes.\n"
+                "**6.** Copy **Client ID** and **Client Secret** — you'll\n"
+                "    paste them in Step 3.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 2 / 3 — Get the refresh token",
+            body=(
+                "> Box rotates refresh tokens on every refresh. The bot\n"
+                "> persists rotated tokens automatically, so you only\n"
+                "> have to mint one refresh token here.\n\n"
+                "**Easiest path — via rclone:**\n"
+                "```\n"
+                "rclone authorize \"box\"\n"
+                "```\n"
+                "Paste the `client_id` and `client_secret` from Step 1 when\n"
+                "prompted, then allow in the browser. The JSON blob it\n"
+                "prints contains `refresh_token`.\n\n"
+                "**Manual path:** navigate to\n"
+                "`https://account.box.com/api/oauth2/authorize` with\n"
+                "`response_type=code&client_id=<id>&redirect_uri=\n"
+                "http://localhost`, exchange the returned `code` against\n"
+                "`/api/oauth2/token` for a refresh token.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 3 / 3 — Link to the bot",
+            body=(
+                "> Paste all three values in a single message. The bot\n"
+                "> encrypts them with Fernet and deletes your message.\n\n"
+                "Tap **📝 Paste / update credentials** below, then send:\n"
+                "```\n"
+                "<refresh_token>\n"
+                "<client_id>\n"
+                "<client_secret>\n"
+                "```\n"
+                "One value per line, in that exact order.\n\n"
+                "Verify afterwards with **🔌 Test connection** — the bot\n"
+                "replies `linked as <your@email>` on success.\n\n"
+                "Uploads land in **All Files** by default. Set a different\n"
+                "folder id later via the provider's config screen."
+            ),
+        ),
+        _trouble_page(
+            "Box",
+            [
+                (
+                    "`invalid_grant` after days of silence",
+                    "Box's rotating refresh tokens expire after 60 days "
+                    "of inactivity. The bot normally rotates them on "
+                    "every upload; if uploads haven't happened in a "
+                    "while, re-run Step 2 and paste the new values.",
+                ),
+                (
+                    "`insufficient_scope` / can't upload",
+                    "The custom app is missing a permission. Open the "
+                    "app in Box's developer console → Configuration → "
+                    "Application Scopes, tick **Write all files** + "
+                    "**Read all files**, save, then re-run Step 2 so "
+                    "the new scopes end up in the token.",
+                ),
+                (
+                    "Custom app pending admin approval",
+                    "Enterprise Box accounts default to admin approval "
+                    "for new custom apps. Ask a Box admin to authorise "
+                    "the app under **Admin Console → Apps → Custom "
+                    "Apps**, then re-run Step 2.",
+                ),
+                (
+                    "`item_name_in_use`",
+                    "A file with the same name already exists in the "
+                    "destination folder. Box doesn't auto-overwrite — "
+                    "either pick a different `folder_id` in the provider "
+                    "config, rename the source file, or delete the "
+                    "existing one.",
+                ),
+                (
+                    "Shared link shows the Box file URL instead",
+                    "The app lacks the shared-link permission. Enable "
+                    "`Generate share links` on the app's Configuration "
+                    "tab, save, then re-run Step 2.",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 GUIDES: dict[str, DestinationGuide] = {
@@ -577,6 +912,9 @@ GUIDES: dict[str, DestinationGuide] = {
     "gofile": _GOFILE,
     "pixeldrain": _PIXELDRAIN,
     "telegram": _TELEGRAM,
+    "dropbox": _DROPBOX,
+    "onedrive": _ONEDRIVE,
+    "box": _BOX,
     # Intentionally no "ddl" entry: DDL is host-admin-only (env var based);
     # when it's available the user has nothing to configure, and when it
     # isn't available it's already hidden from the public settings menu.
