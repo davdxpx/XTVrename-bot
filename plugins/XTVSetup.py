@@ -7,8 +7,10 @@ import random
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import (
     ApiIdInvalid,
+    FloodWait,
     MessageNotModified,
     PasswordHashInvalid,
+    PhoneCodeExpired,
     PhoneCodeInvalid,
     PhoneNumberInvalid,
     SessionPasswordNeeded,
@@ -66,6 +68,24 @@ async def _error_screen(msg, text: str, user_id: int | None = None) -> None:
         await msg.edit_text(text, reply_markup=_back_kb())
     if user_id is not None:
         pro_setup_sessions.pop(user_id, None)
+
+
+def _recovery_hint(e: Exception) -> str:
+    """Best-effort hint appended to generic-exception error screens.
+
+    Looks at the exception message for common failure categories so the
+    admin sees an actionable recovery step instead of a bare traceback
+    string. Hint is a `> ` callout (legitimate blockquote use — single
+    highlighted sentence).
+    """
+    m = str(e).lower()
+    if any(tok in m for tok in ("network", "timeout", "connection", "unreachable")):
+        return "\n\n> 🌐 Check your server's internet connection and retry."
+    if any(tok in m for tok in ("forbidden", "blocked", "user_deactivated", "banned")):
+        return "\n\n> 🚫 The account may be restricted or deactivated by Telegram."
+    if any(tok in m for tok in ("database", "mongo", "dbref", "duplicate key")):
+        return "\n\n> 💾 Database error — contact the admin."
+    return ""
 
 
 def _format_bytes(n) -> str:
@@ -575,11 +595,41 @@ async def pro_setup_handler(client, message):
                     reply_markup=_cancel_kb(),
                 )
         except ApiIdInvalid:
-            await _error_screen(msg, "❌ **Invalid API ID / Hash.** Setup failed.", user_id)
+            await _error_screen(
+                msg,
+                "❌ **Invalid API ID / Hash.**\n"
+                "\n"
+                "Telegram rejected the credentials. Re-check the pair at "
+                "my.telegram.org and restart setup.",
+                user_id,
+            )
         except PhoneNumberInvalid:
-            await _error_screen(msg, "❌ **Invalid Phone Number.** Setup failed.", user_id)
+            await _error_screen(
+                msg,
+                "❌ **Invalid Phone Number.**\n"
+                "\n"
+                "Make sure you include the country code with a leading "
+                "`+`, e.g. `+1234567890`. Restart setup to retry.",
+                user_id,
+            )
+        except FloodWait as e:
+            await _error_screen(
+                msg,
+                "❌ **Rate-limited by Telegram.**\n"
+                "\n"
+                f"Wait **{e.value} seconds** before requesting another "
+                "code. This usually happens after multiple code requests "
+                "in quick succession.",
+                user_id,
+            )
         except Exception as e:
-            await _error_screen(msg, f"❌ **Error requesting code:** {e}", user_id)
+            logger.warning(f"Pro send_code failed: {e}")
+            await _error_screen(
+                msg,
+                f"❌ **Error requesting code:** `{str(e)[:100]}`"
+                + _recovery_hint(e),
+                user_id,
+            )
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -610,8 +660,31 @@ async def pro_setup_handler(client, message):
                     "setup from scratch.",
                     reply_markup=_cancel_kb(),
                 )
+        except PhoneCodeExpired:
+            await _error_screen(
+                msg,
+                "❌ **Code Expired.**\n"
+                "\n"
+                "Telegram invalidated the code because too much time "
+                "passed since it was sent. Tap **← Back to 𝕏TV Pro** and "
+                "restart setup — you'll receive a fresh code.",
+                user_id,
+            )
+        except FloodWait as e:
+            await _error_screen(
+                msg,
+                "❌ **Rate-limited by Telegram.**\n"
+                "\n"
+                f"Wait **{e.value} seconds** before trying to sign in again.",
+                user_id,
+            )
         except Exception as e:
-            await _error_screen(msg, f"❌ **Sign In Error:** {e}", user_id)
+            logger.warning(f"Pro sign_in failed: {e}")
+            await _error_screen(
+                msg,
+                f"❌ **Sign-In Error:** `{str(e)[:100]}`" + _recovery_hint(e),
+                user_id,
+            )
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -629,8 +702,22 @@ async def pro_setup_handler(client, message):
                 "to restart setup.",
                 reply_markup=_cancel_kb(),
             )
+        except FloodWait as e:
+            await _error_screen(
+                msg,
+                "❌ **Rate-limited by Telegram.**\n"
+                "\n"
+                f"Wait **{e.value} seconds** before trying the password "
+                "again.",
+                user_id,
+            )
         except Exception as e:
-            await _error_screen(msg, f"❌ **Error:** {e}", user_id)
+            logger.warning(f"Pro check_password failed: {e}")
+            await _error_screen(
+                msg,
+                f"❌ **Password Error:** `{str(e)[:100]}`" + _recovery_hint(e),
+                user_id,
+            )
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -706,8 +793,22 @@ async def finalize_setup(userbot, user_id, msg):
             )
         await userbot.disconnect()
         del pro_setup_sessions[user_id]
+    except FloodWait as e:
+        await _error_screen(
+            msg,
+            "❌ **Rate-limited by Telegram.**\n"
+            "\n"
+            f"Wait **{e.value} seconds** and retry setup.",
+            user_id,
+        )
     except Exception as e:
-        await _error_screen(msg, f"❌ **Failed to finalize setup:** {e}", user_id)
+        logger.warning(f"Pro finalize_setup failed: {e}")
+        await _error_screen(
+            msg,
+            f"❌ **Failed to finalize setup:** `{str(e)[:100]}`"
+            + _recovery_hint(e),
+            user_id,
+        )
 
 async def _handle_change_tunnel_text(client, message, info):
     """Resolve admin's reply for `🆔 Change Tunnel` and persist the new id."""
