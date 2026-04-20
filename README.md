@@ -21,6 +21,22 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 ---
 
 <details>
+<summary>📋 What's New in v1.6.1 — Mirror-Leech Mega Expansion</summary>
+
+*   **☁️ Nine new uploaders — 14 destinations total**: The Mirror-Leech provider roster grew from five to fourteen. **Cloud-Giants**: **Dropbox** (resumable upload sessions for files > 150 MB, OAuth refresh-token flow), **OneDrive** (Microsoft Graph with MSAL-refreshed tokens, 10 MiB chunks past 4 MB), **Box** (chunked uploader for files ≥ 50 MB, rotating-refresh-token persistence). **S3-family**: generic **S3** (covers AWS / Wasabi / Cloudflare R2 / Storj / MinIO / iDrive e2 via boto3 — auto-multipart past ~8 MB) and **Backblaze B2 native** (b2sdk, capability-aware). **Self-hosted**: generic **WebDAV** (Nextcloud / ownCloud / Synology / QNAP / Apache mod_dav — iCloud Drive too via a WebDAV bridge) and **Seafile native** (REST API, per-library upload tokens). Each provider is auto-hidden from user menus when its Python package / binary / env var is missing — admins still see unavailable providers in `/admin → Mirror-Leech Config` for diagnostics.
+*   **🎯 Destination Presets**: Named fan-out groups — tap **"🎯 Archive"** and the bot queues the same file to S3 + B2 + Dropbox in one move, instead of re-ticking three checkboxes every time. Up to 5 presets per user, 8 providers per preset. Drafts live in memory until you tap **Save** so half-finished edits never hit the database. The `/ml` picker surfaces your presets as one-tap quick-selects when at least one of their providers is configured.
+*   **📂 Folder Templates**: Per-destination path templates for WebDAV, Seafile, S3, and B2. Supports `{year}`, `{month}`, `{month:02d}`, `{day}`, `{hour}`, `{source_kind}` (http/yt/telegram/...), `{user_id}`, `{task_id}`, `{original_name}`, `{ext}` — e.g. `/MirrorLeech/{year}/{month:02d}/{source_kind}/` turns every upload into a tidy date-partitioned archive. Missing vars resolve to empty strings so a typo can't crash the upload. Render-validated before save so malformed templates surface in the editor, not at runtime.
+*   **🕑 Scheduler + Auto-Retry with Backoff**: `/ml` picker now has a **"🕑 Schedule"** button next to **Start**. Quick-picks (In 1 h / Tonight 3 AM / Tomorrow 9 AM) + Custom free-text (`in 2 hours`, `tomorrow 18:00`, `2026-05-01 09:30` — uses `dateparser` when installed, `strptime` fallback otherwise). Scheduled tasks live in a persistent Mongo queue (`MediaStudio-ml-queue`) so bot restarts don't lose them. Failed uploads auto-retry with exponential backoff — **5 min, 10 min, 20 min, 40 min, 60 min** (capped). After the max-attempts cap the user gets a DM with a **🔁 Retry now** button that resets the attempt counter.
+*   **🗂 Enhanced `/mlqueue`**: Four-section dashboard — **Live**, **Scheduled**, **Retrying** (with next retry ETA + attempt counter), **Permanent failures** (with manual-retry + dismiss buttons). CAS-locked worker loop polls every 30 s so multi-instance deployments don't double-execute.
+*   **📊 Per-Destination Quota Tracking**: `/settings → Mirror-Leech` shows live storage-usage bars under each linked provider — **Google Drive, Dropbox, OneDrive, Box, MEGA, Seafile, WebDAV** expose real quota via their respective APIs. Warnings at **⚠ ≥ 90%** and **🚨 ≥ 98%**. Cached in memory for 10 min (concurrent-request-dedup'd) so the settings screen stays snappy; **🔄 Refresh quotas** button for on-demand re-polls. Auto-invalidated after every successful upload.
+*   **🔔 Outgoing Webhooks**: Register an HTTPS URL + pre-shared secret and the bot POSTs a signed JSON payload on `upload_done` / `upload_failed`. **HMAC-SHA256** signature via `X-MediaStudio-Signature: sha256=<hmac>` header. 5 s timeout, one retry after 60 s on non-2xx, best-effort (never blocks the task). **🚀 Test send** button fires a synthetic payload so you can verify your receiver before going live. Event toggles, masked-secret display, one-click secret regeneration.
+*   **📖 Per-Destination Setup Guides**: Every linked destination gets a multi-page walkthrough (Google Drive gets 3 pages: Cloud Console → OAuth playground → Paste credentials; Rclone gets 3 pages; MEGA / GoFile / Pixeldrain / Telegram / S3 / B2 / Dropbox / OneDrive / Box / WebDAV / Seafile each get 1-3 pages with troubleshooting tips). Mirrored under `/help → Mirror-Leech → Destinations`. `/settings` only shows providers the host has actually enabled — normal users never see broken "🚫 unavailable" buttons.
+*   **🔒 SECRETS_KEY Help — Admin-Only**: The `/help → Mirror-Leech → SECRETS_KEY generator` entry is now gated behind `is_admin()`. Non-admins triggering the callback directly get an admin-only alert.
+*   **🧪 XTVSetup Plugin Polish**: `plugins/xtv_pro_setup.py` → `plugins/XTVSetup.py` (rename via `git mv` preserves history). Header formatting unified with `frame_plain()` chrome, `<blockquote>` HTML replaced with markdown `> `, 8 back-button label variants collapsed into one consistent `← Back`. `_cancel_kb()` / `_error_screen()` helpers dedupe 22 inline copies.
+
+</details>
+
+<details>
 <summary>📋 What's New in v1.6.0</summary>
 
 *   **🎬 Movie Auto-Detect Confirmation — Fully Working**: Change Specials / Audio / Codec buttons now appear reliably for Movies when your template uses the matching placeholders. Root cause was a long-standing singular-vs-plural template-key mismatch (`fs["type"] == "movie"` looked up against `DEFAULT_FILENAME_TEMPLATES["movies"]`) that made the three buttons silently vanish. Series happened to work only because singular == plural there. Fixed via a new `utils.detect.template_key_for()` normalizer + DB key aliasing (`database._normalize_template_keys()`) so both legacy and canonical template keys resolve correctly.
@@ -184,7 +200,9 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 `MYFILES_VERSION 2.2` adds a **Mirror-Leech** subsystem that takes any
 supported source and fans it out to one or more cloud destinations.
 Deeply fused with MyFiles — every file in your cloud can be pushed to
-Drive, MEGA, Pixeldrain, or another destination in one click.
+Drive, S3, WebDAV, or any other of the 14 supported destinations in one
+click, scheduled for later, retried on failure, and confirmed via a
+signed webhook.
 
 ### Sources (downloaders)
 
@@ -194,21 +212,101 @@ Drive, MEGA, Pixeldrain, or another destination in one click.
 | YouTube + social (via yt-dlp) | any URL a yt-dlp extractor accepts |
 | Telegram file (`tg:<chat>:<msg>`) | auto-used for MyFiles buttons |
 | RSS feed | `.rss` / `.xml` / `/feed/` URLs; first enclosure via HTTP |
+| gallery-dl (Reddit / Twitter / Pixiv / 100+ sites) | requires `gallery-dl` on PATH |
+| cloud-host / instant-share | one-click hosters + paste→deep-link flows |
 
 Peer-to-peer swarm links are out of scope on this branch and fall
 through to a generic "unsupported source" message.
 
 ### Destinations (uploaders)
 
-| Destination | Credentials |
-|---|---|
-| Google Drive | OAuth refresh_token + client_id + client_secret |
-| Rclone (70+ backends) | `rclone.conf` body + default `remote:path` |
-| MEGA.nz | email + password (requires `pip install mega.py`) |
-| GoFile | anonymous OK, optional account token |
-| Pixeldrain | anonymous OK, optional API key |
-| Telegram | DM by default; set a channel id to override |
-| Direct Download Link | needs `DDL_BASE_URL` env — one-time URLs |
+All uploaders are auto-hidden from the `/settings → Mirror-Leech` menu
+when the host hasn't provisioned them (missing Python package, missing
+binary, or missing env var). Admins still see every provider in
+`/admin → Mirror-Leech Config` for diagnostics.
+
+| Destination | Credentials / Config | Dep | Quota API |
+|---|---|---|---|
+| **Google Drive** | OAuth refresh_token + client_id + client_secret | — | ✅ |
+| **Dropbox** | OAuth refresh_token + app_key + app_secret | `dropbox` | ✅ |
+| **OneDrive** | OAuth refresh_token + client_id + tenant | `msal` | ✅ |
+| **Box** | OAuth refresh_token + client_id + client_secret | `boxsdk` | ✅ |
+| **S3-compatible** | endpoint + region + bucket + access_key + secret_key | `boto3` | — |
+| **Backblaze B2** (native) | app_key_id + app_key + bucket | `b2sdk` | — |
+| **MEGA.nz** | email + password | `mega` | ✅ |
+| **Rclone** (70+ backends) | `rclone.conf` body + default `remote:path` | `rclone` bin | — |
+| **WebDAV** (Nextcloud / ownCloud / Synology / QNAP / mod_dav / iCloud-bridge) | url + username + password | — | ✅ |
+| **Seafile** (native REST) | server_url + library_id + api_token | — | ✅ |
+| **GoFile** | anonymous OK, optional account token | — | — |
+| **Pixeldrain** | anonymous OK, optional API key | — | — |
+| **Telegram** | DM by default; set a channel id to override | — | — |
+| **Direct Download Link** | needs `DDL_BASE_URL` env — one-time URLs | — | — |
+
+Uploaders with a ✅ quota column surface live **used / total** storage
+bars under their button in `/settings → Mirror-Leech`, with `⚠` at ≥90%
+and `🚨` at ≥98% usage.
+
+### Destination Presets + Folder Templates
+
+- **Presets** — name a fan-out group once (e.g. **"Archive"** = S3 + B2
+  + Dropbox, **"Public"** = GoFile + Pixeldrain) and it becomes a
+  one-tap button in the `/ml` destination picker. Up to 5 presets per
+  user, 8 providers per preset.
+- **Folder Templates** — per-destination path expression for WebDAV,
+  Seafile, S3, B2. Supports `{year}`, `{month}`, `{month:02d}`, `{day}`,
+  `{hour}`, `{source_kind}`, `{user_id}`, `{task_id}`, `{original_name}`,
+  `{ext}`. Example: `/MirrorLeech/{year}/{month:02d}/{source_kind}/`.
+  Missing variables silently resolve to empty strings — a typo can't
+  crash the upload.
+
+### Scheduling + Auto-Retry
+
+- **Schedule** any `/ml` task for later via **"🕑 Schedule"** in the
+  picker. Quick-picks: In 1 h / Tonight 3 AM / Tomorrow 9 AM. Custom
+  accepts natural-language input (`in 2 hours`, `tomorrow 18:00`,
+  `2026-05-01 09:30`) via `dateparser` with `strptime` fallbacks when
+  the optional dep isn't installed.
+- **Persistent queue** (`MediaStudio-ml-queue`) survives restarts;
+  a background worker drains it every 30 s with CAS-locked dispatch so
+  multi-instance deployments don't double-execute.
+- **Auto-retry with exponential backoff**: 5 min → 10 → 20 → 40 → 60 →
+  60 min (capped). After the `max_attempts` cap the user gets a DM with
+  **🔁 Retry now** + **🗑 Dismiss** buttons. Manual retry resets the
+  attempt counter back to 0.
+- **`/mlqueue`** dashboard groups tasks into **Live / Scheduled /
+  Retrying / Permanent failures** with the next retry ETA and
+  attempt-counter visible inline.
+
+### Webhook Notifications
+
+Register an HTTPS URL + pre-shared secret under `/settings →
+Mirror-Leech → 🔔 Webhook`. On task completion the bot POSTs a JSON
+payload signed with HMAC-SHA256:
+
+```
+POST /your/receiver
+Content-Type: application/json
+X-MediaStudio-Signature: sha256=<hmac>
+
+{
+  "event": "upload_done",
+  "user_id": 12345,
+  "timestamp": "2026-04-20T14:08:15Z",
+  "task_id": "abc123def456",
+  "source_url": "https://…",
+  "providers": {
+    "gdrive":  {"ok": true,  "url": "https://drive.google.com/…"},
+    "dropbox": {"ok": false, "message": "quota exceeded"}
+  }
+}
+```
+
+Delivery is strictly best-effort: 5 s timeout, single retry after 60 s
+on non-2xx, errors are swallowed so a flaky receiver never blocks the
+bot. A **🚀 Test send** button fires a synthetic `event: test` payload
+so you can verify your receiver before going live. Events
+(`upload_done`, `upload_failed`) are individually toggleable; secret
+regen is one tap.
 
 ### Usage
 
@@ -216,16 +314,18 @@ through to a generic "unsupported source" message.
    off until an admin flips it on, and the toggle itself refuses to
    turn on until `SECRETS_KEY` is configured.
 2. **Link providers** under `/settings → ☁️ Mirror-Leech` (public mode)
-   or the same admin screen (non-public mode). Paste-to-link messages
-   are deleted automatically after storage.
+   or the same admin screen (non-public mode). Each destination has a
+   **📖 Setup Guide** button with a multi-page walkthrough. Paste-to-link
+   messages are deleted automatically after storage.
 3. **Run a transfer**: `/ml <url>` picks a downloader automatically,
-   prompts for destinations, and edits a single progress message in
-   place until the task finishes.
+   prompts for destinations (with preset quick-selects if you have
+   any), and edits a single progress message in place until the task
+   finishes. Tap **🕑 Schedule** instead of **🚀 Start** to defer it.
 4. **From MyFiles**: every single-file view has an "☁️ Mirror-Leech
    Options" button, and multi-select adds a "☁️ Mirror-Leech Selected
    (N)" batch action — each file queues its own task.
-5. **Queue & cancel**: `/mlqueue` lists your last 20 tasks with inline
-   cancel buttons.
+5. **Queue, retry, cancel**: `/mlqueue` lists live + scheduled + retrying
+   + permanent-failed tasks with inline action buttons.
 
 ### Secrets
 
@@ -337,7 +437,28 @@ themselves the moment you add it — no redeploy needed for most keys.
 | `DEBUG_MODE` | ❌ | `false` | Verbose logs |
 | `TMDB_API_KEY` | ❌ | empty | Unlocks title matching, posters, auto channel routing. Free key at https://www.themoviedb.org/settings/api |
 | `SECRETS_KEY` | ❌ | empty | Fernet key encrypting Mirror-Leech provider credentials. Required only when Mirror-Leech is enabled. |
+| `DDL_BASE_URL` | ❌ | empty | Base URL used by the Mirror-Leech "Direct Download Link" uploader. When unset, the DDL destination is hidden from user menus. |
 | `YT_COOKIES_FILE` | ❌ | `config/yt_cookies.txt` | Absolute path to a Netscape YouTube cookies file. Admins can also upload at runtime via `/ytcookies`. |
+
+#### Optional Mirror-Leech PyPI extras
+
+Every uploader that needs a third-party library declares it via
+`python_import_required` and is automatically hidden from user menus
+when the import fails — install only what you actually plan to use:
+
+| Package | Powers |
+|---|---|
+| `dropbox` | Dropbox uploader |
+| `msal` | OneDrive uploader (Microsoft Graph auth) |
+| `boxsdk` | Box uploader |
+| `boto3` | Generic S3-compatible uploader (AWS / Wasabi / R2 / MinIO / Storj) |
+| `b2sdk` | Native Backblaze B2 uploader |
+| `mega.py` | MEGA.nz uploader |
+| `dateparser` | Natural-language scheduler input ("in 2 hours", "tomorrow 18:00") — falls back to `strptime` formats when missing |
+
+WebDAV / Seafile / GoFile / Pixeldrain / Telegram / Google Drive /
+Rclone / DDL need no extra Python packages (they use `aiohttp` or an
+already-present binary).
 
 ---
 
