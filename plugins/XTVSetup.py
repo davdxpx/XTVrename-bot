@@ -159,12 +159,15 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
 
     last_check = session.get("last_auth_check_at")
     last_status = session.get("last_auth_status")
+    last_err = session.get("last_auth_error")
     if last_check is None:
         health_line = "Health: ⚪ `not yet checked` — tap 🩺 Health Check"
     elif last_status == "ok":
         health_line = f"Health: 🟢 `connected` — last check {_format_dt(last_check)}"
     elif last_status == "error":
         health_line = f"Health: 🔴 `error` — last check {_format_dt(last_check)}"
+        if last_err:
+            health_line += f"\n  ↳ `{str(last_err)[:70]}`"
     else:
         health_line = f"Health: 🟡 `{last_status or 'unknown'}` — last check {_format_dt(last_check)}"
 
@@ -298,27 +301,51 @@ async def pro_setup_what(client, callback_query):
 async def pro_health_check(client, callback_query):
     if callback_query.from_user.id != Config.CEO_ID:
         return await callback_query.answer("Not authorized.", show_alert=True)
-    await callback_query.answer("Pinging userbot…")
 
     user_bot = getattr(client, "user_bot", None)
+    now = datetime.datetime.utcnow()
+    error_msg: str | None = None
+
     if user_bot is None:
+        error_msg = "Userbot process is not running"
         await db.update_pro_session(
-            last_auth_check_at=datetime.datetime.utcnow(),
+            last_auth_check_at=now,
             last_auth_status="error",
+            last_auth_error=error_msg,
         )
     else:
         try:
             await asyncio.wait_for(user_bot.get_me(), timeout=5)
             await db.update_pro_session(
-                last_auth_check_at=datetime.datetime.utcnow(),
+                last_auth_check_at=now,
                 last_auth_status="ok",
+                last_auth_error=None,
+            )
+        except asyncio.TimeoutError:
+            error_msg = "Timed out after 5 seconds"
+            logger.warning("Pro health check timed out")
+            await db.update_pro_session(
+                last_auth_check_at=now,
+                last_auth_status="error",
+                last_auth_error=error_msg,
             )
         except Exception as e:
+            error_msg = str(e)[:120]
             logger.warning(f"Pro health check failed: {e}")
             await db.update_pro_session(
-                last_auth_check_at=datetime.datetime.utcnow(),
+                last_auth_check_at=now,
                 last_auth_status="error",
+                last_auth_error=error_msg,
             )
+
+    # Toast the outcome BEFORE re-rendering — `answer()` has to run
+    # within ~15 s of the callback arriving and fires exactly once.
+    if error_msg:
+        await callback_query.answer(
+            f"⚠ Health check failed: {error_msg[:80]}", show_alert=True,
+        )
+    else:
+        await callback_query.answer("🟢 Userbot is healthy.")
 
     session = await db.get_pro_session()
     if session:
