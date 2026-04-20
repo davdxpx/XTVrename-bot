@@ -35,6 +35,7 @@ Callback-data grammar (see Phase D plan for the full table):
     ml_preset_tgl_<provider>       → toggle provider in current draft
     ml_preset_save                 → commit current draft
     ml_preset_cancel               → discard current draft
+    ml_preset_use_<slug>_<ctx_id>  → apply preset to active /ml picker
 """
 
 from __future__ import annotations
@@ -122,7 +123,26 @@ async def _render_uploader_picker(
         return
 
     rows: list[list[InlineKeyboardButton]] = []
+    from tools.mirror_leech import Presets
     from tools.mirror_leech.uploaders import uploader_by_id
+
+    # Preset quick-select row(s): only show presets that reference at
+    # least one provider this user has actually configured — an "archive"
+    # preset that lists s3+b2 is pointless while s3 is unlinked.
+    presets = await Presets.get_presets(user_id)
+    configured_set = set(configured)
+    for preset in presets.values():
+        usable = [p for p in preset.providers if p in configured_set]
+        if not usable:
+            continue
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"🎯 {preset.label} ({len(usable)})",
+                    callback_data=f"ml_preset_use_{preset.slug}_{cid}",
+                )
+            ]
+        )
 
     selected = set(ctx.selected_uploaders)
     for up_id in configured:
@@ -1555,6 +1575,50 @@ async def ml_preset_cancel(client: Client, callback_query: CallbackQuery) -> Non
         user_id,
     )
     await callback_query.answer()
+
+
+@Client.on_callback_query(
+    filters.regex(r"^ml_preset_use_([a-z0-9_-]+)_([A-Za-z0-9_-]{4,10})$")
+)
+async def ml_preset_use(client: Client, callback_query: CallbackQuery) -> None:
+    """Apply a preset to the current /ml picker: set the provider
+    selection to every preset provider the user has configured, then
+    re-render the picker so the user can still tweak before Start."""
+    from tools.mirror_leech import Presets
+
+    match = callback_query.matches[0]
+    slug = match.group(1)
+    cid = match.group(2)
+
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await callback_query.answer(
+            "Picker expired — run /ml again.", show_alert=True
+        )
+        return
+    if ctx.user_id != callback_query.from_user.id:
+        await callback_query.answer(
+            "This picker belongs to another user.", show_alert=True
+        )
+        return
+
+    preset = await Presets.get_preset(callback_query.from_user.id, slug)
+    if not preset:
+        await callback_query.answer("Preset not found.", show_alert=True)
+        return
+
+    configured = set(await _configured_uploader_ids(ctx.user_id))
+    ctx.selected_uploaders = [p for p in preset.providers if p in configured]
+    await callback_query.answer(
+        f"🎯 {preset.label}: {len(ctx.selected_uploaders)} selected"
+    )
+    await _render_uploader_picker(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        cid,
+        ctx.user_id,
+    )
 
 
 @Client.on_callback_query(filters.regex(r"^ml_preset_delete_([a-z0-9_-]+)$"))
