@@ -853,6 +853,79 @@ async def ml_cancel_running(client: Client, callback_query: CallbackQuery) -> No
     await callback_query.answer("Cancel requested.")
 
 
+@Client.on_callback_query(filters.regex(r"^ml_retry_([0-9a-f]{6,16})$"))
+async def ml_retry_permanent(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Reset a permanent-failed row back to pending. The worker picks
+    it up on the next tick."""
+    from tools.mirror_leech import Queue
+
+    task_id = callback_query.data.removeprefix("ml_retry_")
+    entry = await Queue.get(task_id)
+    if not entry:
+        await callback_query.answer(
+            "Task not found — already dismissed?", show_alert=True
+        )
+        return
+    if entry.user_id != callback_query.from_user.id:
+        await callback_query.answer("Not your task.", show_alert=True)
+        return
+    if entry.state != Queue.STATE_PERMANENT_FAIL:
+        await callback_query.answer(
+            f"Can't retry — state is `{entry.state}`.", show_alert=True
+        )
+        return
+    ok = await Queue.reset_for_manual_retry(task_id)
+    if not ok:
+        await callback_query.answer("Retry failed — try again later.", show_alert=True)
+        return
+    await callback_query.answer("Requeued — worker will pick it up shortly.")
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame(
+                "🔁 **Mirror-Leech — Requeued**",
+                f"> 🆔 `{task_id}`\n"
+                f"> Attempt counter reset.\n"
+                "\n"
+                "Track progress in `/mlqueue`.",
+            )
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_qdrop_([0-9a-f]{6,16})$"))
+async def ml_queue_drop(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Delete a persistent queue row. Used to cancel a future-scheduled
+    task and to dismiss permanent-failed notifications."""
+    from tools.mirror_leech import Queue
+
+    task_id = callback_query.data.removeprefix("ml_qdrop_")
+    entry = await Queue.get(task_id)
+    if not entry:
+        await callback_query.answer("Already gone.", show_alert=True)
+        return
+    if entry.user_id != callback_query.from_user.id:
+        await callback_query.answer("Not your task.", show_alert=True)
+        return
+    if entry.state == Queue.STATE_RUNNING:
+        await callback_query.answer(
+            "Task is running — use Cancel on the live task.", show_alert=True
+        )
+        return
+    await Queue.delete(task_id)
+    await callback_query.answer("Removed.")
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame(
+                "🗑 **Mirror-Leech — Removed**",
+                f"> 🆔 `{task_id}`\n"
+                "> Row deleted from the persistent queue.",
+            )
+        )
+
+
 @Client.on_message(filters.command("mlqueue") & filters.private)
 async def ml_queue_command(client: Client, message: Message) -> None:
     await _render_queue(client, message.chat.id, None, message.from_user.id)
@@ -877,21 +950,33 @@ async def _render_queue(
 ) -> None:
     from tools.mirror_leech.Tasks import ml_worker_pool
 
-    tasks = ml_worker_pool.list_for_user(user_id)[:20]
+    from tools.mirror_leech import Queue as _Queue
+
+    live_tasks = ml_worker_pool.list_for_user(user_id)[:20]
+    persistent = await _Queue.list_for_user(user_id, limit=20)
     rows: list[list[InlineKeyboardButton]] = []
-    if not tasks:
-        body = "> 📭 Your Mirror-Leech queue is empty."
-    else:
-        icon = {
-            "queued": "⏳",
-            "downloading": "⬇️",
-            "uploading": "☁️",
-            "done": "✅",
-            "failed": "❌",
-            "cancelled": "🚫",
-        }
-        lines: list[str] = []
-        for t in tasks:
+
+    icon = {
+        "queued": "⏳",
+        "downloading": "⬇️",
+        "uploading": "☁️",
+        "done": "✅",
+        "failed": "❌",
+        "cancelled": "🚫",
+        # persistent-queue-only states
+        _Queue.STATE_PENDING: "🕑",
+        _Queue.STATE_RUNNING: "🔄",
+        _Queue.STATE_FAILED: "↻",
+        _Queue.STATE_PERMANENT_FAIL: "⛔",
+    }
+
+    lines: list[str] = []
+    seen: set[str] = set()
+
+    if live_tasks:
+        lines.append("**Live tasks**")
+        for t in live_tasks:
+            seen.add(t.id)
             lines.append(
                 f"{icon.get(t.status, '•')} `{t.id}` · {t.status} · "
                 f"{t.progress_fraction * 100:.0f}%  ·  `{t.source[:50]}`"
@@ -905,6 +990,70 @@ async def _render_queue(
                         )
                     ]
                 )
+
+    scheduled = [
+        e for e in persistent
+        if e.task_id not in seen and e.state == _Queue.STATE_PENDING
+    ]
+    retrying = [
+        e for e in persistent
+        if e.task_id not in seen and e.state == _Queue.STATE_FAILED
+    ]
+    perm_failed = [
+        e for e in persistent
+        if e.task_id not in seen and e.state == _Queue.STATE_PERMANENT_FAIL
+    ]
+
+    if scheduled:
+        lines.append("")
+        lines.append("**Scheduled**")
+        for e in scheduled:
+            lines.append(
+                f"🕑 `{e.task_id}` · {_fmt_eta(e.scheduled_at)} · "
+                f"`{e.source_url[:50]}`"
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"🗑 Cancel `{e.task_id}`",
+                        callback_data=f"ml_qdrop_{e.task_id}",
+                    )
+                ]
+            )
+
+    if retrying:
+        lines.append("")
+        lines.append("**Retrying**")
+        for e in retrying:
+            when = _fmt_eta(e.next_retry_at) if e.next_retry_at else "—"
+            lines.append(
+                f"↻ `{e.task_id}` · attempt {e.attempt}/{e.max_attempts} · "
+                f"next {when}"
+            )
+
+    if perm_failed:
+        lines.append("")
+        lines.append("**Permanent failures**")
+        for e in perm_failed:
+            lines.append(
+                f"⛔ `{e.task_id}` · `{(e.last_error or '')[:60]}`"
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"🔁 Retry `{e.task_id}`",
+                        callback_data=f"ml_retry_{e.task_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "🗑",
+                        callback_data=f"ml_qdrop_{e.task_id}",
+                    ),
+                ]
+            )
+
+    if not lines:
+        body = "> 📭 Your Mirror-Leech queue is empty."
+    else:
         body = "\n".join(lines)
     rows.append([InlineKeyboardButton("↻ Refresh", callback_data="ml_queue")])
 
