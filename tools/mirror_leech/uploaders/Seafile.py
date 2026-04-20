@@ -127,10 +127,11 @@ class SeafileUploader(Uploader):
 
         # Seafile's upload endpoint returns a list of uploaded items —
         # use the file ID to build a stable web URL.
-        if isinstance(uploaded, list) and uploaded:
-            file_id = uploaded[0].get("id")
-        else:
-            file_id = None
+        file_id = (
+            uploaded[0].get("id")
+            if isinstance(uploaded, list) and uploaded
+            else None
+        )
         if file_id:
             web_url = (
                 f"{c['server_url']}/lib/{c['library_id']}/file"
