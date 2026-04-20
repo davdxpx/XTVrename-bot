@@ -2,9 +2,7 @@
 import asyncio
 import contextlib
 import datetime
-import os
 import random
-import string
 
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import (
@@ -19,13 +17,12 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import Config
 from db import db
+from tools.mirror_leech.UIChrome import frame_plain as frame
 from utils.telegram.log import get_logger
 
-logger = get_logger("plugins.xtv_pro_setup")
+logger = get_logger("plugins.XTVSetup")
 pro_setup_sessions = {}
 pro_change_sessions = {}  # user_id → {"action": "tunnel", "msg_id": ...}
-
-SEPARATOR = "━━━━━━━━━━━━━━━━━━━━"
 
 
 # === Helper Functions ===
@@ -33,6 +30,29 @@ def get_pro_session_data(user_id):
     if user_id not in pro_setup_sessions:
         pro_setup_sessions[user_id] = {}
     return pro_setup_sessions[user_id]
+
+
+def _cancel_kb(callback: str = "pro_setup_menu") -> InlineKeyboardMarkup:
+    """Single-button `❌ Cancel` keyboard used across the wizard."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("❌ Cancel", callback_data=callback)]]
+    )
+
+
+def _back_kb(callback: str = "pro_setup_menu", label: str = "← Back") -> InlineKeyboardMarkup:
+    """Single-button back keyboard with unified label."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(label, callback_data=callback)]]
+    )
+
+
+async def _error_screen(msg, text: str, user_id: int | None = None) -> None:
+    """Edit `msg` to show an error with a unified `← Back` button and drop
+    any stashed wizard state for the given user."""
+    with contextlib.suppress(MessageNotModified):
+        await msg.edit_text(text, reply_markup=_back_kb())
+    if user_id is not None:
+        pro_setup_sessions.pop(user_id, None)
 
 
 def _format_bytes(n) -> str:
@@ -118,59 +138,58 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
     runtime = "🟢 `running`" if user_bot is not None else "🔴 `not started`"
 
     account_lines = [
-        "**Userbot Account**",
-        f"👤 Name: `{name}`",
-        f"🆔 ID: `{uid}`",
-        f"📞 Phone: {phone}",
-        prem_line,
-        auth_line,
+        "> **Userbot Account**",
+        f"> 👤 Name: `{name}`",
+        f"> 🆔 ID: `{uid}`",
+        f"> 📞 Phone: {phone}",
+        f"> {prem_line}",
+        f"> {auth_line}",
     ]
     runtime_lines = [
-        "**Runtime**",
-        f"⚙️ Userbot process: {runtime}",
-        health_line,
+        "> **Runtime**",
+        f"> ⚙️ Userbot process: {runtime}",
+        f"> {health_line}",
     ]
-    tunnel_lines = ["**Tunnel Channel**"]
+    tunnel_lines = ["> **Tunnel Channel**"]
     if session.get("tunnel_id"):
-        tunnel_lines.append(f"🆔 ID: `{session['tunnel_id']}`")
+        tunnel_lines.append(f"> 🆔 ID: `{session['tunnel_id']}`")
         link = session.get("tunnel_link")
         if link:
-            tunnel_lines.append(f"🔗 Link: `{link}`")
+            tunnel_lines.append(f"> 🔗 Link: `{link}`")
         else:
-            tunnel_lines.append("🔗 Link: _not set_")
+            tunnel_lines.append("> 🔗 Link: _not set_")
     else:
-        tunnel_lines.append("__No tunnel configured yet.__")
+        tunnel_lines.append("> __No tunnel configured yet.__")
 
     upload_count = int(session.get("upload_count_total") or 0)
     upload_bytes = int(session.get("upload_bytes_total") or 0)
     avg = (upload_bytes / upload_count) if upload_count else 0
     last_upload = _format_dt(session.get("last_upload_at"))
     stats_lines = [
-        "**Upload Stats — Lifetime**",
-        f"📦 Files routed: `{upload_count}`",
-        f"📊 Volume: `{_format_bytes(upload_bytes)}`",
-        f"⚡ Avg per file: `{_format_bytes(avg)}`",
-        f"🕒 Last upload: {last_upload}",
+        "> **Upload Stats — Lifetime**",
+        f"> 📦 Files routed: `{upload_count}`",
+        f"> 📊 Volume: `{_format_bytes(upload_bytes)}`",
+        f"> ⚡ Avg per file: `{_format_bytes(avg)}`",
+        f"> 🕒 Last upload: {last_upload}",
     ]
 
-    text = "\n".join(
+    body = "\n".join(
         [
-            "**🚀 Manage 𝕏TV Pro™**",
-            SEPARATOR,
-            "",
             "Status: ✅ `Active`",
             "",
-            "<blockquote>" + "\n".join(account_lines) + "</blockquote>",
+            *account_lines,
             "",
-            "<blockquote>" + "\n".join(runtime_lines) + "</blockquote>",
+            *runtime_lines,
             "",
-            "<blockquote>" + "\n".join(tunnel_lines) + "</blockquote>",
+            *tunnel_lines,
             "",
-            "<blockquote>" + "\n".join(stats_lines) + "</blockquote>",
+            *stats_lines,
             "",
-            "> Use Health Check before relying on the userbot. Test Send proves the tunnel.",
+            "> Use Health Check before relying on the userbot.",
+            "> Test Send proves the tunnel.",
         ]
     )
+    text = frame("🚀 **𝕏TV Pro™ — Manage**", body)
 
     buttons = [
         [
@@ -185,33 +204,31 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
             InlineKeyboardButton("🔄 Refresh", callback_data="pro_setup_menu"),
             InlineKeyboardButton("🗑 Delete Session", callback_data="pro_setup_delete_ask"),
         ],
-        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
+        [InlineKeyboardButton("← Back", callback_data="admin_main")],
     ]
     return text, buttons
 
 
 def _render_inactive() -> tuple[str, list]:
-    text = "\n".join(
+    body = "\n".join(
         [
-            "**🚀 Setup 𝕏TV Pro™**",
-            SEPARATOR,
+            "> Pro extends Telegram's 4 GB cap by routing uploads through",
+            "> a userbot session. You'll need:",
+            ">",
+            "> **1.** A spare Telegram account",
+            "> **2.** Its `api_id` + `api_hash` from my.telegram.org",
+            "> **3.** Access to receive its login code",
             "",
-            "Pro extends Telegram's 4 GB cap by routing uploads through",
-            "a userbot session. You'll need:",
-            "",
-            "  1. A spare Telegram account",
-            "  2. Its `api_id` + `api_hash` from my.telegram.org",
-            "  3. Access to receive its login code",
-            "",
-            "> The session string is stored in your database — do not share it.",
+            "> 🔐 The session string is stored in your database — do not share it.",
         ]
     )
+    text = frame("🚀 **𝕏TV Pro™ — Setup**", body)
     buttons = [
         [
             InlineKeyboardButton("🆕 Start Setup", callback_data="pro_setup_start"),
-            InlineKeyboardButton("📖 What is XTV Pro?", callback_data="pro_setup_what"),
+            InlineKeyboardButton("📖 What is 𝕏TV Pro?", callback_data="pro_setup_what"),
         ],
-        [InlineKeyboardButton("← Back to Admin Panel", callback_data="admin_main")],
+        [InlineKeyboardButton("← Back", callback_data="admin_main")],
     ]
     return text, buttons
 
@@ -221,30 +238,23 @@ async def pro_setup_what(client, callback_query):
     if callback_query.from_user.id != Config.CEO_ID:
         return await callback_query.answer("Not authorized.", show_alert=True)
     await callback_query.answer()
-    text = "\n".join(
+    body = "\n".join(
         [
-            "**📖 About 𝕏TV Pro™**",
-            SEPARATOR,
+            "> Standard Telegram bots can only upload files up to **2 GB**.",
+            "> Telegram **Premium** users can upload up to **4 GB**.",
             "",
-            "Standard Telegram bots can only upload files up to **2 GB**.",
-            "Telegram **Premium** users can upload up to **4 GB**.",
-            "",
-            "𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
-            "file >2 GB through it. The bot copies the file to a private",
-            "tunnel channel where the userbot picks it up and re-sends it",
-            "to the destination — all transparently.",
+            "> 𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
+            "> file >2 GB through it. The bot copies the file to a private",
+            "> tunnel channel where the userbot picks it up and re-sends it",
+            "> to the destination — all transparently.",
             "",
             "> Setup is one-time. After authorisation everything happens",
             "> automatically.",
         ]
     )
+    text = frame("📖 **About 𝕏TV Pro™**", body)
     with contextlib.suppress(MessageNotModified):
-        await callback_query.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back", callback_data="pro_setup_menu")]]
-            ),
-        )
+        await callback_query.message.edit_text(text, reply_markup=_back_kb())
 
 @Client.on_callback_query(filters.regex(r"^pro_health_check$"))
 async def pro_health_check(client, callback_query):
@@ -330,12 +340,11 @@ async def pro_re_auth(client, callback_query):
     pro_setup_sessions[callback_query.from_user.id] = {"state": "awaiting_api_id"}
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            "🔁 **Re-Authorise 𝕏TV Pro™**\n"
-            f"{SEPARATOR}\n\n"
-            "Old session cleared. Send the new **API ID** to begin.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
+            frame(
+                "🔁 **𝕏TV Pro™ — Re-Authorise**",
+                "> Old session cleared. Send the new **API ID** to begin.",
             ),
+            reply_markup=_cancel_kb(),
         )
 
 
@@ -351,14 +360,15 @@ async def pro_change_tunnel(client, callback_query):
     }
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            "🆔 **Change Tunnel Channel**\n"
-            f"{SEPARATOR}\n\n"
-            "Send the new tunnel as `@username`, numeric ID (`-100…`), "
-            "or send `none` to clear.\n\n"
-            "__The userbot must already be a member with post permissions.__",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
+            frame(
+                "🆔 **𝕏TV Pro™ — Change Tunnel Channel**",
+                "> Send the new tunnel as `@username`, numeric ID (`-100…`),\n"
+                "> or send `none` to clear.\n"
+                ">\n"
+                "> __The userbot must already be a member with post "
+                "permissions.__",
             ),
+            reply_markup=_cancel_kb(),
         )
 
 
@@ -373,16 +383,17 @@ async def delete_setup_ask(client, callback_query):
     await callback_query.answer()
     if callback_query.from_user.id != Config.CEO_ID:
         return
-    text = (
-        "**🗑 Delete 𝕏TV Pro™ Session?**\n"
-        f"{SEPARATOR}\n\n"
-        "This will:\n\n"
-        "  • Stop the running userbot\n"
-        "  • Erase the session string and credentials from the database\n"
-        "  • Reset all upload telemetry counters\n\n"
-        "> The 4 GB tunnel will stop working immediately. Re-Setup is "
-        "the only way back.\n"
-        "> __This cannot be undone.__"
+    text = frame(
+        "🗑 **𝕏TV Pro™ — Delete Session?**",
+        "> This will:\n"
+        ">\n"
+        "> • Stop the running userbot\n"
+        "> • Erase the session string and credentials from the database\n"
+        "> • Reset all upload telemetry counters\n"
+        ">\n"
+        "> The 4 GB tunnel will stop working immediately. Re-Setup is\n"
+        "> the only way back.\n"
+        "> __This cannot be undone.__",
     )
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
@@ -418,11 +429,12 @@ async def delete_setup_confirm(client, callback_query):
         client.user_bot = None
 
     await callback_query.message.edit_text(
-        "✅ **Session Deleted!**\n\n"
-        "𝕏TV Pro™ has been disabled. The Userbot session was securely deleted from the database.",
-        reply_markup=InlineKeyboardMarkup(
-            [[InlineKeyboardButton("← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu")]]
+        frame(
+            "✅ **𝕏TV Pro™ — Session Deleted**",
+            "> Disabled. The userbot session was securely deleted from\n"
+            "> the database.",
         ),
+        reply_markup=_back_kb(),
     )
 
 @Client.on_callback_query(filters.regex(r"^pro_setup_start$"))
@@ -435,12 +447,13 @@ async def start_setup(client, callback_query):
     pro_setup_sessions[user_id] = {"state": "awaiting_api_id"}
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            "🚀 **𝕏TV Pro™ Setup**\n\n"
-            "Let's configure the Userbot tunnel for 4GB files.\n"
-            "First, please send me your **API ID** (e.g., `1234567`):",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
+            frame(
+                "🚀 **𝕏TV Pro™ — Setup Wizard**",
+                "> Let's configure the Userbot tunnel for 4 GB files.\n"
+                ">\n"
+                "> **Step 1 / 3** — send your **API ID** (e.g. `1234567`).",
             ),
+            reply_markup=_cancel_kb(),
         )
 
 @Client.on_message(filters.private & filters.user(Config.CEO_ID), group=0)
@@ -468,12 +481,7 @@ async def pro_setup_handler(client, message):
 
     text = message.text.strip() if message.text else ""
     if not text:
-        await message.reply_text(
-            "Please provide text.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
-            ),
-        )
+        await message.reply_text("Please provide text.", reply_markup=_cancel_kb())
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -481,15 +489,7 @@ async def pro_setup_handler(client, message):
         if not text.isdigit():
             await message.reply_text(
                 "API ID must be numeric. Try again.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="pro_setup_menu"
-                            )
-                        ]
-                    ]
-                ),
+                reply_markup=_cancel_kb(),
             )
             from pyrogram import StopPropagation
             raise StopPropagation
@@ -497,10 +497,8 @@ async def pro_setup_handler(client, message):
         data["api_id"] = int(text)
         data["state"] = "awaiting_api_hash"
         await message.reply_text(
-            "✅ Got API ID.\n\nNow, send me your **API Hash**:",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
-            ),
+            "✅ Got API ID.\n\n**Step 2 / 3** — send your **API Hash**:",
+            reply_markup=_cancel_kb(),
         )
         from pyrogram import StopPropagation
         raise StopPropagation
@@ -509,11 +507,9 @@ async def pro_setup_handler(client, message):
         data["api_hash"] = text
         data["state"] = "awaiting_phone"
         await message.reply_text(
-            "✅ Got API Hash.\n\n"
-            "Now, send your **Phone Number** in international format (e.g., `+1234567890`):",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
-            ),
+            "✅ Got API Hash.\n\n**Step 3 / 3** — send your **Phone Number**\n"
+            "in international format (e.g. `+1234567890`):",
+            reply_markup=_cancel_kb(),
         )
         from pyrogram import StopPropagation
         raise StopPropagation
@@ -521,7 +517,7 @@ async def pro_setup_handler(client, message):
     elif state == "awaiting_phone":
         data["phone"] = text
         msg = await message.reply_text(
-            "⏳ Generating session and requesting code from Telegram..."
+            "⏳ Generating session and requesting code from Telegram…"
         )
 
         try:
@@ -541,69 +537,23 @@ async def pro_setup_handler(client, message):
                 await msg.edit_text(
                     "✅ **Verification Code Sent!**\n\n"
                     "Check your Telegram app for the login code.\n"
-                    "**IMPORTANT:** Enter the code with spaces to avoid Telegram's security triggers.\n"
-                    "For example, if your code is `12345`, enter `1 2 3 4 5`.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "❌ Cancel", callback_data="pro_setup_menu"
-                                )
-                            ]
-                        ]
-                    ),
+                    "**IMPORTANT:** Enter the code with spaces to avoid "
+                    "Telegram's security triggers.\n"
+                    "Example: if your code is `12345`, enter `1 2 3 4 5`.",
+                    reply_markup=_cancel_kb(),
                 )
         except ApiIdInvalid:
-            with contextlib.suppress(MessageNotModified):
-                await msg.edit_text(
-                    "❌ **Invalid API ID / Hash**. Setup failed.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu"
-                                )
-                            ]
-                        ]
-                    ),
-                )
-            del pro_setup_sessions[user_id]
+            await _error_screen(msg, "❌ **Invalid API ID / Hash.** Setup failed.", user_id)
         except PhoneNumberInvalid:
-            with contextlib.suppress(MessageNotModified):
-                await msg.edit_text(
-                    "❌ **Invalid Phone Number**. Setup failed.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu"
-                                )
-                            ]
-                        ]
-                    ),
-                )
-            del pro_setup_sessions[user_id]
+            await _error_screen(msg, "❌ **Invalid Phone Number.** Setup failed.", user_id)
         except Exception as e:
-            with contextlib.suppress(MessageNotModified):
-                await msg.edit_text(
-                    f"❌ **Error requesting code:** {e}",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu"
-                                )
-                            ]
-                        ]
-                    ),
-                )
-            del pro_setup_sessions[user_id]
+            await _error_screen(msg, f"❌ **Error requesting code:** {e}", user_id)
         from pyrogram import StopPropagation
         raise StopPropagation
 
     elif state == "awaiting_code":
         code = text.replace(" ", "")
-        msg = await message.reply_text("⏳ Verifying code...")
+        msg = await message.reply_text("⏳ Verifying code…")
 
         userbot = data.get("client")
         try:
@@ -614,82 +564,32 @@ async def pro_setup_handler(client, message):
             await msg.edit_text(
                 "🔐 **Two-Step Verification Enabled**\n\n"
                 "Please enter your 2FA password:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="pro_setup_menu"
-                            )
-                        ]
-                    ]
-                ),
+                reply_markup=_cancel_kb(),
             )
         except PhoneCodeInvalid:
             with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
-                    "❌ **Invalid Code**. Try again or restart setup.",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "❌ Cancel", callback_data="pro_setup_menu"
-                                )
-                            ]
-                        ]
-                    ),
+                    "❌ **Invalid Code.** Try again or restart setup.",
+                    reply_markup=_cancel_kb(),
                 )
         except Exception as e:
-            with contextlib.suppress(MessageNotModified):
-                await msg.edit_text(
-                    f"❌ **Sign In Error:** {e}",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "❌ Cancel", callback_data="pro_setup_menu"
-                                )
-                            ]
-                        ]
-                    ),
-                )
-            del pro_setup_sessions[user_id]
+            await _error_screen(msg, f"❌ **Sign In Error:** {e}", user_id)
         from pyrogram import StopPropagation
         raise StopPropagation
 
     elif state == "awaiting_password":
-        msg = await message.reply_text("⏳ Verifying password...")
+        msg = await message.reply_text("⏳ Verifying password…")
         userbot = data.get("client")
         try:
             await userbot.check_password(text)
             await finalize_setup(userbot, user_id, msg)
         except PasswordHashInvalid:
             await msg.edit_text(
-                "❌ **Invalid Password**. Try again.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="pro_setup_menu"
-                            )
-                        ]
-                    ]
-                ),
+                "❌ **Invalid Password.** Try again.",
+                reply_markup=_cancel_kb(),
             )
         except Exception as e:
-            with contextlib.suppress(MessageNotModified):
-                await msg.edit_text(
-                    f"❌ **Error:** {e}",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton(
-                                    "❌ Cancel", callback_data="pro_setup_menu"
-                                )
-                            ]
-                        ]
-                    ),
-                )
-            del pro_setup_sessions[user_id]
+            await _error_screen(msg, f"❌ **Error:** {e}", user_id)
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -698,12 +598,13 @@ async def finalize_setup(userbot, user_id, msg):
         me = await userbot.get_me()
         if not me.is_premium:
             await msg.edit_text(
-                "❌ **Premium Account Required**\n\n"
-                "Your account doesn't have Telegram Premium.\n"
-                "Buy it or complete the setup with an account that has Premium to unlock 4GB uploads.",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu")]]
+                frame(
+                    "❌ **𝕏TV Pro™ — Premium Account Required**",
+                    "> Your account doesn't have Telegram Premium.\n"
+                    "> Buy it or complete the setup with an account that has\n"
+                    "> Premium to unlock 4 GB uploads.",
                 ),
+                reply_markup=_back_kb(),
             )
             await userbot.disconnect()
             del pro_setup_sessions[user_id]
@@ -744,31 +645,18 @@ async def finalize_setup(userbot, user_id, msg):
 
         with contextlib.suppress(MessageNotModified):
             await msg.edit_text(
-                "✅ **𝕏TV Pro™ Setup Complete!**\n\n"
-                f"Successfully authenticated as **{me.first_name}**.\n"
-                "Session string and credentials saved to the database.\n"
-                "**𝕏TV Pro™ is now active and ready to process >2GB files.**",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Admin Panel", callback_data="admin_main"
-                            )
-                        ]
-                    ]
+                frame(
+                    "✅ **𝕏TV Pro™ — Setup Complete**",
+                    f"> Successfully authenticated as **{me.first_name}**.\n"
+                    "> Session string and credentials saved to the database.\n"
+                    "> 𝕏TV Pro™ is now active and ready to process >2 GB files.",
                 ),
+                reply_markup=_back_kb("admin_main"),
             )
         await userbot.disconnect()
         del pro_setup_sessions[user_id]
     except Exception as e:
-        with contextlib.suppress(MessageNotModified):
-            await msg.edit_text(
-                f"❌ **Failed to finalize setup:** {e}",
-                reply_markup=InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("← Back to 𝕏TV Pro Setup", callback_data="pro_setup_menu")]]
-                ),
-            )
-        del pro_setup_sessions[user_id]
+        await _error_screen(msg, f"❌ **Failed to finalize setup:** {e}", user_id)
 
 async def _handle_change_tunnel_text(client, message, info):
     """Resolve admin's reply for `🆔 Change Tunnel` and persist the new id."""
@@ -781,23 +669,13 @@ async def _handle_change_tunnel_text(client, message, info):
 
     if val.lower() in ("cancel", "/cancel"):
         pro_change_sessions.pop(user_id, None)
-        await message.reply_text(
-            "Cancelled.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to 𝕏TV Pro™", callback_data="pro_setup_menu")]]
-            ),
-        )
+        await message.reply_text("Cancelled.", reply_markup=_back_kb())
         return
 
     if val.lower() == "none":
         await db.update_pro_session(tunnel_id=None, tunnel_link=None)
         pro_change_sessions.pop(user_id, None)
-        await message.reply_text(
-            "✅ Tunnel cleared.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to 𝕏TV Pro™", callback_data="pro_setup_menu")]]
-            ),
-        )
+        await message.reply_text("✅ Tunnel cleared.", reply_markup=_back_kb())
         return
 
     # Resolve the channel via the userbot — it has to be a member to post,
@@ -806,9 +684,7 @@ async def _handle_change_tunnel_text(client, message, info):
     if user_bot is None:
         await message.reply_text(
             "❌ Userbot not running. Run a Health Check first.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back", callback_data="pro_setup_menu")]]
-            ),
+            reply_markup=_back_kb(),
         )
         pro_change_sessions.pop(user_id, None)
         return
@@ -827,17 +703,13 @@ async def _handle_change_tunnel_text(client, message, info):
         title = chat.title or chat.username or str(chat.id)
         await message.reply_text(
             f"✅ Tunnel set to **{title}** (`{chat.id}`).",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("← Back to 𝕏TV Pro™", callback_data="pro_setup_menu")]]
-            ),
+            reply_markup=_back_kb(),
         )
     except Exception as e:
         logger.warning(f"Change tunnel failed for {val}: {e}")
         await message.reply_text(
             f"❌ Could not resolve `{val}`: {e}\nMake sure the userbot is a member.",
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("❌ Cancel", callback_data="pro_setup_menu")]]
-            ),
+            reply_markup=_cancel_kb(),
         )
 
 
