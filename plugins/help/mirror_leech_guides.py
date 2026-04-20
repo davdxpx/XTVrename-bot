@@ -1121,6 +1121,237 @@ _B2 = DestinationGuide(
 
 
 # ---------------------------------------------------------------------------
+# WebDAV (generic) — 4 pages (server url, app password, paste, iCloud)
+#                    + troubleshooting
+# ---------------------------------------------------------------------------
+_WEBDAV = DestinationGuide(
+    provider_id="webdav",
+    display_name="WebDAV",
+    summary=(
+        "Generic WebDAV uploader — covers Nextcloud, ownCloud, Synology, "
+        "QNAP, Apache mod_dav, and anything else speaking the protocol."
+    ),
+    required_values=["url", "username", "password"],
+    pages=[
+        GuidePage(
+            title="Step 1 / 4 — Find your WebDAV URL",
+            body=(
+                "> WebDAV URLs look different on each server. Pick the\n"
+                "> one matching your setup and note it down for Step 3.\n\n"
+                "**Nextcloud / ownCloud**\n"
+                "    `https://<host>/remote.php/dav/files/<username>/`\n"
+                "**Synology (DSM ≥ 6)** — enable WebDAV Server in Package\n"
+                "    Center, open a port, then\n"
+                "    `https://<nas>:5006/` (or your configured HTTPS port)\n"
+                "**QNAP (QTS)** — enable WebDAV in Control Panel →\n"
+                "    Network Services → Web Server, then\n"
+                "    `https://<nas>:8081/<share>/`\n"
+                "**Apache mod_dav** — whatever `<Location>` you configured,\n"
+                "    e.g. `https://files.example.com/dav/`\n\n"
+                "Verify the URL in a browser: it should return an XML\n"
+                "directory listing after Basic-auth login."
+            ),
+        ),
+        GuidePage(
+            title="Step 2 / 4 — Create an app password",
+            body=(
+                "> Never paste your account password into the bot. Every\n"
+                "> self-hosted server supports dedicated app passwords\n"
+                "> that can be revoked without touching your login.\n\n"
+                "**Nextcloud** — Settings → Security → **Devices &\n"
+                "    sessions** → *App name* → **Create new app password**.\n"
+                "**ownCloud** — Settings → Security → **Create App\n"
+                "    Password**.\n"
+                "**Synology** — User account → **2-Step Verification** →\n"
+                "    Application passwords (DSM 7+) or a dedicated\n"
+                "    non-admin user with only WebDAV permission.\n"
+                "**QNAP** — create a dedicated user with WebDAV access and\n"
+                "    no admin role.\n\n"
+                "Copy the generated password *now* — most servers show it\n"
+                "only once."
+            ),
+        ),
+        GuidePage(
+            title="Step 3 / 4 — Link to the bot",
+            body=(
+                "> Paste as `key: value` lines in a single message. The\n"
+                "> bot encrypts `password` with Fernet and deletes your\n"
+                "> message.\n\n"
+                "Tap **📝 Paste / update credentials** below, then send:\n"
+                "```\n"
+                "url: https://cloud.example.com/remote.php/dav/files/alice/\n"
+                "username: alice\n"
+                "password: <app-password>\n"
+                "folder: MirrorLeech\n"
+                "```\n"
+                "`folder` is optional and relative to the WebDAV root — if\n"
+                "you leave it empty, uploads land at the root.\n\n"
+                "Verify with **🔌 Test connection** — the bot issues a\n"
+                "`PROPFIND Depth: 0` on the folder and replies\n"
+                "`directory accessible` on success."
+            ),
+        ),
+        GuidePage(
+            title="Step 4 / 4 — iCloud Drive workaround",
+            body=(
+                "> **Unofficial — use at your own risk.** Apple doesn't\n"
+                "> expose iCloud Drive over WebDAV, but third-party\n"
+                "> bridges exist.\n\n"
+                "Options the community has used:\n"
+                "**rclone** — `rclone config` → `webdav` remote pointing at\n"
+                "    `iclouddrive` (rclone has native iCloud support but\n"
+                "    not every flow maps to WebDAV cleanly).\n"
+                "**iCloudPD + webdav-bridge** — runs a local WebDAV\n"
+                "    server that re-uploads to iCloud via pyicloud.\n\n"
+                "None of these are endorsed by Apple. If Apple changes\n"
+                "iCloud auth (which they periodically do) the bridge\n"
+                "stops working. For critical data, prefer a native\n"
+                "provider (Dropbox, OneDrive, …)."
+            ),
+        ),
+        _trouble_page(
+            "WebDAV",
+            [
+                (
+                    "`401 Unauthorized` / Basic-auth reject",
+                    "Password is wrong, or you pasted the account password "
+                    "when the server enforces app passwords. Regenerate an "
+                    "app password (Step 2) and re-paste. On Nextcloud, "
+                    "check the Settings → Security → *Devices & sessions* "
+                    "tab to confirm the app password is still listed.",
+                ),
+                (
+                    "`403 Forbidden` on PROPFIND",
+                    "URL is reachable but the user lacks WebDAV "
+                    "permission. For Synology / QNAP, make sure the user "
+                    "has the *WebDAV* application permission enabled in "
+                    "Control Panel.",
+                ),
+                (
+                    "`404 Not Found`",
+                    "URL path is wrong. Nextcloud / ownCloud paths include "
+                    "the username at the end — double-check the trailing "
+                    "slash and that the username matches an existing "
+                    "account on the server.",
+                ),
+                (
+                    "`507 Insufficient Storage`",
+                    "Server-side quota hit. Free space on the host, or "
+                    "bump the per-user quota in the admin panel.",
+                ),
+                (
+                    "TLS / certificate errors",
+                    "aiohttp verifies TLS by default. Use a valid cert "
+                    "(Let's Encrypt, real CA) or put a reverse proxy in "
+                    "front that terminates TLS cleanly. Disabling "
+                    "verification is not exposed as a bot knob on purpose.",
+                ),
+                (
+                    "Large uploads time out",
+                    "The bot streams PUT, but some servers cap request "
+                    "duration at 30-60 s. For Nextcloud specifically, "
+                    "use the chunked-upload endpoint by splitting huge "
+                    "files client-side — that support is a planned "
+                    "follow-up in the bot.",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
+# Seafile (native) — 2 pages (api token + library, paste) + troubleshooting
+# ---------------------------------------------------------------------------
+_SEAFILE = DestinationGuide(
+    provider_id="seafile",
+    display_name="Seafile",
+    summary=(
+        "Native Seafile REST API. Needs an API token plus the server "
+        "URL and the target library (repo) UUID."
+    ),
+    required_values=["server_url", "library_id", "api_token"],
+    pages=[
+        GuidePage(
+            title="Step 1 / 2 — Grab the token and library UUID",
+            body=(
+                "> Seafile API tokens are per-user and don't expire unless\n"
+                "> you revoke them. Library UUIDs sit in the web-UI URL.\n\n"
+                "**Get the API token:**\n"
+                "**1.** Log in to your Seafile server in a browser.\n"
+                "**2.** Click your avatar → **Settings**.\n"
+                "**3.** Scroll to **API Token** → **Generate** (or copy\n"
+                "    the existing one).\n\n"
+                "**Get the library UUID:**\n"
+                "**1.** Open **My Libraries** in the Seafile web UI.\n"
+                "**2.** Click the target library.\n"
+                "**3.** The URL now looks like\n"
+                "    `https://cloud.example.com/library/<UUID>/...` — copy\n"
+                "    the UUID segment (8-4-4-4-12 hex form).\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 2 / 2 — Link to the bot",
+            body=(
+                "> Paste as `key: value` lines in a single message. The\n"
+                "> bot encrypts `api_token` with Fernet and deletes your\n"
+                "> message.\n\n"
+                "Tap **📝 Paste / update credentials** below, then send:\n"
+                "```\n"
+                "server_url: https://cloud.example.com\n"
+                "library_id: 11111111-2222-3333-4444-555555555555\n"
+                "api_token: <token from Settings>\n"
+                "parent_dir: /MirrorLeech\n"
+                "```\n"
+                "`parent_dir` is optional — leave blank or `/` to upload\n"
+                "to the library root.\n\n"
+                "Verify with **🔌 Test connection** — the bot calls\n"
+                "`/api2/auth/ping/` and expects a `pong` response."
+            ),
+        ),
+        _trouble_page(
+            "Seafile",
+            [
+                (
+                    "`401 Unauthorized` on ping",
+                    "Token is wrong or was revoked. Regenerate it in "
+                    "Settings → API Token and re-paste. Note that Seafile "
+                    "Pro may require re-authentication after a password "
+                    "change even for API tokens.",
+                ),
+                (
+                    "`404 Not Found` on upload-link",
+                    "library_id doesn't match any library the token's "
+                    "user can access. Verify the UUID from the library's "
+                    "URL and that the token owner is a member of the "
+                    "library (or its group).",
+                ),
+                (
+                    "`403 Forbidden` on upload",
+                    "The token's user has read-only access to the "
+                    "library. Re-check the member role in **Share** → "
+                    "the token user needs **Read-Write** or higher.",
+                ),
+                (
+                    "`507 Insufficient Storage`",
+                    "Library or per-user quota exhausted. Free space in "
+                    "the library or have an admin bump the quota in the "
+                    "System Admin panel.",
+                ),
+                (
+                    "Uploads land but file ID missing",
+                    "Older Seafile CE (≤ 7.1) returns the upload result "
+                    "in a slightly different shape. The bot falls back to "
+                    "the server URL so at least something opens; upgrade "
+                    "to Seafile 8+ for the stable file-ID response.",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 GUIDES: dict[str, DestinationGuide] = {
@@ -1135,6 +1366,8 @@ GUIDES: dict[str, DestinationGuide] = {
     "box": _BOX,
     "s3": _S3,
     "b2": _B2,
+    "webdav": _WEBDAV,
+    "seafile": _SEAFILE,
     # Intentionally no "ddl" entry: DDL is host-admin-only (env var based);
     # when it's available the user has nothing to configure, and when it
     # isn't available it's already hidden from the public settings menu.
