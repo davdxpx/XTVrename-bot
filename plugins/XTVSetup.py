@@ -138,39 +138,39 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
     runtime = "🟢 `running`" if user_bot is not None else "🔴 `not started`"
 
     account_lines = [
-        "> **Userbot Account**",
-        f"> 👤 Name: `{name}`",
-        f"> 🆔 ID: `{uid}`",
-        f"> 📞 Phone: {phone}",
-        f"> {prem_line}",
-        f"> {auth_line}",
+        "**👤 Userbot Account**",
+        f"• Name: `{name}`",
+        f"• ID: `{uid}`",
+        f"• Phone: {phone}",
+        f"• {prem_line}",
+        f"• {auth_line}",
     ]
     runtime_lines = [
-        "> **Runtime**",
-        f"> ⚙️ Userbot process: {runtime}",
-        f"> {health_line}",
+        "**⚙️ Runtime**",
+        f"• Userbot process: {runtime}",
+        f"• {health_line}",
     ]
-    tunnel_lines = ["> **Tunnel Channel**"]
+    tunnel_lines = ["**🆔 Tunnel Channel**"]
     if session.get("tunnel_id"):
-        tunnel_lines.append(f"> 🆔 ID: `{session['tunnel_id']}`")
+        tunnel_lines.append(f"• ID: `{session['tunnel_id']}`")
         link = session.get("tunnel_link")
         if link:
-            tunnel_lines.append(f"> 🔗 Link: `{link}`")
+            tunnel_lines.append(f"• Link: `{link}`")
         else:
-            tunnel_lines.append("> 🔗 Link: _not set_")
+            tunnel_lines.append("• Link: _not set_")
     else:
-        tunnel_lines.append("> __No tunnel configured yet.__")
+        tunnel_lines.append("_No tunnel configured yet._")
 
     upload_count = int(session.get("upload_count_total") or 0)
     upload_bytes = int(session.get("upload_bytes_total") or 0)
     avg = (upload_bytes / upload_count) if upload_count else 0
     last_upload = _format_dt(session.get("last_upload_at"))
     stats_lines = [
-        "> **Upload Stats — Lifetime**",
-        f"> 📦 Files routed: `{upload_count}`",
-        f"> 📊 Volume: `{_format_bytes(upload_bytes)}`",
-        f"> ⚡ Avg per file: `{_format_bytes(avg)}`",
-        f"> 🕒 Last upload: {last_upload}",
+        "**📊 Upload Stats — Lifetime**",
+        f"• Files routed: `{upload_count}`",
+        f"• Volume: `{_format_bytes(upload_bytes)}`",
+        f"• Avg per file: `{_format_bytes(avg)}`",
+        f"• Last upload: {last_upload}",
     ]
 
     body = "\n".join(
@@ -212,12 +212,14 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
 def _render_inactive() -> tuple[str, list]:
     body = "\n".join(
         [
-            "> Pro extends Telegram's 4 GB cap by routing uploads through",
-            "> a userbot session. You'll need:",
-            ">",
-            "> **1.** A spare Telegram account",
-            "> **2.** Its `api_id` + `api_hash` from my.telegram.org",
-            "> **3.** Access to receive its login code",
+            "Pro extends Telegram's 4 GB cap by routing uploads through",
+            "a userbot session.",
+            "",
+            "**Requirements:**",
+            "",
+            "**1.** A spare Telegram account (Premium tier required)",
+            "**2.** Its `api_id` + `api_hash` from my.telegram.org",
+            "**3.** Access to receive its login code",
             "",
             "> 🔐 The session string is stored in your database — do not share it.",
         ]
@@ -240,16 +242,19 @@ async def pro_setup_what(client, callback_query):
     await callback_query.answer()
     body = "\n".join(
         [
-            "> Standard Telegram bots can only upload files up to **2 GB**.",
-            "> Telegram **Premium** users can upload up to **4 GB**.",
+            "**The upload limits:**",
             "",
-            "> 𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
-            "> file >2 GB through it. The bot copies the file to a private",
-            "> tunnel channel where the userbot picks it up and re-sends it",
-            "> to the destination — all transparently.",
+            "• Standard Telegram bots — cap **2 GB** per file",
+            "• Telegram **Premium** accounts — cap **4 GB** per file",
             "",
-            "> Setup is one-time. After authorisation everything happens",
-            "> automatically.",
+            "**What 𝕏TV Pro™ does:**",
+            "",
+            "𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
+            "file larger than 2 GB through it. The bot copies the file to a",
+            "private tunnel channel where the userbot picks it up and re-sends",
+            "it to the destination — all transparently.",
+            "",
+            "> Setup is one-time. After authorisation everything happens automatically.",
         ]
     )
     text = frame("📖 **About 𝕏TV Pro™**", body)
@@ -362,11 +367,13 @@ async def pro_change_tunnel(client, callback_query):
         await callback_query.message.edit_text(
             frame(
                 "🆔 **𝕏TV Pro™ — Change Tunnel Channel**",
-                "> Send the new tunnel as `@username`, numeric ID (`-100…`),\n"
-                "> or send `none` to clear.\n"
-                ">\n"
-                "> __The userbot must already be a member with post "
-                "permissions.__",
+                "Send the new tunnel reference as one of:\n"
+                "\n"
+                "**1.** `@username` — public channel handle\n"
+                "**2.** Numeric ID — e.g. `-1001234567890`\n"
+                "**3.** `none` — clear the current tunnel\n"
+                "\n"
+                "> ⚠ The userbot must already be a member with post permissions.",
             ),
             reply_markup=_cancel_kb(),
         )
@@ -385,15 +392,16 @@ async def delete_setup_ask(client, callback_query):
         return
     text = frame(
         "🗑 **𝕏TV Pro™ — Delete Session?**",
-        "> This will:\n"
-        ">\n"
-        "> • Stop the running userbot\n"
-        "> • Erase the session string and credentials from the database\n"
-        "> • Reset all upload telemetry counters\n"
-        ">\n"
-        "> The 4 GB tunnel will stop working immediately. Re-Setup is\n"
-        "> the only way back.\n"
-        "> __This cannot be undone.__",
+        "**This action will:**\n"
+        "\n"
+        "• Stop the running userbot process\n"
+        "• Erase the session string and credentials from the database\n"
+        "• Reset all lifetime upload telemetry counters\n"
+        "• Immediately disable the 4 GB upload tunnel\n"
+        "\n"
+        "Re-Setup from scratch is the only way back.\n"
+        "\n"
+        "> ⚠ **This cannot be undone.**",
     )
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
@@ -431,8 +439,10 @@ async def delete_setup_confirm(client, callback_query):
     await callback_query.message.edit_text(
         frame(
             "✅ **𝕏TV Pro™ — Session Deleted**",
-            "> Disabled. The userbot session was securely deleted from\n"
-            "> the database.",
+            "𝕏TV Pro™ has been disabled. The userbot session was securely "
+            "deleted from the database.\n"
+            "\n"
+            "> 🔐 All cached credentials have been purged.",
         ),
         reply_markup=_back_kb(),
     )
@@ -600,9 +610,15 @@ async def finalize_setup(userbot, user_id, msg):
             await msg.edit_text(
                 frame(
                     "❌ **𝕏TV Pro™ — Premium Account Required**",
-                    "> Your account doesn't have Telegram Premium.\n"
-                    "> Buy it or complete the setup with an account that has\n"
-                    "> Premium to unlock 4 GB uploads.",
+                    "**Your account doesn't have Telegram Premium.**\n"
+                    "\n"
+                    "To unlock 4 GB uploads, either:\n"
+                    "\n"
+                    "• Subscribe to Telegram Premium on this account, or\n"
+                    "• Re-run setup with a different account that already has Premium\n"
+                    "\n"
+                    "> Premium is required because the userbot inherits its\n"
+                    "> 4 GB upload cap from the underlying account tier.",
                 ),
                 reply_markup=_back_kb(),
             )
@@ -647,9 +663,13 @@ async def finalize_setup(userbot, user_id, msg):
             await msg.edit_text(
                 frame(
                     "✅ **𝕏TV Pro™ — Setup Complete**",
-                    f"> Successfully authenticated as **{me.first_name}**.\n"
-                    "> Session string and credentials saved to the database.\n"
-                    "> 𝕏TV Pro™ is now active and ready to process >2 GB files.",
+                    f"Successfully authenticated as **{me.first_name}**.\n"
+                    "\n"
+                    "• Session string stored Fernet-encrypted in the database\n"
+                    "• Userbot process hot-started — no restart required\n"
+                    "• Tunnel ready for the 🆔 Change Tunnel step\n"
+                    "\n"
+                    "**𝕏TV Pro™ is now active and ready to process >2 GB files.**",
                 ),
                 reply_markup=_back_kb("admin_main"),
             )
