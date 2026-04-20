@@ -20,6 +20,8 @@ from pyrogram.types import Message
 from config import Config
 from db import db
 from utils.media.detect import apply_autofill, probe_audio_streams
+from utils.media.patterns import detect_all as _detect_patterns
+from utils.media.patterns import flatten_specials as _flatten_specials
 from utils.media.ffmpeg_tools import execute_ffmpeg, generate_ffmpeg_command, probe_file
 from utils.queue_manager import queue_manager
 from utils.telegram.progress import progress_for_pyrogram
@@ -598,61 +600,32 @@ class TaskProcessor:
             except Exception as e:
                 logger.warning(f"probe_audio_streams failed: {e}")
 
+        # Detection moved to utils.media.patterns (v1.6.2). The user's
+        # confirm-screen picks (stored on self.data) still win over
+        # regex detection; only fall back to detection when the field
+        # isn't already on the session.
         if "specials" in self.data:
             extracted_specials = self.data["specials"]
+            _fallback_groups = None
         else:
-            extracted_specials = []
-            if self.original_name:
-                orig_name_upper = self.original_name.upper()
-                specials_map = {
-                    "WEB-DL": "WEB-DL",
-                    "WEBRIP": "WEBRip",
-                    "HDR": "HDR",
-                    "REMUX": "REMUX",
-                    "PROPER": "PROPER",
-                    "REPACK": "REPACK",
-                    "UNCUT": "UNCUT",
-                    "BDRIP": "BDRip",
-                    "BLURAY": "BluRay",
-                    "BLUERAY": "BluRay",
-                }
-                for kw, label in specials_map.items():
-                    if kw in orig_name_upper:
-                        extracted_specials.append(label)
-                extracted_specials = list(dict.fromkeys(extracted_specials))
+            _fallback_groups = _detect_patterns(self.original_name or "")
+            extracted_specials = _flatten_specials(_fallback_groups)
 
         if "codec" in self.data:
             extracted_codec = [self.data["codec"]] if self.data["codec"] else []
         else:
-            extracted_codec = []
-            if self.original_name:
-                orig_name_upper = self.original_name.upper()
-                codec_map = {"X264": "x264", "X265": "x265", "HEVC": "HEVC"}
-                for kw, label in codec_map.items():
-                    if kw in orig_name_upper:
-                        extracted_codec.append(label)
+            if _fallback_groups is None:
+                _fallback_groups = _detect_patterns(self.original_name or "")
+            codec_label = _fallback_groups.get("codec")
+            extracted_codec = [codec_label] if isinstance(codec_label, str) and codec_label else []
 
         if "audio" in self.data:
             extracted_audio = [self.data["audio"]] if self.data["audio"] else []
         else:
-            extracted_audio = []
-            if self.original_name:
-                orig_name_upper = self.original_name.upper()
-                audio_map = {
-                    "DUAL": "DUAL",
-                    "DUBBED": "Dubbed",
-                    "MULTI": "Multi",
-                    "MICDUB": "MicDub",
-                    "LINEDUB": "LineDub",
-                    "DTS": "DTS",
-                    "AC3": "AC3",
-                    "ATMOS": "Atmos",
-                }
-                if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
-                    extracted_audio.append("DL")
-                for kw, label in audio_map.items():
-                    if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
-                        extracted_audio.append(label)
+            if _fallback_groups is None:
+                _fallback_groups = _detect_patterns(self.original_name or "")
+            audio_label = _fallback_groups.get("audio")
+            extracted_audio = [audio_label] if isinstance(audio_label, str) and audio_label else []
 
         specials_str = pref_sep.join(extracted_specials)
         codec_str = pref_sep.join(extracted_codec)
