@@ -13,18 +13,20 @@ callback query handler. Heavy logic lives in tools/mirror_leech/*;
 this file is the wiring layer that knows about Pyrogram.
 
 Callback-data grammar (see Phase D plan for the full table):
-    ml_cfg                       → user config root
-    ml_cfg_up_<provider>         → per-provider config screen
-    ml_cfg_test_<provider>       → test connection
-    ml_cfg_clr_<provider>        → clear stored credential
-    ml_cfg_paste_<provider>      → prompt user to paste token
-    ml_opt_single_<file_id>      → MyFiles single-file entry
-    ml_opt_multi_<state_key>     → MyFiles multi-select entry
-    ml_prov_<uploader>_<ctx_id>  → pick uploader for picker context
-    ml_go_<ctx_id>               → start task(s)
-    ml_cancel_<task_id>          → cancel running task
-    ml_queue                     → user queue
-    ml_admin                     → CEO admin screen
+    ml_cfg                         → user config root
+    ml_cfg_up_<provider>           → per-provider config screen
+    ml_cfg_test_<provider>         → test connection
+    ml_cfg_clr_<provider>          → clear stored credential
+    ml_cfg_paste_<provider>        → prompt user to paste token
+    ml_cfg_guide_<provider>        → open guide page 1 for provider
+    ml_cfg_guide_<provider>_<page> → jump to page N (1-indexed)
+    ml_opt_single_<file_id>        → MyFiles single-file entry
+    ml_opt_multi_<state_key>       → MyFiles multi-select entry
+    ml_prov_<uploader>_<ctx_id>    → pick uploader for picker context
+    ml_go_<ctx_id>                 → start task(s)
+    ml_cancel_<task_id>            → cancel running task
+    ml_queue                       → user queue
+    ml_admin                       → CEO admin screen
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from tools.mirror_leech.Controller import (
     UnsupportedSourceError,
     pick_downloader,
 )
+from tools.mirror_leech.DestinationGuides import get_guide
 from tools.mirror_leech.UIChrome import frame_plain as frame
 from tools.mirror_leech.uploaders import available_uploaders
 from utils.telegram.log import get_logger
@@ -700,6 +703,14 @@ async def _render_provider_screen(
         )
 
     rows: list[list[InlineKeyboardButton]] = []
+    if get_guide(provider) is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "📖 Setup Guide", callback_data=f"ml_cfg_guide_{provider}"
+                )
+            ]
+        )
     if cls.available():
         rows.append(
             [
@@ -731,6 +742,79 @@ async def _render_provider_screen(
             text=text,
             reply_markup=InlineKeyboardMarkup(rows),
         )
+
+
+@Client.on_callback_query(
+    filters.regex(r"^ml_cfg_guide_([a-z0-9]+)(?:_(\d+))?$")
+)
+async def ml_cfg_guide(client: Client, callback_query: CallbackQuery) -> None:
+    """Multi-page setup-guide viewer for a destination."""
+    match = callback_query.matches[0]
+    provider = match.group(1)
+    page_arg = match.group(2)
+
+    guide = get_guide(provider)
+    if guide is None:
+        await callback_query.answer("No guide available.", show_alert=True)
+        return
+
+    try:
+        page_idx = int(page_arg) if page_arg else 1
+    except ValueError:
+        page_idx = 1
+    page_idx = max(1, min(page_idx, guide.page_count))
+    page = guide.pages[page_idx - 1]
+
+    rows: list[list[InlineKeyboardButton]] = []
+    nav: list[InlineKeyboardButton] = []
+    if page_idx > 1:
+        nav.append(
+            InlineKeyboardButton(
+                "← Prev",
+                callback_data=f"ml_cfg_guide_{provider}_{page_idx - 1}",
+            )
+        )
+    nav.append(
+        InlineKeyboardButton(
+            f"Page {page_idx}/{guide.page_count}",
+            callback_data=f"ml_cfg_guide_{provider}_{page_idx}",
+        )
+    )
+    if page_idx < guide.page_count:
+        nav.append(
+            InlineKeyboardButton(
+                "Next →",
+                callback_data=f"ml_cfg_guide_{provider}_{page_idx + 1}",
+            )
+        )
+    rows.append(nav)
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "📝 Paste now", callback_data=f"ml_cfg_paste_{provider}"
+            )
+        ]
+    )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                f"← Back to {guide.display_name}",
+                callback_data=f"ml_cfg_up_{provider}",
+            )
+        ]
+    )
+
+    text = frame(
+        f"📖 **{guide.display_name} — {page.title}**",
+        page.body,
+    )
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(rows),
+            disable_web_page_preview=True,
+        )
+    await callback_query.answer()
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cfg_test_([a-z0-9_]+)$"))

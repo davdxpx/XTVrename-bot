@@ -1573,8 +1573,74 @@ async def handle_help_callbacks(client, callback_query):
         # Per-subtopic pages for the Mirror-Leech guide reached via
         # All Tools → Mirror-Leech. Each page is one short screen with
         # its own Back button to the Mirror-Leech hub.
+        from tools.mirror_leech.DestinationGuides import get_guide
+        from tools.mirror_leech.uploaders import available_uploaders
+
         topic = data.replace("help_ml_", "")
         back_to_ml = [[InlineKeyboardButton("← Back to Mirror-Leech", callback_data="help_tool_ml")]]
+
+        # Per-destination multi-page viewer: help_ml_dest_<provider>[_p<N>]
+        if topic.startswith("dest_"):
+            rest = topic.removeprefix("dest_")
+            if "_p" in rest:
+                provider, _, page_str = rest.rpartition("_p")
+                try:
+                    page_idx = int(page_str)
+                except ValueError:
+                    provider, page_idx = rest, 1
+            else:
+                provider, page_idx = rest, 1
+            guide = get_guide(provider)
+            if guide is None:
+                await callback_query.answer(
+                    "No guide available.", show_alert=True
+                )
+                return
+            page_idx = max(1, min(page_idx, guide.page_count))
+            page = guide.pages[page_idx - 1]
+            nav: list[InlineKeyboardButton] = []
+            if page_idx > 1:
+                nav.append(
+                    InlineKeyboardButton(
+                        "← Prev",
+                        callback_data=f"help_ml_dest_{provider}_p{page_idx - 1}",
+                    )
+                )
+            nav.append(
+                InlineKeyboardButton(
+                    f"Page {page_idx}/{guide.page_count}",
+                    callback_data=f"help_ml_dest_{provider}_p{page_idx}",
+                )
+            )
+            if page_idx < guide.page_count:
+                nav.append(
+                    InlineKeyboardButton(
+                        "Next →",
+                        callback_data=f"help_ml_dest_{provider}_p{page_idx + 1}",
+                    )
+                )
+            rows = [
+                nav,
+                [
+                    InlineKeyboardButton(
+                        "← Back to Destinations",
+                        callback_data="help_ml_dests",
+                    )
+                ],
+            ]
+            text = (
+                f"**📖 {guide.display_name} — {page.title}**\n"
+                "━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"{page.body}\n"
+                "━━━━━━━━━━━━━━━━━━━━"
+            )
+            with contextlib.suppress(MessageNotModified):
+                await callback_query.message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(rows),
+                    disable_web_page_preview=True,
+                )
+            return
         if topic == "overview":
             text = (
                 "**☁️ Mirror-Leech overview**\n\n"
@@ -1608,20 +1674,45 @@ async def handle_help_callbacks(client, callback_query):
                 "this build. Contact support if you need that flow."
             )
         elif topic == "dests":
+            # Hub: list only the destinations this host actually enables,
+            # each a tappable entry opening its own multi-page guide.
+            dest_rows: list[list[InlineKeyboardButton]] = []
+            for cls in available_uploaders():
+                if get_guide(cls.id) is None:
+                    continue
+                dest_rows.append(
+                    [
+                        InlineKeyboardButton(
+                            f"☁️ {cls.display_name}",
+                            callback_data=f"help_ml_dest_{cls.id}",
+                        )
+                    ]
+                )
+            dest_rows.append(back_to_ml[0])
+            if dest_rows[:-1]:
+                body = (
+                    "> Tap a destination for its step-by-step setup guide.\n\n"
+                    "Only destinations enabled on this host are shown here."
+                )
+            else:
+                body = (
+                    "> 🚧 No destinations are currently enabled by the host\n"
+                    "> admin. Ask them to configure Mirror-Leech providers\n"
+                    "> before trying to link one."
+                )
             text = (
-                "**☁️ Mirror-Leech destinations**\n\n"
-                "> Every uploader can be fanned to in parallel.\n"
+                "**☁️ Mirror-Leech destinations**\n"
                 "━━━━━━━━━━━━━━━━━━━━\n\n"
-                "> • **Google Drive** — OAuth refresh-token flow\n"
-                "> • **Rclone** — covers 70+ backends via your rclone.conf\n"
-                "> • **MEGA.nz** — email + password\n"
-                "> • **GoFile** — anonymous by default, optional token\n"
-                "> • **Pixeldrain** — anonymous by default, optional key\n"
-                "> • **Telegram** — DM fallback, userbot for >2 GB\n"
-                "> • **DDL** — one-time signed URLs served from the host\n\n"
-                "Availability depends on what's installed on the host — "
-                "unavailable providers are hidden automatically in the picker."
+                f"{body}\n\n"
+                "━━━━━━━━━━━━━━━━━━━━"
             )
+            with contextlib.suppress(MessageNotModified):
+                await callback_query.message.edit_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(dest_rows),
+                    disable_web_page_preview=True,
+                )
+            return
         elif topic == "link":
             text = (
                 "**🔗 Linking a provider**\n\n"
