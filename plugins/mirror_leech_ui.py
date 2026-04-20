@@ -16,6 +16,13 @@ Callback-data grammar (see Phase D plan for the full table):
     ml_cfg                         → user config root
     ml_cfg_qref                    → force-refresh quota snapshots
     ml_cfg_up_<provider>           → per-provider config screen
+    ml_webhook                     → webhook config screen
+    ml_webhook_seturl              → prompt to paste webhook URL
+    ml_webhook_regen               → regenerate HMAC secret
+    ml_webhook_tgl_<event>         → toggle event subscription
+    ml_webhook_test                → send synthetic test payload
+    ml_webhook_clear               → clear webhook config (confirm step)
+    ml_webhook_clrconf             → confirm-clear handler
     ml_cfg_test_<provider>         → test connection
     ml_cfg_clr_<provider>          → clear stored credential
     ml_cfg_paste_<provider>        → prompt user to paste token
@@ -1218,6 +1225,9 @@ async def _render_cfg_root(
         rows.append(
             [InlineKeyboardButton(preset_label, callback_data="ml_preset_list")]
         )
+        rows.append(
+            [InlineKeyboardButton("🔔 Webhook", callback_data="ml_webhook")]
+        )
         queue_row = [InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")]
         if configured_ids:
             queue_row.append(
@@ -1247,6 +1257,264 @@ async def _render_cfg_root(
         await client.send_message(
             chat_id, text, reply_markup=InlineKeyboardMarkup(rows)
         )
+
+
+# ---------------------------------------------------------------------------
+# Webhook config screen
+# ---------------------------------------------------------------------------
+
+
+def _mask_secret(s: str) -> str:
+    if not s:
+        return "—"
+    if len(s) <= 8:
+        return "·" * len(s)
+    return f"{s[:4]}…{s[-4:]}"
+
+
+async def _render_webhook_screen(
+    client: Client, chat_id: int, message_id: int, user_id: int
+) -> None:
+    from tools.mirror_leech import Webhooks
+
+    cfg = await Webhooks.get_config(user_id) or {}
+    url = cfg.get("url") or ""
+    secret = cfg.get("secret") or ""
+    enabled = bool(cfg.get("enabled", True))
+    events = set(cfg.get("events") or Webhooks.DEFAULT_EVENTS)
+
+    status = "🟢 enabled" if (cfg and url and secret and enabled) else (
+        "🟠 disabled" if (cfg and url and secret) else "⚪ not set"
+    )
+
+    body_lines = [
+        f"> Status: {status}",
+        f"> URL: `{url or '—'}`",
+        f"> Secret: `{_mask_secret(secret)}`",
+        "",
+        "Events (tap to toggle):",
+        f"> {'☑' if Webhooks.EVENT_UPLOAD_DONE in events else '☐'}  upload_done",
+        f"> {'☑' if Webhooks.EVENT_UPLOAD_FAILED in events else '☐'}  upload_failed",
+        "",
+        "Payload is JSON, signed with HMAC-SHA256 via the\n"
+        "`X-MediaStudio-Signature` header. Verify it on your receiver\n"
+        "before trusting the body — the secret is the pre-shared key.",
+    ]
+    body = "\n".join(body_lines)
+
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton("📝 Set URL", callback_data="ml_webhook_seturl"),
+            InlineKeyboardButton(
+                "🎲 Regenerate secret", callback_data="ml_webhook_regen"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                ("☑ " if Webhooks.EVENT_UPLOAD_DONE in events else "☐ ") + "upload_done",
+                callback_data=f"ml_webhook_tgl_{Webhooks.EVENT_UPLOAD_DONE}",
+            ),
+            InlineKeyboardButton(
+                ("☑ " if Webhooks.EVENT_UPLOAD_FAILED in events else "☐ ") + "upload_failed",
+                callback_data=f"ml_webhook_tgl_{Webhooks.EVENT_UPLOAD_FAILED}",
+            ),
+        ],
+    ]
+    if cfg and url and secret:
+        rows.append(
+            [
+                InlineKeyboardButton("🚀 Test send", callback_data="ml_webhook_test"),
+                InlineKeyboardButton(
+                    "🗑 Clear config", callback_data="ml_webhook_clear"
+                ),
+            ]
+        )
+    rows.append([InlineKeyboardButton("← Back", callback_data="ml_cfg")])
+
+    text = frame("🔔 **Mirror-Leech — Webhook**", body)
+    with contextlib.suppress(Exception):
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_webhook$"))
+async def ml_webhook_open(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    await _render_webhook_screen(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_webhook_seturl$"))
+async def ml_webhook_set_url(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Enter paste flow. Auto-generates a secret on first save."""
+    _paste_state[callback_query.from_user.id] = {"provider": "__webhook_url__"}
+    body = (
+        "> Send the HTTPS URL the bot should POST to.\n"
+        "> Example: `https://example.com/hooks/ml`\n"
+        "\n"
+        "A 32-char HMAC secret is generated automatically on first save.\n"
+        "Tap `🎲 Regenerate secret` later to rotate it."
+    )
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame("✏️ **Mirror-Leech — Webhook URL**", body),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="ml_webhook")]]
+            ),
+        )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_webhook_regen$"))
+async def ml_webhook_regen_secret(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Webhooks
+
+    cfg = (await Webhooks.get_config(callback_query.from_user.id)) or {}
+    cfg["secret"] = Webhooks.generate_secret()
+    cfg.setdefault("events", list(Webhooks.DEFAULT_EVENTS))
+    cfg.setdefault("enabled", True)
+    await Webhooks.save_config(callback_query.from_user.id, cfg)
+    await callback_query.answer("Secret regenerated.")
+    await _render_webhook_screen(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+
+
+@Client.on_callback_query(
+    filters.regex(r"^ml_webhook_tgl_(upload_done|upload_failed)$")
+)
+async def ml_webhook_toggle_event(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Webhooks
+
+    event = callback_query.data.removeprefix("ml_webhook_tgl_")
+    cfg = (await Webhooks.get_config(callback_query.from_user.id)) or {}
+    events = set(cfg.get("events") or Webhooks.DEFAULT_EVENTS)
+    if event in events:
+        events.discard(event)
+    else:
+        events.add(event)
+    if not events:
+        await callback_query.answer(
+            "At least one event must stay subscribed.", show_alert=True
+        )
+        return
+    cfg["events"] = sorted(events)
+    cfg.setdefault("enabled", True)
+    await Webhooks.save_config(callback_query.from_user.id, cfg)
+    await callback_query.answer()
+    await _render_webhook_screen(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_webhook_test$"))
+async def ml_webhook_test_send(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Webhooks
+
+    ok, msg = await Webhooks.test_send(callback_query.from_user.id)
+    await callback_query.answer(
+        ("✅ " if ok else "❌ ") + msg[:180], show_alert=True
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_webhook_clear$"))
+async def ml_webhook_clear_confirm(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    body = (
+        "> 🗑 **Clear webhook config?**\n"
+        "> This removes the URL, secret, and event preferences.\n"
+        "> You can set a new webhook anytime."
+    )
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ Yes, clear", callback_data="ml_webhook_clrconf"
+                ),
+                InlineKeyboardButton("❌ Keep", callback_data="ml_webhook"),
+            ]
+        ]
+    )
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame("🔔 **Mirror-Leech — Webhook**", body), reply_markup=kb
+        )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_webhook_clrconf$"))
+async def ml_webhook_clear_apply(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Webhooks
+
+    await Webhooks.clear_config(callback_query.from_user.id)
+    await callback_query.answer("Cleared.")
+    await _render_webhook_screen(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+
+
+async def _ml_webhook_url_text(
+    client: Client, message: Message, state: dict
+) -> None:
+    """Paste-state handler for webhook URL free-text."""
+    from tools.mirror_leech import Webhooks
+
+    raw = (message.text or "").strip()
+    if not Webhooks.valid_http_url(raw):
+        await message.reply_text(
+            "⚠️ Not a valid http(s) URL. Try again or ❌ Cancel."
+        )
+        return
+
+    cfg = (await Webhooks.get_config(message.from_user.id)) or {}
+    cfg["url"] = raw
+    if not cfg.get("secret"):
+        cfg["secret"] = Webhooks.generate_secret()
+    cfg.setdefault("events", list(Webhooks.DEFAULT_EVENTS))
+    cfg.setdefault("enabled", True)
+    await Webhooks.save_config(message.from_user.id, cfg)
+    _paste_state.pop(message.from_user.id, None)
+
+    await message.reply_text(
+        frame(
+            "🔔 **Mirror-Leech — Webhook saved**",
+            f"> URL: `{raw}`\n"
+            f"> Secret: `{_mask_secret(cfg['secret'])}`\n"
+            "\n"
+            "Open `/settings → Mirror-Leech → Webhook` to rotate the\n"
+            "secret or fire a test payload.",
+        )
+    )
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cfg_qref$"))
@@ -1812,6 +2080,11 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
     # Custom-schedule free-text (e.g. "tomorrow 18:00").
     if state.get("provider") == "__schedule__":
         await _ml_schedule_text(client, message, state)
+        return
+
+    # Webhook URL paste.
+    if state.get("provider") == "__webhook_url__":
+        await _ml_webhook_url_text(client, message, state)
         return
 
     provider = state["provider"]
