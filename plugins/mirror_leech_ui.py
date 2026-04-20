@@ -27,6 +27,14 @@ Callback-data grammar (see Phase D plan for the full table):
     ml_cancel_<task_id>            → cancel running task
     ml_queue                       → user queue
     ml_admin                       → CEO admin screen
+    ml_preset_list                 → list / manage destination presets
+    ml_preset_new                  → start "new preset" wizard (label first)
+    ml_preset_edit_<slug>          → open edit draft for existing preset
+    ml_preset_delete_<slug>        → delete-with-confirm
+    ml_preset_delconf_<slug>       → confirm delete
+    ml_preset_tgl_<provider>       → toggle provider in current draft
+    ml_preset_save                 → commit current draft
+    ml_preset_cancel               → discard current draft
 """
 
 from __future__ import annotations
@@ -589,6 +597,19 @@ async def _render_cfg_root(
         rows = [[InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")]]
         text = frame("☁️ **Mirror-Leech — Destinations**", body)
     else:
+        # Presets entry only makes sense once the user has at least 2
+        # configured providers — otherwise a "group" is just the provider.
+        from tools.mirror_leech import Presets
+
+        preset_count = len(await Presets.get_presets(user_id))
+        preset_label = (
+            f"🎯 Presets ({preset_count}/{Presets.MAX_PRESETS_PER_USER})"
+            if preset_count
+            else "🎯 Presets"
+        )
+        rows.append(
+            [InlineKeyboardButton(preset_label, callback_data="ml_preset_list")]
+        )
         rows.append([InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")])
         rows.append([InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")])
 
@@ -1105,6 +1126,12 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
     if not state:
         return  # not a ML paste message; let other handlers run
 
+    # Preset wizards hijack the paste-state dispatcher — they only need a
+    # single free-text line (the label).
+    if state.get("provider") == "__preset__":
+        await _ml_preset_label_text(client, message, state)
+        return
+
     provider = state["provider"]
     fmt = _PROVIDER_PASTE_FORMAT.get(provider, {})
     mode = fmt.get("mode", "")
@@ -1201,6 +1228,380 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
     with contextlib.suppress(Exception):
         await message.delete()
     await message.reply_text(f"✅ `{provider}` linked. Use **Test connection** to verify.")
+
+
+# ---------------------------------------------------------------------------
+# Destination presets — user-defined fan-out groups
+# ---------------------------------------------------------------------------
+#
+# Drafts live in memory while the user is editing — they only reach Mongo
+# once the user taps "💾 Save preset". That way we never persist an
+# invalid state (zero providers, unresolved rename, etc.).
+_preset_drafts: dict[int, dict] = {}  # user_id -> {slug, label, providers, existing}
+
+
+def _slugify_label(label: str) -> str:
+    """Turn a human label into a preset slug. Lowercase, strip non-alnum,
+    collapse runs of `_`. Callers must still ensure uniqueness."""
+    cleaned = "".join(
+        (c.lower() if c.isalnum() else "_") for c in label.strip()
+    ).strip("_")
+    while "__" in cleaned:
+        cleaned = cleaned.replace("__", "_")
+    return cleaned or "preset"
+
+
+async def _unique_slug(user_id: int, base: str) -> str:
+    """Return `base` if free, else `base_2`, `base_3`, …"""
+    from tools.mirror_leech import Presets
+
+    existing = await Presets.get_presets(user_id)
+    if base not in existing:
+        return base
+    n = 2
+    while f"{base}_{n}" in existing:
+        n += 1
+    return f"{base}_{n}"
+
+
+async def _render_preset_list(
+    client: Client, chat_id: int, message_id: int, user_id: int
+) -> None:
+    from tools.mirror_leech import Presets
+
+    presets = await Presets.get_presets(user_id)
+    rows: list[list[InlineKeyboardButton]] = []
+    if presets:
+        for slug, preset in presets.items():
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"🎯 {preset.label} ({len(preset.providers)})",
+                        callback_data=f"ml_preset_edit_{slug}",
+                    ),
+                    InlineKeyboardButton(
+                        "🗑", callback_data=f"ml_preset_delete_{slug}"
+                    ),
+                ]
+            )
+
+    if len(presets) < Presets.MAX_PRESETS_PER_USER:
+        rows.append(
+            [InlineKeyboardButton("➕ New preset", callback_data="ml_preset_new")]
+        )
+    rows.append([InlineKeyboardButton("← Back", callback_data="ml_cfg")])
+
+    if presets:
+        body = (
+            "> Group your destinations so one tap in `/ml` fans out to all\n"
+            "> of them at once. Up to "
+            f"{Presets.MAX_PRESETS_PER_USER} presets, "
+            f"{Presets.MAX_PROVIDERS_PER_PRESET} providers each."
+        )
+    else:
+        body = (
+            "> No presets yet. A preset is a named group of destinations —\n"
+            "> tap it in `/ml` to fan a single file out to every provider\n"
+            "> in the group without toggling checkboxes each time."
+        )
+
+    text = frame("🎯 **Mirror-Leech — Presets**", body)
+    with contextlib.suppress(Exception):
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_list$"))
+async def ml_preset_list(client: Client, callback_query: CallbackQuery) -> None:
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_new$"))
+async def ml_preset_new(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    user_id = callback_query.from_user.id
+    existing = await Presets.get_presets(user_id)
+    if len(existing) >= Presets.MAX_PRESETS_PER_USER:
+        await callback_query.answer(
+            f"Preset limit reached ({Presets.MAX_PRESETS_PER_USER}). "
+            "Delete one first.",
+            show_alert=True,
+        )
+        return
+
+    _paste_state[user_id] = {
+        "provider": "__preset__",
+        "step": "await_label",
+        "tmp": {},
+    }
+    await callback_query.answer()
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            "🎯 **New preset — label**\n\n"
+            "Send a short label for this preset (e.g. `Media Hosts`, "
+            "`Cold Storage`). Max 40 characters.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("❌ Cancel", callback_data="ml_preset_cancel")]]
+            ),
+        )
+
+
+async def _ml_preset_label_text(
+    client: Client, message: Message, state: dict
+) -> None:
+    user_id = message.from_user.id
+    label = (message.text or "").strip()
+    if not label:
+        await message.reply_text("⚠️ Label can't be empty.")
+        return
+    if len(label) > 40:
+        await message.reply_text("⚠️ Label too long (max 40 chars).")
+        return
+
+    base_slug = _slugify_label(label)
+    slug = await _unique_slug(user_id, base_slug)
+    _preset_drafts[user_id] = {
+        "slug": slug,
+        "label": label,
+        "providers": [],
+        "existing": False,
+    }
+    _paste_state.pop(user_id, None)
+    with contextlib.suppress(Exception):
+        await message.delete()
+    sent = await message.reply_text("✅ Label stored. Now pick providers.")
+    await _render_preset_edit(client, sent.chat.id, sent.id, user_id)
+
+
+async def _render_preset_edit(
+    client: Client, chat_id: int, message_id: int, user_id: int
+) -> None:
+    from tools.mirror_leech import Presets
+
+    draft = _preset_drafts.get(user_id)
+    if not draft:
+        await _render_preset_list(client, chat_id, message_id, user_id)
+        return
+
+    configured = await _configured_uploader_ids(user_id)
+    if not configured:
+        body = (
+            "> ⚠️ You need at least one configured destination before\n"
+            "> building a preset. Link providers first, then come back."
+        )
+        rows = [[InlineKeyboardButton("← Back", callback_data="ml_preset_cancel")]]
+        text = frame("🎯 **Preset — no destinations**", body)
+        with contextlib.suppress(Exception):
+            await client.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=InlineKeyboardMarkup(rows),
+            )
+        return
+
+    from tools.mirror_leech.uploaders import uploader_by_id
+
+    rows: list[list[InlineKeyboardButton]] = []
+    selected = set(draft["providers"])
+    for pid in configured:
+        cls = uploader_by_id(pid)
+        display = cls.display_name if cls else pid
+        mark = "✅" if pid in selected else "▫️"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"{mark} {display}",
+                    callback_data=f"ml_preset_tgl_{pid}",
+                )
+            ]
+        )
+
+    max_p = Presets.MAX_PROVIDERS_PER_PRESET
+    rows.append(
+        [
+            InlineKeyboardButton(
+                "💾 Save preset" if selected else "💾 (pick ≥1 provider)",
+                callback_data="ml_preset_save",
+            ),
+            InlineKeyboardButton("❌ Cancel", callback_data="ml_preset_cancel"),
+        ]
+    )
+
+    body = (
+        f"> **Label:** {draft['label']}\n"
+        f"> **Selected:** {len(selected)}/{max_p}\n\n"
+        "> Tap providers to toggle. Save when you're done."
+    )
+    text = frame("🎯 **Preset — edit**", body)
+    with contextlib.suppress(Exception):
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_edit_([a-z0-9_-]+)$"))
+async def ml_preset_edit(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    slug = callback_query.data.removeprefix("ml_preset_edit_")
+    user_id = callback_query.from_user.id
+    preset = await Presets.get_preset(user_id, slug)
+    if not preset:
+        await callback_query.answer("Preset not found.", show_alert=True)
+        return
+    _preset_drafts[user_id] = {
+        "slug": preset.slug,
+        "label": preset.label,
+        "providers": list(preset.providers),
+        "existing": True,
+    }
+    await _render_preset_edit(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_tgl_([a-z0-9_]+)$"))
+async def ml_preset_toggle(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    provider = callback_query.data.removeprefix("ml_preset_tgl_")
+    user_id = callback_query.from_user.id
+    draft = _preset_drafts.get(user_id)
+    if not draft:
+        await callback_query.answer("Draft expired — start again.", show_alert=True)
+        return
+
+    if provider in draft["providers"]:
+        draft["providers"].remove(provider)
+    else:
+        if len(draft["providers"]) >= Presets.MAX_PROVIDERS_PER_PRESET:
+            await callback_query.answer(
+                f"Max {Presets.MAX_PROVIDERS_PER_PRESET} providers per preset.",
+                show_alert=True,
+            )
+            return
+        draft["providers"].append(provider)
+
+    await _render_preset_edit(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_save$"))
+async def ml_preset_save(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    user_id = callback_query.from_user.id
+    draft = _preset_drafts.get(user_id)
+    if not draft:
+        await callback_query.answer("No draft to save.", show_alert=True)
+        return
+    if not draft["providers"]:
+        await callback_query.answer(
+            "Pick at least one provider first.", show_alert=True
+        )
+        return
+
+    try:
+        await Presets.set_preset(
+            user_id, draft["slug"], draft["label"], draft["providers"]
+        )
+    except ValueError as exc:
+        await callback_query.answer(f"Save failed: {exc}", show_alert=True)
+        return
+
+    _preset_drafts.pop(user_id, None)
+    await callback_query.answer("Saved.")
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_cancel$"))
+async def ml_preset_cancel(client: Client, callback_query: CallbackQuery) -> None:
+    user_id = callback_query.from_user.id
+    _preset_drafts.pop(user_id, None)
+    _paste_state.pop(user_id, None)
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_delete_([a-z0-9_-]+)$"))
+async def ml_preset_delete(client: Client, callback_query: CallbackQuery) -> None:
+    from tools.mirror_leech import Presets
+
+    slug = callback_query.data.removeprefix("ml_preset_delete_")
+    preset = await Presets.get_preset(callback_query.from_user.id, slug)
+    if not preset:
+        await callback_query.answer("Preset not found.", show_alert=True)
+        return
+
+    body = (
+        f"> Delete preset **{preset.label}** ({len(preset.providers)} "
+        "providers)?\n\n> This cannot be undone."
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                "🗑 Delete", callback_data=f"ml_preset_delconf_{slug}"
+            ),
+            InlineKeyboardButton("← Back", callback_data="ml_preset_list"),
+        ]
+    ]
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame("🎯 **Preset — confirm delete**", body),
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_preset_delconf_([a-z0-9_-]+)$"))
+async def ml_preset_delete_confirm(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Presets
+
+    slug = callback_query.data.removeprefix("ml_preset_delconf_")
+    await Presets.delete_preset(callback_query.from_user.id, slug)
+    await callback_query.answer("Deleted.")
+    await _render_preset_list(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+    )
 
 
 # ---------------------------------------------------------------------------
