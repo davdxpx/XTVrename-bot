@@ -174,39 +174,39 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
     runtime = "🟢 `running`" if user_bot is not None else "🔴 `not started`"
 
     account_lines = [
-        "**👤 Userbot Account**",
-        f"• Name: `{name}`",
-        f"• ID: `{uid}`",
-        f"• Phone: {phone}",
-        f"• {prem_line}",
-        f"• {auth_line}",
+        "> **👤 Userbot Account**",
+        f"> Name: `{name}`",
+        f"> ID: `{uid}`",
+        f"> Phone: {phone}",
+        f"> {prem_line}",
+        f"> {auth_line}",
     ]
     runtime_lines = [
-        "**⚙️ Runtime**",
-        f"• Userbot process: {runtime}",
-        f"• {health_line}",
+        "> **⚙️ Runtime**",
+        f"> Userbot process: {runtime}",
+        f"> {health_line}",
     ]
-    tunnel_lines = ["**🆔 Tunnel Channel**"]
+    tunnel_lines = ["> **🆔 Tunnel Channel**"]
     if session.get("tunnel_id"):
-        tunnel_lines.append(f"• ID: `{session['tunnel_id']}`")
+        tunnel_lines.append(f"> ID: `{session['tunnel_id']}`")
         link = session.get("tunnel_link")
         if link:
-            tunnel_lines.append(f"• Link: `{link}`")
+            tunnel_lines.append(f"> Link: `{link}`")
         else:
-            tunnel_lines.append("• Link: _not set_")
+            tunnel_lines.append("> Link: _not set_")
     else:
-        tunnel_lines.append("_No tunnel configured yet._")
+        tunnel_lines.append("> _No tunnel configured yet._")
 
     upload_count = int(session.get("upload_count_total") or 0)
     upload_bytes = int(session.get("upload_bytes_total") or 0)
     avg = (upload_bytes / upload_count) if upload_count else 0
     last_upload = _format_dt(session.get("last_upload_at"))
     stats_lines = [
-        "**📊 Upload Stats — Lifetime**",
-        f"• Files routed: `{upload_count}`",
-        f"• Volume: `{_format_bytes(upload_bytes)}`",
-        f"• Avg per file: `{_format_bytes(avg)}`",
-        f"• Last upload: {last_upload}",
+        "> **📊 Upload Stats — Lifetime**",
+        f"> Files routed: `{upload_count}`",
+        f"> Volume: `{_format_bytes(upload_bytes)}`",
+        f"> Avg per file: `{_format_bytes(avg)}`",
+        f"> Last upload: {last_upload}",
     ]
 
     body = "\n".join(
