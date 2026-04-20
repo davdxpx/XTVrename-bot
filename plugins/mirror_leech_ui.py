@@ -20,6 +20,9 @@ Callback-data grammar (see Phase D plan for the full table):
     ml_cfg_paste_<provider>        → prompt user to paste token
     ml_cfg_guide_<provider>        → open guide page 1 for provider
     ml_cfg_guide_<provider>_<page> → jump to page N (1-indexed)
+    ml_cfg_tmpl_<provider>         → folder-template editor for provider
+    ml_cfg_tmpledit_<provider>     → enter paste flow for new template
+    ml_cfg_tmplclr_<provider>      → clear folder template for provider
     ml_opt_single_<file_id>        → MyFiles single-file entry
     ml_opt_multi_<state_key>       → MyFiles multi-select entry
     ml_prov_<uploader>_<ctx_id>    → pick uploader for picker context
@@ -666,6 +669,13 @@ async def ml_cfg_close(client: Client, callback_query: CallbackQuery) -> None:
 # ---------------------------------------------------------------------------
 
 # Short hints shown under the provider name so the user knows what to paste.
+# Providers that honor the `folder_template` field on upload.
+# Only uploaders with a plain-string destination folder concept are in here —
+# gdrive uses folder ids, telegram uses chat ids, etc., and those don't map
+# to a path template.
+_FOLDER_TEMPLATE_PROVIDERS: set[str] = {"webdav", "seafile", "s3", "b2"}
+
+
 _PROVIDER_HINTS: dict[str, str] = {
     "gdrive": (
         "Needs an OAuth refresh token + client_id + client_secret. Generate "
@@ -788,6 +798,15 @@ async def _render_provider_screen(
                 )
             ]
         )
+        if provider in _FOLDER_TEMPLATE_PROVIDERS and configured:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "📁 Folder template",
+                        callback_data=f"ml_cfg_tmpl_{provider}",
+                    )
+                ]
+            )
         if cls.needs_credentials or provider in {"gofile", "pixeldrain", "telegram"}:
             paste_label = "📝 Paste / update credentials"
             rows.append(
@@ -1152,6 +1171,11 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
         await _ml_preset_label_text(client, message, state)
         return
 
+    # Folder-template editor: single free-text step too.
+    if state.get("provider") == "__tmpl__":
+        await _ml_tmpl_text(client, message, state)
+        return
+
     provider = state["provider"]
     fmt = _PROVIDER_PASTE_FORMAT.get(provider, {})
     mode = fmt.get("mode", "")
@@ -1375,6 +1399,44 @@ async def ml_preset_new(client: Client, callback_query: CallbackQuery) -> None:
                 [[InlineKeyboardButton("❌ Cancel", callback_data="ml_preset_cancel")]]
             ),
         )
+
+
+async def _ml_tmpl_text(client: Client, message: Message, state: dict) -> None:
+    from tools.mirror_leech import Accounts
+    from tools.mirror_leech.TemplateEngine import render_template
+
+    user_id = message.from_user.id
+    provider = state.get("tmp", {}).get("target") or ""
+    if provider not in _FOLDER_TEMPLATE_PROVIDERS:
+        _paste_state.pop(user_id, None)
+        await message.reply_text("⚠️ Editor target lost — try again.")
+        return
+
+    raw = (message.text or "").strip()
+    if raw.lower() == "clear" or not raw:
+        await Accounts.set_plain(user_id, provider, "folder_template", "")
+        _paste_state.pop(user_id, None)
+        sent = await message.reply_text("🗑 Folder template cleared.")
+        await _render_template_editor(client, sent.chat.id, sent.id, user_id, provider)
+        return
+
+    # Validate by rendering once with dummy vars; surfaces unclosed braces
+    # and format-spec errors before we persist a broken template.
+    try:
+        render_template(
+            raw,
+            {"year": 2026, "month": 1, "day": 1, "hour": 0, "minute": 0,
+             "source_kind": "yt", "user_id": user_id, "task_id": "test",
+             "original_name": "x", "ext": "mp4"},
+        )
+    except ValueError as exc:
+        await message.reply_text(f"⚠️ Invalid template: {exc}")
+        return
+
+    await Accounts.set_plain(user_id, provider, "folder_template", raw)
+    _paste_state.pop(user_id, None)
+    sent = await message.reply_text(f"✅ Folder template saved for `{provider}`.")
+    await _render_template_editor(client, sent.chat.id, sent.id, user_id, provider)
 
 
 async def _ml_preset_label_text(
@@ -1665,6 +1727,181 @@ async def ml_preset_delete_confirm(
         callback_query.message.chat.id,
         callback_query.message.id,
         callback_query.from_user.id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Folder template editor
+# ---------------------------------------------------------------------------
+
+_TEMPLATE_VARIABLES_HELP = (
+    "> **Variables**\n"
+    "> `{year}` `{month}` `{day}` — today's date\n"
+    "> `{month:02d}` — format specs work too\n"
+    "> `{source_kind}` — http / yt / telegram / rss\n"
+    "> `{user_id}` `{task_id}` — per-task\n"
+    "> `{original_name}` `{ext}` — filename parts\n"
+    "\n"
+    "> **Example**\n"
+    "> `/MirrorLeech/{year}/{month:02d}/{source_kind}/`"
+)
+
+
+async def _render_template_editor(
+    client: Client,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+    provider: str,
+) -> None:
+    from tools.mirror_leech import Accounts
+    from tools.mirror_leech.TemplateEngine import render_template
+    from tools.mirror_leech.uploaders import uploader_by_id
+
+    cls = uploader_by_id(provider)
+    if cls is None or provider not in _FOLDER_TEMPLATE_PROVIDERS:
+        with contextlib.suppress(Exception):
+            await client.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=frame(
+                    "📁 **Folder template — unsupported**",
+                    "> This provider doesn't use path-style destinations.",
+                ),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("← Back", callback_data=f"ml_cfg_up_{provider}")]]
+                ),
+            )
+        return
+
+    account = await Accounts.get_account(user_id, provider)
+    current = (account.get("folder_template") or "").strip()
+    if current:
+        # Preview what it renders to right now, so the user catches typos
+        # before the next upload goes to the wrong folder.
+        try:
+            from pathlib import Path
+
+            preview_vars = {
+                "user_id": user_id,
+                "task_id": "abcd1234",
+                "source_kind": "yt",
+                "original_name": "example",
+                "ext": "mp4",
+            }
+            from tools.mirror_leech.TemplateEngine import now_vars
+
+            preview_vars.update(now_vars())
+            preview = render_template(current, preview_vars)
+        except Exception as exc:
+            preview = f"⚠️ {exc}"
+        body_lines = [
+            f"> **Current:** `{current}`",
+            f"> **Preview:** `{preview or '(empty)'}`",
+            "",
+            _TEMPLATE_VARIABLES_HELP,
+        ]
+    else:
+        body_lines = [
+            "> No folder template set — uploads use the static folder\n"
+            "> you configured when linking this provider.",
+            "",
+            _TEMPLATE_VARIABLES_HELP,
+        ]
+
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                "📝 Edit template", callback_data=f"ml_cfg_tmpledit_{provider}"
+            )
+        ]
+    ]
+    if current:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "🗑 Clear template",
+                    callback_data=f"ml_cfg_tmplclr_{provider}",
+                )
+            ]
+        )
+    rows.append(
+        [InlineKeyboardButton("← Back", callback_data=f"ml_cfg_up_{provider}")]
+    )
+
+    text = frame(f"📁 **{cls.display_name} — folder template**", "\n".join(body_lines))
+    with contextlib.suppress(Exception):
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_tmpl_([a-z0-9_]+)$"))
+async def ml_cfg_tmpl(client: Client, callback_query: CallbackQuery) -> None:
+    provider = callback_query.data.removeprefix("ml_cfg_tmpl_")
+    await _render_template_editor(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+        provider,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_tmpledit_([a-z0-9_]+)$"))
+async def ml_cfg_tmpl_edit(client: Client, callback_query: CallbackQuery) -> None:
+    provider = callback_query.matches[0].group(1)
+    if provider not in _FOLDER_TEMPLATE_PROVIDERS:
+        await callback_query.answer("Not supported for this provider.", show_alert=True)
+        return
+
+    _paste_state[callback_query.from_user.id] = {
+        "provider": "__tmpl__",
+        "step": "await_template",
+        "tmp": {"target": provider},
+    }
+    await callback_query.answer()
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            "📁 **Set folder template**\n\n"
+            "Send the new template (plain text). Example:\n"
+            "`/MirrorLeech/{year}/{month:02d}/{source_kind}/`\n\n"
+            "Leading/trailing slashes are normalised automatically.\n"
+            "Reply with `clear` to remove the current template.\n\n"
+            + _TEMPLATE_VARIABLES_HELP,
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "❌ Cancel", callback_data=f"ml_cfg_tmpl_{provider}"
+                        )
+                    ]
+                ]
+            ),
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_tmplclr_([a-z0-9_]+)$"))
+async def ml_cfg_tmpl_clear(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    from tools.mirror_leech import Accounts
+
+    provider = callback_query.data.removeprefix("ml_cfg_tmplclr_")
+    await Accounts.set_plain(
+        callback_query.from_user.id, provider, "folder_template", ""
+    )
+    await callback_query.answer("Template cleared.")
+    await _render_template_editor(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        callback_query.from_user.id,
+        provider,
     )
 
 
