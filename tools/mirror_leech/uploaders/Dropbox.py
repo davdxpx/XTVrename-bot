@@ -16,7 +16,7 @@ from pathlib import Path
 
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
-from tools.mirror_leech.uploaders import Uploader, register_uploader
+from tools.mirror_leech.uploaders import QuotaInfo, Uploader, register_uploader
 from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.dropbox")
@@ -130,3 +130,31 @@ class DropboxUploader(Uploader):
             return UploadResult(self.id, ok=False, message=f"Dropbox upload failed: {exc}")
 
         return UploadResult(self.id, ok=True, url=url)
+
+    async def get_quota(self, user_id: int) -> QuotaInfo | None:
+        rt = await Accounts.get_secret(user_id, self.id, "refresh_token")
+        ak = await Accounts.get_secret(user_id, self.id, "app_key")
+        sec = await Accounts.get_secret(user_id, self.id, "app_secret")
+        if not (rt and ak and sec):
+            return None
+
+        def _probe():
+            usage = _client(rt, ak, sec).users_get_space_usage()
+            used = int(getattr(usage, "used", 0) or 0)
+            allocation = getattr(usage, "allocation", None)
+            total = None
+            if allocation is not None:
+                # individual vs team allocation — both expose .allocated
+                total = int(
+                    getattr(allocation.get_individual(), "allocated", 0)
+                    if allocation.is_individual()
+                    else getattr(allocation.get_team(), "allocated", 0)
+                ) or None
+            return used, total
+
+        try:
+            used, total = await asyncio.to_thread(_probe)
+        except Exception:
+            return None
+        free = (total - used) if (total is not None) else None
+        return QuotaInfo(used_bytes=used, total_bytes=total, free_bytes=free)

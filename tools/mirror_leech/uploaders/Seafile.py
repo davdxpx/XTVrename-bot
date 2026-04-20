@@ -13,7 +13,7 @@ from pathlib import Path
 
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
-from tools.mirror_leech.uploaders import Uploader, register_uploader
+from tools.mirror_leech.uploaders import QuotaInfo, Uploader, register_uploader
 from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.seafile")
@@ -138,3 +138,29 @@ class SeafileUploader(Uploader):
             )
             return UploadResult(self.id, ok=True, url=web_url)
         return UploadResult(self.id, ok=True, url=c["server_url"])
+
+    async def get_quota(self, user_id: int) -> QuotaInfo | None:
+        import aiohttp
+
+        c = await self._creds(user_id)
+        if not (c["server_url"] and c["api_token"]):
+            return None
+        url = f"{c['server_url']}/api2/account/info/"
+        try:
+            async with aiohttp.ClientSession() as http, http.get(
+                url,
+                headers=_headers(c["api_token"]),
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+        except Exception:
+            return None
+        used = int(data.get("usage") or 0)
+        total_raw = data.get("total")
+        # Seafile returns -2 for "unlimited" in some configurations; treat
+        # anything non-positive as unlimited so the UI hides the bar.
+        total = int(total_raw) if total_raw and int(total_raw) > 0 else None
+        free = (total - used) if total is not None else None
+        return QuotaInfo(used_bytes=used, total_bytes=total, free_bytes=free)

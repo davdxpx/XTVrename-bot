@@ -17,7 +17,7 @@ from urllib.parse import quote
 
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
-from tools.mirror_leech.uploaders import Uploader, register_uploader
+from tools.mirror_leech.uploaders import QuotaInfo, Uploader, register_uploader
 from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.webdav")
@@ -120,3 +120,54 @@ class WebDAVUploader(Uploader):
             return UploadResult(self.id, ok=False, message=f"WebDAV upload failed: {exc}")
 
         return UploadResult(self.id, ok=True, url=target)
+
+    async def get_quota(self, user_id: int) -> QuotaInfo | None:
+        """Probe DAV:quota-used-bytes + DAV:quota-available-bytes via
+        PROPFIND. Nextcloud / ownCloud / Synology all support this;
+        generic mod_dav without the quota module returns empty props
+        and we surface None."""
+        import re as _re
+
+        import aiohttp
+
+        c = await self._creds(user_id)
+        if not (c["url"] and c["username"] and c["password"]):
+            return None
+        target = _join_url(c["url"], c["folder"]) if c["folder"] else c["url"] + "/"
+        body = (
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<d:propfind xmlns:d="DAV:">'
+            "<d:prop>"
+            "<d:quota-used-bytes/>"
+            "<d:quota-available-bytes/>"
+            "</d:prop></d:propfind>"
+        )
+        try:
+            async with aiohttp.ClientSession() as http, http.request(
+                "PROPFIND",
+                target,
+                auth=_auth(c["username"], c["password"]),
+                headers={"Depth": "0", "Content-Type": "application/xml"},
+                data=body,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status not in (200, 207):
+                    return None
+                xml = await resp.text()
+        except Exception:
+            return None
+        used_m = _re.search(
+            r"<[^>]*quota-used-bytes[^>]*>(-?\d+)", xml, _re.IGNORECASE
+        )
+        avail_m = _re.search(
+            r"<[^>]*quota-available-bytes[^>]*>(-?\d+)", xml, _re.IGNORECASE
+        )
+        used = int(used_m.group(1)) if used_m else None
+        available = int(avail_m.group(1)) if avail_m else None
+        # Per RFC 4331, negative values mean "unknown" / "unlimited".
+        if available is not None and available < 0:
+            available = None
+        total = None
+        if used is not None and available is not None:
+            total = used + available
+        return QuotaInfo(used_bytes=used, total_bytes=total, free_bytes=available)

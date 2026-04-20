@@ -17,7 +17,7 @@ from pathlib import Path
 
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
-from tools.mirror_leech.uploaders import Uploader, register_uploader
+from tools.mirror_leech.uploaders import QuotaInfo, Uploader, register_uploader
 from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.box")
@@ -150,3 +150,30 @@ class BoxUploader(Uploader):
             return UploadResult(self.id, ok=False, message=f"Box upload failed: {exc}")
         await _persist_rotated(ctx.user_id, sink)
         return UploadResult(self.id, ok=True, url=url)
+
+    async def get_quota(self, user_id: int) -> QuotaInfo | None:
+        rt = await Accounts.get_secret(user_id, self.id, "refresh_token")
+        cid = await Accounts.get_secret(user_id, self.id, "client_id")
+        cs = await Accounts.get_secret(user_id, self.id, "client_secret")
+        if not (rt and cid and cs):
+            return None
+
+        sink: dict = {}
+
+        def _probe():
+            client, _ = _build_client(rt, cid, cs, sink)
+            user = client.user().get()
+            used = int(getattr(user, "space_used", 0) or 0)
+            # Box reports -1 to mean "unlimited"; convert that to None
+            # so the UI draws a "linked" badge instead of a 0-width bar.
+            total_raw = getattr(user, "space_amount", None)
+            total = int(total_raw) if total_raw and int(total_raw) > 0 else None
+            return used, total
+
+        try:
+            used, total = await asyncio.to_thread(_probe)
+        except Exception:
+            return None
+        await _persist_rotated(user_id, sink)
+        free = (total - used) if total is not None else None
+        return QuotaInfo(used_bytes=used, total_bytes=total, free_bytes=free)
