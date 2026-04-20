@@ -56,6 +56,7 @@ from plugins.help.builder import (
     is_callback_tool_available,
     is_tool_available,
 )
+from utils.auth.auth import is_admin
 from utils.telegram.log import get_logger
 from utils.telegram.logger import debug
 
@@ -362,6 +363,20 @@ async def handle_help_callbacks(client, callback_query):
             return
 
         if data == "help_tool_ml":
+            ml_rows = [
+                [InlineKeyboardButton("🌐 Overview", callback_data="help_ml_overview")],
+                [InlineKeyboardButton("📥 Sources", callback_data="help_ml_sources"),
+                 InlineKeyboardButton("☁️ Destinations", callback_data="help_ml_dests")],
+                [InlineKeyboardButton("🔗 Linking a provider", callback_data="help_ml_link")],
+                [InlineKeyboardButton("🧩 MyFiles integration", callback_data="help_ml_myfiles")],
+            ]
+            if is_admin(callback_query.from_user.id):
+                ml_rows.append(
+                    [InlineKeyboardButton("🎲 SECRETS_KEY generator", callback_data="help_ml_secrets")]
+                )
+            ml_rows.append(
+                [InlineKeyboardButton("← Back to Tools", callback_data="help_tools")]
+            )
             with contextlib.suppress(MessageNotModified):
                 await callback_query.message.edit_text(
                     "**☁️ Mirror-Leech**\n\n"
@@ -372,17 +387,7 @@ async def handle_help_callbacks(client, callback_query):
                     "configured destinations in parallel. Fused with MyFiles "
                     "single + multi-select.\n\n"
                     "Pick a topic below:",
-                    reply_markup=InlineKeyboardMarkup(
-                        [
-                            [InlineKeyboardButton("🌐 Overview", callback_data="help_ml_overview")],
-                            [InlineKeyboardButton("📥 Sources", callback_data="help_ml_sources"),
-                             InlineKeyboardButton("☁️ Destinations", callback_data="help_ml_dests")],
-                            [InlineKeyboardButton("🔗 Linking a provider", callback_data="help_ml_link")],
-                            [InlineKeyboardButton("🧩 MyFiles integration", callback_data="help_ml_myfiles")],
-                            [InlineKeyboardButton("🎲 SECRETS_KEY generator", callback_data="help_ml_secrets")],
-                            [InlineKeyboardButton("← Back to Tools", callback_data="help_tools")],
-                        ]
-                    ),
+                    reply_markup=InlineKeyboardMarkup(ml_rows),
                     disable_web_page_preview=True,
                 )
             return
@@ -1747,6 +1752,11 @@ async def handle_help_callbacks(client, callback_query):
                 "button, and `/mlqueue` lists them all at once."
             )
         elif topic == "secrets":
+            if not is_admin(callback_query.from_user.id):
+                await callback_query.answer(
+                    "This guide is admin-only.", show_alert=True
+                )
+                return
             text = (
                 "**🎲 SECRETS_KEY one-click generator**\n\n"
                 "> Needed to store provider credentials.\n"
