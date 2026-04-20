@@ -39,8 +39,21 @@ def _cancel_kb(callback: str = "pro_setup_menu") -> InlineKeyboardMarkup:
     )
 
 
-def _back_kb(callback: str = "pro_setup_menu", label: str = "← Back") -> InlineKeyboardMarkup:
-    """Single-button back keyboard with unified label."""
+def _back_kb(
+    callback: str = "pro_setup_menu",
+    label: str | None = None,
+) -> InlineKeyboardMarkup:
+    """Single-button back keyboard with context-aware label.
+
+    When no label is given, one is picked from the callback target so
+    users always know where they're going back to. Custom labels are
+    respected when caller-supplied.
+    """
+    if label is None:
+        label = {
+            "pro_setup_menu": "← Back to 𝕏TV Pro",
+            "admin_main": "← Back to Admin",
+        }.get(callback, "← Back")
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton(label, callback_data=callback)]]
     )
@@ -204,7 +217,7 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
             InlineKeyboardButton("🔄 Refresh", callback_data="pro_setup_menu"),
             InlineKeyboardButton("🗑 Delete Session", callback_data="pro_setup_delete_ask"),
         ],
-        [InlineKeyboardButton("← Back", callback_data="admin_main")],
+        [InlineKeyboardButton("← Back to Admin", callback_data="admin_main")],
     ]
     return text, buttons
 
@@ -230,7 +243,7 @@ def _render_inactive() -> tuple[str, list]:
             InlineKeyboardButton("🆕 Start Setup", callback_data="pro_setup_start"),
             InlineKeyboardButton("📖 What is 𝕏TV Pro?", callback_data="pro_setup_what"),
         ],
-        [InlineKeyboardButton("← Back", callback_data="admin_main")],
+        [InlineKeyboardButton("← Back to Admin", callback_data="admin_main")],
     ]
     return text, buttons
 
