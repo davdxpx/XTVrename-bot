@@ -43,6 +43,32 @@ class DestinationGuide:
 
 
 # ---------------------------------------------------------------------------
+# Troubleshooting-page helper
+# ---------------------------------------------------------------------------
+def _trouble_page(provider: str, items: list[tuple[str, str]]) -> GuidePage:
+    """Render a uniformly-styled troubleshooting page.
+
+    Each entry is `(error_label, fix)` — label becomes a bold header,
+    fix is a short paragraph. Entries are separated by a blank line so
+    the Telegram renderer keeps them visually distinct.
+    """
+    parts: list[str] = [
+        "> Common errors and how to recover from them. If your issue",
+        "> isn't here, run **🔌 Test connection** first — the message it",
+        "> returns usually matches one of the entries below.",
+        "",
+    ]
+    for err, fix in items:
+        parts.append(f"**{err}**")
+        parts.append(fix)
+        parts.append("")
+    return GuidePage(
+        title=f"Troubleshooting — {provider}",
+        body="\n".join(parts).rstrip(),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Google Drive — 3 pages (OAuth project, refresh token, paste)
 # ---------------------------------------------------------------------------
 _GDRIVE = DestinationGuide(
@@ -98,6 +124,49 @@ _GDRIVE = DestinationGuide(
                 "One value per line, in that exact order.\n\n"
                 "Verify the link afterwards with **🔌 Test connection**."
             ),
+        ),
+        _trouble_page(
+            "Google Drive",
+            [
+                (
+                    "`invalid_grant` / Token expired",
+                    "Google invalidated the refresh token (happens after 6 "
+                    "months of inactivity, password change, or revoked "
+                    "access). Re-run Step 2 in OAuth Playground to mint a "
+                    "fresh `refresh_token`, then paste the three values "
+                    "again.",
+                ),
+                (
+                    "`storageQuotaExceeded`",
+                    "Your Drive is full. Either free up space in the "
+                    "Google account, empty the Drive Trash (files there "
+                    "still count against quota), or switch to a different "
+                    "Drive account. Workspace accounts may need an admin "
+                    "to lift a shared-drive quota.",
+                ),
+                (
+                    "`403 rateLimitExceeded` / `userRateLimitExceeded`",
+                    "Drive API quota hit on the OAuth project. Open the "
+                    "Cloud Console → APIs & Services → Quotas, search for "
+                    "**Drive**, and request a higher per-user quota. For "
+                    "bursty uploads, the bot auto-retries with backoff — "
+                    "you usually don't need to do anything.",
+                ),
+                (
+                    "Scope mismatch / `insufficientPermissions`",
+                    "The OAuth flow was completed with a narrower scope "
+                    "than `drive`. Re-run Step 2 and make sure the "
+                    "`https://www.googleapis.com/auth/drive` checkbox is "
+                    "ticked before authorising.",
+                ),
+                (
+                    "`File not found` on a shared drive folder",
+                    "Shared-drive folders need the `supportsAllDrives` "
+                    "flag. The bot already sends it for uploads, but the "
+                    "OAuth account must be a **member** of the shared "
+                    "drive with at least Contributor rights.",
+                ),
+            ],
         ),
     ],
 )
@@ -167,6 +236,47 @@ _RCLONE = DestinationGuide(
                 "Verify with **🔌 Test connection**."
             ),
         ),
+        _trouble_page(
+            "Rclone",
+            [
+                (
+                    "`rclone: not found` on the host",
+                    "The bot's host doesn't have the rclone binary "
+                    "installed — that's an admin-level issue, not a user "
+                    "one. Ask the admin to install it with the one-liner "
+                    "from Step 1, or pick a different destination.",
+                ),
+                (
+                    "`Failed to load config` / parse error",
+                    "The pasted `rclone.conf` is malformed. Re-run "
+                    "`rclone config show` locally and copy the output "
+                    "verbatim — don't hand-edit it. Common pitfalls: "
+                    "Windows CRLF line-endings and missing the `[name]` "
+                    "section header.",
+                ),
+                (
+                    "`remote <name> not found`",
+                    "The remote name in the second block doesn't match "
+                    "any `[section]` in the pasted config. Re-paste using "
+                    "the exact name you chose in `rclone config` (case-"
+                    "sensitive), the one shown in `rclone listremotes`.",
+                ),
+                (
+                    "`oauth2: token expired` / `AuthError`",
+                    "The backend's OAuth token is stale. Run `rclone "
+                    "config reconnect <name>:` locally, re-export with "
+                    "`rclone config show`, and paste the refreshed "
+                    "config into the bot.",
+                ),
+                (
+                    "Upload hangs / very slow",
+                    "Increase concurrency by adding `--transfers 4 "
+                    "--checkers 8` on the backend side, or pick a closer "
+                    "endpoint region. For large files, rclone does "
+                    "chunked multipart automatically — no bot-side knob.",
+                ),
+            ],
+        ),
     ],
 )
 
@@ -201,6 +311,43 @@ _MEGA = DestinationGuide(
                 "consider creating a dedicated MEGA sub-account instead."
             ),
         ),
+        _trouble_page(
+            "MEGA.nz",
+            [
+                (
+                    "`EACCESS` / Login failed (wrong credentials)",
+                    "Triple-check the email and password, watching for "
+                    "trailing whitespace. If the account has 2FA enabled "
+                    "the plain password won't work — MEGA's SDK needs an "
+                    "**app-specific password**. Generate one under "
+                    "https://mega.nz → Settings → Security → Session "
+                    "Management.",
+                ),
+                (
+                    "`ETOOMANY` / Temporary IP ban",
+                    "MEGA bans an IP for up to an hour after repeated "
+                    "failed logins. Wait ~60 minutes, fix the credentials, "
+                    "then retry. The bot will not keep hammering — it "
+                    "aborts after the first EACCESS.",
+                ),
+                (
+                    "`EOVERQUOTA` / Storage full",
+                    "Your MEGA quota is exhausted. Free tier caps at 20 "
+                    "GB, paid tiers go higher. Either upgrade, move "
+                    "uploads to another destination, or clear the "
+                    "**Rubbish Bin** — deleted files in the Bin still "
+                    "count against quota until emptied.",
+                ),
+                (
+                    "Upload stalls at 99%",
+                    "MEGA finalises large files on the server side and "
+                    "occasionally takes 30–60 s after the last chunk. If "
+                    "the task status keeps showing 99% for more than 2 "
+                    "minutes, cancel and retry — usually a transient "
+                    "MEGA-side issue.",
+                ),
+            ],
+        ),
     ],
 )
 
@@ -233,6 +380,40 @@ _GOFILE = DestinationGuide(
                 "**5.** Verify with **🔌 Test connection**.\n"
             ),
         ),
+        _trouble_page(
+            "GoFile",
+            [
+                (
+                    "`server not found` / `upload server error`",
+                    "GoFile rotates its upload servers frequently. The "
+                    "bot auto-retries against `store1` as a fallback when "
+                    "the primary server fails. If every server fails at "
+                    "once, it's a GoFile-side outage — check "
+                    "https://status.gofile.io before retrying.",
+                ),
+                (
+                    "`invalid token` / unauthorized",
+                    "The API token was revoked or regenerated. Sign into "
+                    "gofile.io → **My Profile** and copy the **current** "
+                    "token — tokens shown on the profile page are always "
+                    "the active ones. Re-paste into the bot.",
+                ),
+                (
+                    "Upload succeeds but file not in my dashboard",
+                    "You uploaded anonymously. GoFile only attaches "
+                    "files to your dashboard when a valid account token "
+                    "is linked — re-run Step 3 with the token, the next "
+                    "upload will show up.",
+                ),
+                (
+                    "File disappears a few days later",
+                    "Anonymous files on GoFile auto-expire. Attach a "
+                    "token to keep uploads tied to your account; that "
+                    "raises the retention window to match your GoFile "
+                    "plan.",
+                ),
+            ],
+        ),
     ],
 )
 
@@ -263,6 +444,41 @@ _PIXELDRAIN = DestinationGuide(
                 "```\n"
                 "**5.** Verify with **🔌 Test connection**.\n"
             ),
+        ),
+        _trouble_page(
+            "Pixeldrain",
+            [
+                (
+                    "`rate-limit exceeded`",
+                    "Pixeldrain applies per-IP rate limits to anonymous "
+                    "uploads. Linking an API key raises your ceiling "
+                    "significantly — if you upload often, the key is "
+                    "worth the one-minute setup.",
+                ),
+                (
+                    "`file too large` / rejected",
+                    "Each Pixeldrain tier has its own per-file cap. "
+                    "Check your tier at "
+                    "https://pixeldrain.com/user/subscriptions — the "
+                    "free plan is capped at a few GB per file. Split "
+                    "large uploads or pick a different destination.",
+                ),
+                (
+                    "`unauthorized` when pasting a new API key",
+                    "Pixeldrain API keys are 32-char hex strings. Make "
+                    "sure you copied the full value (without the "
+                    "surrounding whitespace the UI sometimes adds). "
+                    "Generate a new key if in doubt.",
+                ),
+                (
+                    "Uploaded but link returns 404",
+                    "Pixeldrain occasionally needs a few seconds to "
+                    "propagate new file entries through their CDN. If "
+                    "the 404 persists after 60 s, re-run the upload — "
+                    "the previous attempt may have been aborted server-"
+                    "side without the bot noticing.",
+                ),
+            ],
         ),
     ],
 )
@@ -302,6 +518,50 @@ _TELEGRAM = DestinationGuide(
                 "```\n"
                 "**5.** Verify with **🔌 Test connection**.\n"
             ),
+        ),
+        _trouble_page(
+            "Telegram",
+            [
+                (
+                    "`CHAT_WRITE_FORBIDDEN`",
+                    "The bot isn't an admin in the target channel, or "
+                    "the `Post Messages` permission was revoked. Go to "
+                    "the channel → **Administrators** → promote the bot "
+                    "(or toggle Post Messages back on).",
+                ),
+                (
+                    "`PEER_ID_INVALID` / `CHAT_ID_INVALID`",
+                    "The `chat_id` doesn't point to a chat the bot can "
+                    "see. Common causes: typo, forgotten leading `-100`, "
+                    "or the bot was removed from the chat. Re-forward a "
+                    "message via @RawDataBot and copy `chat.id` "
+                    "verbatim.",
+                ),
+                (
+                    "`FILE_TOO_LARGE` on DM delivery",
+                    "Standard Telegram bot API caps outgoing files at 2 "
+                    "GB (4 GB with Premium via the Userbot tunnel). Set "
+                    "up **𝕏TV Pro™** in `/settings → Admin` to unlock "
+                    "the 4 GB path, or pick a non-Telegram destination "
+                    "for >2 GB files.",
+                ),
+                (
+                    "`SLOWMODE_WAIT_X` on a channel",
+                    "The target channel has slow-mode enabled. The bot "
+                    "waits out the cooldown automatically, but the "
+                    "upload will appear delayed. Either disable slow-"
+                    "mode for the bot (channel admins can exempt bots) "
+                    "or accept the spacing.",
+                ),
+                (
+                    "Thumbnail is wrong / missing",
+                    "Telegram strips metadata below a size threshold and "
+                    "may pick an arbitrary frame for videos. The bot "
+                    "relies on Telegram's auto-thumbnail — there's no "
+                    "knob here. For critical thumbnails, upload a still "
+                    "image separately as a caption.",
+                ),
+            ],
         ),
     ],
 )
