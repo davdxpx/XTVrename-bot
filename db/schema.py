@@ -22,6 +22,10 @@ MYFILES_AUDIT_COLLECTION = "MediaStudio-myfiles-audit"
 MYFILES_ACTIVITY_COLLECTION = "MediaStudio-myfiles-activity"
 MYFILES_QUOTAS_COLLECTION = "MediaStudio-myfiles-quotas"
 MYFILES_SHARES_COLLECTION = "MediaStudio-myfiles-shares"
+# Mirror-Leech — persistent task queue (scheduled + retry bookkeeping).
+# Survives restarts so a bot crash mid-transfer doesn't drop the user's
+# scheduled uploads.
+ML_QUEUE_COLLECTION = "MediaStudio-ml-queue"
 
 # Legacy names in MainDB prior to the mediastudio_layout migration.
 LEGACY_COLLECTION_NAMES = {
