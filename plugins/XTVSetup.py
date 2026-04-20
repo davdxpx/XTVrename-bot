@@ -7,8 +7,10 @@ import random
 from pyrogram import Client, ContinuePropagation, filters
 from pyrogram.errors import (
     ApiIdInvalid,
+    FloodWait,
     MessageNotModified,
     PasswordHashInvalid,
+    PhoneCodeExpired,
     PhoneCodeInvalid,
     PhoneNumberInvalid,
     SessionPasswordNeeded,
@@ -39,8 +41,21 @@ def _cancel_kb(callback: str = "pro_setup_menu") -> InlineKeyboardMarkup:
     )
 
 
-def _back_kb(callback: str = "pro_setup_menu", label: str = "← Back") -> InlineKeyboardMarkup:
-    """Single-button back keyboard with unified label."""
+def _back_kb(
+    callback: str = "pro_setup_menu",
+    label: str | None = None,
+) -> InlineKeyboardMarkup:
+    """Single-button back keyboard with context-aware label.
+
+    When no label is given, one is picked from the callback target so
+    users always know where they're going back to. Custom labels are
+    respected when caller-supplied.
+    """
+    if label is None:
+        label = {
+            "pro_setup_menu": "← Back to 𝕏TV Pro",
+            "admin_main": "← Back to Admin",
+        }.get(callback, "← Back")
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton(label, callback_data=callback)]]
     )
@@ -53,6 +68,24 @@ async def _error_screen(msg, text: str, user_id: int | None = None) -> None:
         await msg.edit_text(text, reply_markup=_back_kb())
     if user_id is not None:
         pro_setup_sessions.pop(user_id, None)
+
+
+def _recovery_hint(e: Exception) -> str:
+    """Best-effort hint appended to generic-exception error screens.
+
+    Looks at the exception message for common failure categories so the
+    admin sees an actionable recovery step instead of a bare traceback
+    string. Hint is a `> ` callout (legitimate blockquote use — single
+    highlighted sentence).
+    """
+    m = str(e).lower()
+    if any(tok in m for tok in ("network", "timeout", "connection", "unreachable")):
+        return "\n\n> 🌐 Check your server's internet connection and retry."
+    if any(tok in m for tok in ("forbidden", "blocked", "user_deactivated", "banned")):
+        return "\n\n> 🚫 The account may be restricted or deactivated by Telegram."
+    if any(tok in m for tok in ("database", "mongo", "dbref", "duplicate key")):
+        return "\n\n> 💾 Database error — contact the admin."
+    return ""
 
 
 def _format_bytes(n) -> str:
@@ -126,51 +159,54 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
 
     last_check = session.get("last_auth_check_at")
     last_status = session.get("last_auth_status")
+    last_err = session.get("last_auth_error")
     if last_check is None:
         health_line = "Health: ⚪ `not yet checked` — tap 🩺 Health Check"
     elif last_status == "ok":
         health_line = f"Health: 🟢 `connected` — last check {_format_dt(last_check)}"
     elif last_status == "error":
         health_line = f"Health: 🔴 `error` — last check {_format_dt(last_check)}"
+        if last_err:
+            health_line += f"\n  ↳ `{str(last_err)[:70]}`"
     else:
         health_line = f"Health: 🟡 `{last_status or 'unknown'}` — last check {_format_dt(last_check)}"
 
     runtime = "🟢 `running`" if user_bot is not None else "🔴 `not started`"
 
     account_lines = [
-        "> **Userbot Account**",
-        f"> 👤 Name: `{name}`",
-        f"> 🆔 ID: `{uid}`",
-        f"> 📞 Phone: {phone}",
-        f"> {prem_line}",
-        f"> {auth_line}",
+        "**👤 Userbot Account**",
+        f"• Name: `{name}`",
+        f"• ID: `{uid}`",
+        f"• Phone: {phone}",
+        f"• {prem_line}",
+        f"• {auth_line}",
     ]
     runtime_lines = [
-        "> **Runtime**",
-        f"> ⚙️ Userbot process: {runtime}",
-        f"> {health_line}",
+        "**⚙️ Runtime**",
+        f"• Userbot process: {runtime}",
+        f"• {health_line}",
     ]
-    tunnel_lines = ["> **Tunnel Channel**"]
+    tunnel_lines = ["**🆔 Tunnel Channel**"]
     if session.get("tunnel_id"):
-        tunnel_lines.append(f"> 🆔 ID: `{session['tunnel_id']}`")
+        tunnel_lines.append(f"• ID: `{session['tunnel_id']}`")
         link = session.get("tunnel_link")
         if link:
-            tunnel_lines.append(f"> 🔗 Link: `{link}`")
+            tunnel_lines.append(f"• Link: `{link}`")
         else:
-            tunnel_lines.append("> 🔗 Link: _not set_")
+            tunnel_lines.append("• Link: _not set_")
     else:
-        tunnel_lines.append("> __No tunnel configured yet.__")
+        tunnel_lines.append("_No tunnel configured yet._")
 
     upload_count = int(session.get("upload_count_total") or 0)
     upload_bytes = int(session.get("upload_bytes_total") or 0)
     avg = (upload_bytes / upload_count) if upload_count else 0
     last_upload = _format_dt(session.get("last_upload_at"))
     stats_lines = [
-        "> **Upload Stats — Lifetime**",
-        f"> 📦 Files routed: `{upload_count}`",
-        f"> 📊 Volume: `{_format_bytes(upload_bytes)}`",
-        f"> ⚡ Avg per file: `{_format_bytes(avg)}`",
-        f"> 🕒 Last upload: {last_upload}",
+        "**📊 Upload Stats — Lifetime**",
+        f"• Files routed: `{upload_count}`",
+        f"• Volume: `{_format_bytes(upload_bytes)}`",
+        f"• Avg per file: `{_format_bytes(avg)}`",
+        f"• Last upload: {last_upload}",
     ]
 
     body = "\n".join(
@@ -204,7 +240,7 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
             InlineKeyboardButton("🔄 Refresh", callback_data="pro_setup_menu"),
             InlineKeyboardButton("🗑 Delete Session", callback_data="pro_setup_delete_ask"),
         ],
-        [InlineKeyboardButton("← Back", callback_data="admin_main")],
+        [InlineKeyboardButton("← Back to Admin", callback_data="admin_main")],
     ]
     return text, buttons
 
@@ -212,12 +248,14 @@ def _render_active(session: dict, user_bot) -> tuple[str, list]:
 def _render_inactive() -> tuple[str, list]:
     body = "\n".join(
         [
-            "> Pro extends Telegram's 4 GB cap by routing uploads through",
-            "> a userbot session. You'll need:",
-            ">",
-            "> **1.** A spare Telegram account",
-            "> **2.** Its `api_id` + `api_hash` from my.telegram.org",
-            "> **3.** Access to receive its login code",
+            "Pro extends Telegram's 4 GB cap by routing uploads through",
+            "a userbot session.",
+            "",
+            "**Requirements:**",
+            "",
+            "**1.** A spare Telegram account (Premium tier required)",
+            "**2.** Its `api_id` + `api_hash` from my.telegram.org",
+            "**3.** Access to receive its login code",
             "",
             "> 🔐 The session string is stored in your database — do not share it.",
         ]
@@ -228,7 +266,7 @@ def _render_inactive() -> tuple[str, list]:
             InlineKeyboardButton("🆕 Start Setup", callback_data="pro_setup_start"),
             InlineKeyboardButton("📖 What is 𝕏TV Pro?", callback_data="pro_setup_what"),
         ],
-        [InlineKeyboardButton("← Back", callback_data="admin_main")],
+        [InlineKeyboardButton("← Back to Admin", callback_data="admin_main")],
     ]
     return text, buttons
 
@@ -240,16 +278,19 @@ async def pro_setup_what(client, callback_query):
     await callback_query.answer()
     body = "\n".join(
         [
-            "> Standard Telegram bots can only upload files up to **2 GB**.",
-            "> Telegram **Premium** users can upload up to **4 GB**.",
+            "**The upload limits:**",
             "",
-            "> 𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
-            "> file >2 GB through it. The bot copies the file to a private",
-            "> tunnel channel where the userbot picks it up and re-sends it",
-            "> to the destination — all transparently.",
+            "• Standard Telegram bots — cap **2 GB** per file",
+            "• Telegram **Premium** accounts — cap **4 GB** per file",
             "",
-            "> Setup is one-time. After authorisation everything happens",
-            "> automatically.",
+            "**What 𝕏TV Pro™ does:**",
+            "",
+            "𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
+            "file larger than 2 GB through it. The bot copies the file to a",
+            "private tunnel channel where the userbot picks it up and re-sends",
+            "it to the destination — all transparently.",
+            "",
+            "> Setup is one-time. After authorisation everything happens automatically.",
         ]
     )
     text = frame("📖 **About 𝕏TV Pro™**", body)
@@ -260,27 +301,51 @@ async def pro_setup_what(client, callback_query):
 async def pro_health_check(client, callback_query):
     if callback_query.from_user.id != Config.CEO_ID:
         return await callback_query.answer("Not authorized.", show_alert=True)
-    await callback_query.answer("Pinging userbot…")
 
     user_bot = getattr(client, "user_bot", None)
+    now = datetime.datetime.utcnow()
+    error_msg: str | None = None
+
     if user_bot is None:
+        error_msg = "Userbot process is not running"
         await db.update_pro_session(
-            last_auth_check_at=datetime.datetime.utcnow(),
+            last_auth_check_at=now,
             last_auth_status="error",
+            last_auth_error=error_msg,
         )
     else:
         try:
             await asyncio.wait_for(user_bot.get_me(), timeout=5)
             await db.update_pro_session(
-                last_auth_check_at=datetime.datetime.utcnow(),
+                last_auth_check_at=now,
                 last_auth_status="ok",
+                last_auth_error=None,
+            )
+        except asyncio.TimeoutError:
+            error_msg = "Timed out after 5 seconds"
+            logger.warning("Pro health check timed out")
+            await db.update_pro_session(
+                last_auth_check_at=now,
+                last_auth_status="error",
+                last_auth_error=error_msg,
             )
         except Exception as e:
+            error_msg = str(e)[:120]
             logger.warning(f"Pro health check failed: {e}")
             await db.update_pro_session(
-                last_auth_check_at=datetime.datetime.utcnow(),
+                last_auth_check_at=now,
                 last_auth_status="error",
+                last_auth_error=error_msg,
             )
+
+    # Toast the outcome BEFORE re-rendering — `answer()` has to run
+    # within ~15 s of the callback arriving and fires exactly once.
+    if error_msg:
+        await callback_query.answer(
+            f"⚠ Health check failed: {error_msg[:80]}", show_alert=True,
+        )
+    else:
+        await callback_query.answer("🟢 Userbot is healthy.")
 
     session = await db.get_pro_session()
     if session:
@@ -362,11 +427,13 @@ async def pro_change_tunnel(client, callback_query):
         await callback_query.message.edit_text(
             frame(
                 "🆔 **𝕏TV Pro™ — Change Tunnel Channel**",
-                "> Send the new tunnel as `@username`, numeric ID (`-100…`),\n"
-                "> or send `none` to clear.\n"
-                ">\n"
-                "> __The userbot must already be a member with post "
-                "permissions.__",
+                "Send the new tunnel reference as one of:\n"
+                "\n"
+                "**1.** `@username` — public channel handle\n"
+                "**2.** Numeric ID — e.g. `-1001234567890`\n"
+                "**3.** `none` — clear the current tunnel\n"
+                "\n"
+                "> ⚠ The userbot must already be a member with post permissions.",
             ),
             reply_markup=_cancel_kb(),
         )
@@ -385,15 +452,16 @@ async def delete_setup_ask(client, callback_query):
         return
     text = frame(
         "🗑 **𝕏TV Pro™ — Delete Session?**",
-        "> This will:\n"
-        ">\n"
-        "> • Stop the running userbot\n"
-        "> • Erase the session string and credentials from the database\n"
-        "> • Reset all upload telemetry counters\n"
-        ">\n"
-        "> The 4 GB tunnel will stop working immediately. Re-Setup is\n"
-        "> the only way back.\n"
-        "> __This cannot be undone.__",
+        "**This action will:**\n"
+        "\n"
+        "• Stop the running userbot process\n"
+        "• Erase the session string and credentials from the database\n"
+        "• Reset all lifetime upload telemetry counters\n"
+        "• Immediately disable the 4 GB upload tunnel\n"
+        "\n"
+        "Re-Setup from scratch is the only way back.\n"
+        "\n"
+        "> ⚠ **This cannot be undone.**",
     )
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
@@ -431,8 +499,10 @@ async def delete_setup_confirm(client, callback_query):
     await callback_query.message.edit_text(
         frame(
             "✅ **𝕏TV Pro™ — Session Deleted**",
-            "> Disabled. The userbot session was securely deleted from\n"
-            "> the database.",
+            "𝕏TV Pro™ has been disabled. The userbot session was securely "
+            "deleted from the database.\n"
+            "\n"
+            "> 🔐 All cached credentials have been purged.",
         ),
         reply_markup=_back_kb(),
     )
@@ -497,7 +567,10 @@ async def pro_setup_handler(client, message):
         data["api_id"] = int(text)
         data["state"] = "awaiting_api_hash"
         await message.reply_text(
-            "✅ Got API ID.\n\n**Step 2 / 3** — send your **API Hash**:",
+            "✅ Got your API ID.\n"
+            "\n"
+            "**Step 2 / 3** — now send your **API Hash** "
+            "(32-char hex string from my.telegram.org):",
             reply_markup=_cancel_kb(),
         )
         from pyrogram import StopPropagation
@@ -507,8 +580,10 @@ async def pro_setup_handler(client, message):
         data["api_hash"] = text
         data["state"] = "awaiting_phone"
         await message.reply_text(
-            "✅ Got API Hash.\n\n**Step 3 / 3** — send your **Phone Number**\n"
-            "in international format (e.g. `+1234567890`):",
+            "✅ Got your API Hash.\n"
+            "\n"
+            "**Step 3 / 3** — now send your **Phone Number** in "
+            "international format, e.g. `+1234567890`:",
             reply_markup=_cancel_kb(),
         )
         from pyrogram import StopPropagation
@@ -535,19 +610,53 @@ async def pro_setup_handler(client, message):
 
             with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
-                    "✅ **Verification Code Sent!**\n\n"
-                    "Check your Telegram app for the login code.\n"
-                    "**IMPORTANT:** Enter the code with spaces to avoid "
-                    "Telegram's security triggers.\n"
-                    "Example: if your code is `12345`, enter `1 2 3 4 5`.",
+                    "✅ **Verification Code Sent!**\n"
+                    "\n"
+                    "Check your Telegram app — the login code has been "
+                    "delivered to the number you just entered.\n"
+                    "\n"
+                    "**⚠ Important:** enter the code with spaces between "
+                    "each digit to avoid Telegram's anti-bot triggers.\n"
+                    "\n"
+                    "For example, if your code is `12345`, send `1 2 3 4 5`.",
                     reply_markup=_cancel_kb(),
                 )
         except ApiIdInvalid:
-            await _error_screen(msg, "❌ **Invalid API ID / Hash.** Setup failed.", user_id)
+            await _error_screen(
+                msg,
+                "❌ **Invalid API ID / Hash.**\n"
+                "\n"
+                "Telegram rejected the credentials. Re-check the pair at "
+                "my.telegram.org and restart setup.",
+                user_id,
+            )
         except PhoneNumberInvalid:
-            await _error_screen(msg, "❌ **Invalid Phone Number.** Setup failed.", user_id)
+            await _error_screen(
+                msg,
+                "❌ **Invalid Phone Number.**\n"
+                "\n"
+                "Make sure you include the country code with a leading "
+                "`+`, e.g. `+1234567890`. Restart setup to retry.",
+                user_id,
+            )
+        except FloodWait as e:
+            await _error_screen(
+                msg,
+                "❌ **Rate-limited by Telegram.**\n"
+                "\n"
+                f"Wait **{e.value} seconds** before requesting another "
+                "code. This usually happens after multiple code requests "
+                "in quick succession.",
+                user_id,
+            )
         except Exception as e:
-            await _error_screen(msg, f"❌ **Error requesting code:** {e}", user_id)
+            logger.warning(f"Pro send_code failed: {e}")
+            await _error_screen(
+                msg,
+                f"❌ **Error requesting code:** `{str(e)[:100]}`"
+                + _recovery_hint(e),
+                user_id,
+            )
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -562,18 +671,47 @@ async def pro_setup_handler(client, message):
         except SessionPasswordNeeded:
             data["state"] = "awaiting_password"
             await msg.edit_text(
-                "🔐 **Two-Step Verification Enabled**\n\n"
-                "Please enter your 2FA password:",
+                "🔐 **Two-Step Verification Enabled**\n"
+                "\n"
+                "This account has a 2FA password set. Please enter it now "
+                "to complete sign-in:",
                 reply_markup=_cancel_kb(),
             )
         except PhoneCodeInvalid:
             with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
-                    "❌ **Invalid Code.** Try again or restart setup.",
+                    "❌ **Invalid Code.**\n"
+                    "\n"
+                    "Double-check the digits (with spaces between them) "
+                    "and send the code again, or tap ❌ Cancel to restart "
+                    "setup from scratch.",
                     reply_markup=_cancel_kb(),
                 )
+        except PhoneCodeExpired:
+            await _error_screen(
+                msg,
+                "❌ **Code Expired.**\n"
+                "\n"
+                "Telegram invalidated the code because too much time "
+                "passed since it was sent. Tap **← Back to 𝕏TV Pro** and "
+                "restart setup — you'll receive a fresh code.",
+                user_id,
+            )
+        except FloodWait as e:
+            await _error_screen(
+                msg,
+                "❌ **Rate-limited by Telegram.**\n"
+                "\n"
+                f"Wait **{e.value} seconds** before trying to sign in again.",
+                user_id,
+            )
         except Exception as e:
-            await _error_screen(msg, f"❌ **Sign In Error:** {e}", user_id)
+            logger.warning(f"Pro sign_in failed: {e}")
+            await _error_screen(
+                msg,
+                f"❌ **Sign-In Error:** `{str(e)[:100]}`" + _recovery_hint(e),
+                user_id,
+            )
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -585,11 +723,28 @@ async def pro_setup_handler(client, message):
             await finalize_setup(userbot, user_id, msg)
         except PasswordHashInvalid:
             await msg.edit_text(
-                "❌ **Invalid Password.** Try again.",
+                "❌ **Invalid Password.**\n"
+                "\n"
+                "The 2FA password didn't match. Try again, or tap ❌ Cancel "
+                "to restart setup.",
                 reply_markup=_cancel_kb(),
             )
+        except FloodWait as e:
+            await _error_screen(
+                msg,
+                "❌ **Rate-limited by Telegram.**\n"
+                "\n"
+                f"Wait **{e.value} seconds** before trying the password "
+                "again.",
+                user_id,
+            )
         except Exception as e:
-            await _error_screen(msg, f"❌ **Error:** {e}", user_id)
+            logger.warning(f"Pro check_password failed: {e}")
+            await _error_screen(
+                msg,
+                f"❌ **Password Error:** `{str(e)[:100]}`" + _recovery_hint(e),
+                user_id,
+            )
         from pyrogram import StopPropagation
         raise StopPropagation
 
@@ -600,9 +755,15 @@ async def finalize_setup(userbot, user_id, msg):
             await msg.edit_text(
                 frame(
                     "❌ **𝕏TV Pro™ — Premium Account Required**",
-                    "> Your account doesn't have Telegram Premium.\n"
-                    "> Buy it or complete the setup with an account that has\n"
-                    "> Premium to unlock 4 GB uploads.",
+                    "**Your account doesn't have Telegram Premium.**\n"
+                    "\n"
+                    "To unlock 4 GB uploads, either:\n"
+                    "\n"
+                    "• Subscribe to Telegram Premium on this account, or\n"
+                    "• Re-run setup with a different account that already has Premium\n"
+                    "\n"
+                    "> Premium is required because the userbot inherits its\n"
+                    "> 4 GB upload cap from the underlying account tier.",
                 ),
                 reply_markup=_back_kb(),
             )
@@ -647,16 +808,34 @@ async def finalize_setup(userbot, user_id, msg):
             await msg.edit_text(
                 frame(
                     "✅ **𝕏TV Pro™ — Setup Complete**",
-                    f"> Successfully authenticated as **{me.first_name}**.\n"
-                    "> Session string and credentials saved to the database.\n"
-                    "> 𝕏TV Pro™ is now active and ready to process >2 GB files.",
+                    f"Successfully authenticated as **{me.first_name}**.\n"
+                    "\n"
+                    "• Session string stored Fernet-encrypted in the database\n"
+                    "• Userbot process hot-started — no restart required\n"
+                    "• Tunnel ready for the 🆔 Change Tunnel step\n"
+                    "\n"
+                    "**𝕏TV Pro™ is now active and ready to process >2 GB files.**",
                 ),
                 reply_markup=_back_kb("admin_main"),
             )
         await userbot.disconnect()
         del pro_setup_sessions[user_id]
+    except FloodWait as e:
+        await _error_screen(
+            msg,
+            "❌ **Rate-limited by Telegram.**\n"
+            "\n"
+            f"Wait **{e.value} seconds** and retry setup.",
+            user_id,
+        )
     except Exception as e:
-        await _error_screen(msg, f"❌ **Failed to finalize setup:** {e}", user_id)
+        logger.warning(f"Pro finalize_setup failed: {e}")
+        await _error_screen(
+            msg,
+            f"❌ **Failed to finalize setup:** `{str(e)[:100]}`"
+            + _recovery_hint(e),
+            user_id,
+        )
 
 async def _handle_change_tunnel_text(client, message, info):
     """Resolve admin's reply for `🆔 Change Tunnel` and persist the new id."""
