@@ -165,6 +165,23 @@ async def _execute_entry(client: Any, entry: Queue.QueueEntry) -> None:
         # Refresh the row so the DM reflects the cap hit.
         refreshed = await Queue.get(entry.task_id) or entry
         await _notify_permanent_failure(client, refreshed)
+        # Best-effort webhook on permanent failure — users who register
+        # a URL want to know about dead-letter tasks, not just successes.
+        try:
+            from tools.mirror_leech import Webhooks
+
+            payload = Webhooks.build_failure_payload(
+                refreshed.task_id,
+                refreshed.source_url,
+                refreshed.last_error or error,
+                refreshed.attempt,
+                refreshed.max_attempts,
+            )
+            await Webhooks.fire(
+                refreshed.user_id, Webhooks.EVENT_UPLOAD_FAILED, payload
+            )
+        except Exception as exc:
+            logger.debug("webhook dispatch on permanent-fail failed: %s", exc)
         return
 
     next_at = time.time() + _backoff_seconds(new_attempt)

@@ -158,6 +158,28 @@ async def run_task(task: MLTask, client: Any, progress_cb: Optional[Any] = None)
 
         # Task.status = "done" is set by the worker pool if no result sets
         # an earlier terminal state.
+
+        # Best-effort webhook dispatch when every uploader finished (or
+        # none were scheduled). Failures are silent — webhook delivery
+        # must not poison the task outcome.
+        if not task.cancel_event.is_set():
+            with contextlib.suppress(Exception):
+                from tools.mirror_leech import Webhooks
+
+                payload = Webhooks.build_task_payload(
+                    task.id, task.source, task.results
+                )
+                await Webhooks.fire(
+                    task.user_id, Webhooks.EVENT_UPLOAD_DONE, payload
+                )
+
+        # QuotaCache becomes stale after a successful upload; invalidate
+        # so the next /settings open re-polls in the background.
+        if any(r.ok for r in task.results):
+            with contextlib.suppress(Exception):
+                from tools.mirror_leech import QuotaCache
+
+                QuotaCache.invalidate(task.user_id)
     finally:
         # Always clean up — the file is either fully handed off upstream
         # (so losing the local copy is fine) or a partial download that
