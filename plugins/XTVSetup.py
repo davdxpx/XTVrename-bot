@@ -520,7 +520,10 @@ async def pro_setup_handler(client, message):
         data["api_id"] = int(text)
         data["state"] = "awaiting_api_hash"
         await message.reply_text(
-            "✅ Got API ID.\n\n**Step 2 / 3** — send your **API Hash**:",
+            "✅ Got your API ID.\n"
+            "\n"
+            "**Step 2 / 3** — now send your **API Hash** "
+            "(32-char hex string from my.telegram.org):",
             reply_markup=_cancel_kb(),
         )
         from pyrogram import StopPropagation
@@ -530,8 +533,10 @@ async def pro_setup_handler(client, message):
         data["api_hash"] = text
         data["state"] = "awaiting_phone"
         await message.reply_text(
-            "✅ Got API Hash.\n\n**Step 3 / 3** — send your **Phone Number**\n"
-            "in international format (e.g. `+1234567890`):",
+            "✅ Got your API Hash.\n"
+            "\n"
+            "**Step 3 / 3** — now send your **Phone Number** in "
+            "international format, e.g. `+1234567890`:",
             reply_markup=_cancel_kb(),
         )
         from pyrogram import StopPropagation
@@ -558,11 +563,15 @@ async def pro_setup_handler(client, message):
 
             with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
-                    "✅ **Verification Code Sent!**\n\n"
-                    "Check your Telegram app for the login code.\n"
-                    "**IMPORTANT:** Enter the code with spaces to avoid "
-                    "Telegram's security triggers.\n"
-                    "Example: if your code is `12345`, enter `1 2 3 4 5`.",
+                    "✅ **Verification Code Sent!**\n"
+                    "\n"
+                    "Check your Telegram app — the login code has been "
+                    "delivered to the number you just entered.\n"
+                    "\n"
+                    "**⚠ Important:** enter the code with spaces between "
+                    "each digit to avoid Telegram's anti-bot triggers.\n"
+                    "\n"
+                    "For example, if your code is `12345`, send `1 2 3 4 5`.",
                     reply_markup=_cancel_kb(),
                 )
         except ApiIdInvalid:
@@ -585,14 +594,20 @@ async def pro_setup_handler(client, message):
         except SessionPasswordNeeded:
             data["state"] = "awaiting_password"
             await msg.edit_text(
-                "🔐 **Two-Step Verification Enabled**\n\n"
-                "Please enter your 2FA password:",
+                "🔐 **Two-Step Verification Enabled**\n"
+                "\n"
+                "This account has a 2FA password set. Please enter it now "
+                "to complete sign-in:",
                 reply_markup=_cancel_kb(),
             )
         except PhoneCodeInvalid:
             with contextlib.suppress(MessageNotModified):
                 await msg.edit_text(
-                    "❌ **Invalid Code.** Try again or restart setup.",
+                    "❌ **Invalid Code.**\n"
+                    "\n"
+                    "Double-check the digits (with spaces between them) "
+                    "and send the code again, or tap ❌ Cancel to restart "
+                    "setup from scratch.",
                     reply_markup=_cancel_kb(),
                 )
         except Exception as e:
@@ -608,7 +623,10 @@ async def pro_setup_handler(client, message):
             await finalize_setup(userbot, user_id, msg)
         except PasswordHashInvalid:
             await msg.edit_text(
-                "❌ **Invalid Password.** Try again.",
+                "❌ **Invalid Password.**\n"
+                "\n"
+                "The 2FA password didn't match. Try again, or tap ❌ Cancel "
+                "to restart setup.",
                 reply_markup=_cancel_kb(),
             )
         except Exception as e:
