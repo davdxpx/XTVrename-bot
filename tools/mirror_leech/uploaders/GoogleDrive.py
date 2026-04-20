@@ -11,7 +11,7 @@ from pathlib import Path
 
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
-from tools.mirror_leech.uploaders import Uploader, register_uploader
+from tools.mirror_leech.uploaders import QuotaInfo, Uploader, register_uploader
 from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.gdrive")
@@ -104,3 +104,30 @@ class GoogleDriveUploader(Uploader):
             ok=True,
             url=f"https://drive.google.com/file/d/{file_id}/view",
         )
+
+    async def get_quota(self, user_id: int) -> QuotaInfo | None:
+        import aiohttp
+
+        rt = await Accounts.get_secret(user_id, self.id, "refresh_token")
+        cid = await Accounts.get_secret(user_id, self.id, "client_id")
+        cs = await Accounts.get_secret(user_id, self.id, "client_secret")
+        if not (rt and cid and cs):
+            return None
+        try:
+            token = await _refresh_access_token(rt, cid, cs)
+            async with aiohttp.ClientSession() as session, session.get(
+                "https://www.googleapis.com/drive/v3/about",
+                params={"fields": "storageQuota"},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                data = await resp.json()
+        except Exception:
+            return None
+        q = (data or {}).get("storageQuota") or {}
+        # Google returns strings for "limit" / "usage" — cast carefully;
+        # consumer accounts can have `limit` absent when unlimited.
+        used = int(q["usage"]) if q.get("usage") is not None else None
+        total = int(q["limit"]) if q.get("limit") is not None else None
+        free = (total - used) if (total is not None and used is not None) else None
+        return QuotaInfo(used_bytes=used, total_bytes=total, free_bytes=free)

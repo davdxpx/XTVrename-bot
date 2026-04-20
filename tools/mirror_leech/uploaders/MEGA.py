@@ -13,7 +13,7 @@ from pathlib import Path
 
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
-from tools.mirror_leech.uploaders import Uploader, register_uploader
+from tools.mirror_leech.uploaders import QuotaInfo, Uploader, register_uploader
 from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.mega")
@@ -66,3 +66,33 @@ class MEGAUploader(Uploader):
         except Exception as exc:
             return UploadResult(self.id, ok=False, message=f"MEGA upload failed: {exc}")
         return UploadResult(self.id, ok=True, url=link)
+
+    async def get_quota(self, user_id: int) -> QuotaInfo | None:
+        email = (await Accounts.get_account(user_id, self.id)).get("email")
+        password = await Accounts.get_secret(user_id, self.id, "password")
+        if not (email and password):
+            return None
+
+        def _probe():
+            m = _login_sync(email, password)
+            # mega.py returns a tuple (total, used, _, _); older forks expose
+            # .get_quota() returning a dict. Handle both shapes.
+            q = m.get_quota()
+            if isinstance(q, (list, tuple)) and len(q) >= 2:
+                total, used = int(q[0]), int(q[1])
+            elif isinstance(q, dict):
+                total = int(q.get("total") or 0) or None
+                used = int(q.get("used") or 0)
+            else:
+                return None
+            return used, total
+
+        try:
+            result = await asyncio.to_thread(_probe)
+        except Exception:
+            return None
+        if not result:
+            return None
+        used, total = result
+        free = (total - used) if total else None
+        return QuotaInfo(used_bytes=used, total_bytes=total, free_bytes=free)

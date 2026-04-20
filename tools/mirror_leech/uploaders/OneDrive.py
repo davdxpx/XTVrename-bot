@@ -17,7 +17,7 @@ from pathlib import Path
 
 from tools.mirror_leech import Accounts
 from tools.mirror_leech.Tasks import MLContext, UploadResult
-from tools.mirror_leech.uploaders import Uploader, register_uploader
+from tools.mirror_leech.uploaders import QuotaInfo, Uploader, register_uploader
 from utils.telegram.log import get_logger
 
 logger = get_logger("mirror_leech.onedrive")
@@ -165,3 +165,27 @@ class OneDriveUploader(Uploader):
         if not web_url:
             return UploadResult(self.id, ok=False, message=f"OneDrive: {body}")
         return UploadResult(self.id, ok=True, url=web_url)
+
+    async def get_quota(self, user_id: int) -> QuotaInfo | None:
+        import aiohttp
+
+        rt = await Accounts.get_secret(user_id, self.id, "refresh_token")
+        cid = await Accounts.get_secret(user_id, self.id, "client_id")
+        tenant = await Accounts.get_secret(user_id, self.id, "tenant")
+        if not (rt and cid and tenant):
+            return None
+        try:
+            token = await _refresh_access_token(rt, cid, tenant)
+            async with aiohttp.ClientSession() as session, session.get(
+                f"{_GRAPH}/me/drive",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                body = await resp.json()
+        except Exception:
+            return None
+        q = (body or {}).get("quota") or {}
+        used = int(q["used"]) if q.get("used") is not None else None
+        total = int(q["total"]) if q.get("total") is not None else None
+        free = int(q["remaining"]) if q.get("remaining") is not None else None
+        return QuotaInfo(used_bytes=used, total_bytes=total, free_bytes=free)

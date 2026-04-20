@@ -225,6 +225,7 @@ PERSONAL_KEYS = frozenset(
         # Phase D (Mirror-Leech)
         "mirror_leech_accounts",
         "mirror_leech_presets",
+        "mirror_leech_webhook",
     }
 )
 
