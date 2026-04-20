@@ -6,6 +6,7 @@ import re
 
 from guessit import guessit
 
+from utils.media.patterns import detect_all, flatten_specials
 from utils.telegram.log import get_logger
 from utils.tmdb import tmdb
 
@@ -210,50 +211,17 @@ def analyze_filename(filename):
             with contextlib.suppress(TypeError, ValueError):
                 language = str(guess.get("subtitle_language"))
 
-        extracted_specials = []
-        extracted_codec = []
-        extracted_audio = []
-
-        orig_name_upper = filename.upper()
-
-        specials_map = {
-            "WEB-DL": "WEB-DL",
-            "WEBRIP": "WEBRip",
-            "HDR": "HDR",
-            "REMUX": "REMUX",
-            "PROPER": "PROPER",
-            "REPACK": "REPACK",
-            "UNCUT": "UNCUT",
-            "BDRIP": "BDRip",
-            "BLURAY": "BluRay",
-            "BLUERAY": "BluRay",
-        }
-        for kw, label in specials_map.items():
-            if kw in orig_name_upper:
-                extracted_specials.append(label)
-
-        extracted_specials = list(dict.fromkeys(extracted_specials))
-
-        codec_map = {"X264": "x264", "X265": "x265", "HEVC": "HEVC"}
-        for kw, label in codec_map.items():
-            if kw in orig_name_upper:
-                extracted_codec.append(label)
-
-        audio_map = {
-            "DUAL": "DUAL",
-            "DUBBED": "Dubbed",
-            "MULTI": "Multi",
-            "MICDUB": "MicDub",
-            "LINEDUB": "LineDub",
-            "DTS": "DTS",
-            "AC3": "AC3",
-            "ATMOS": "Atmos",
-        }
-        if re.search(r'(?<!WEB-)\bDL\b', orig_name_upper):
-            extracted_audio.append("DL")
-        for kw, label in audio_map.items():
-            if re.search(r'\b' + re.escape(kw) + r'\b', orig_name_upper):
-                extracted_audio.append(label)
+        # v1.6.2: central pattern library covers 8 groups with ordered
+        # matching, separator normalisation, and cross-group span
+        # dedup. Legacy fields (`specials` list, `codec` str, `audio`
+        # str) stay on the return so existing renderers keep working.
+        detected_groups = detect_all(filename)
+        extracted_specials = flatten_specials(detected_groups)
+        quality_from_patterns = detected_groups.get("quality")
+        if isinstance(quality_from_patterns, str) and quality_from_patterns:
+            quality = quality_from_patterns
+        codec_label = detected_groups.get("codec")
+        audio_label = detected_groups.get("audio")
 
         season_val = guess.get("season")
         episode_val = guess.get("episode")
@@ -277,8 +245,12 @@ def analyze_filename(filename):
             "container": container,
             "language": language,
             "specials": extracted_specials,
-            "codec": extracted_codec[0] if extracted_codec else "",
-            "audio": extracted_audio[0] if extracted_audio else "",
+            "codec": codec_label if isinstance(codec_label, str) else "",
+            "audio": audio_label if isinstance(audio_label, str) else "",
+            # Structured groups for callers that want granular access
+            # (per-group pickers, richer UI). Safe to ignore — legacy
+            # callers keep using `specials` / `codec` / `audio`.
+            "detected_groups": detected_groups,
         }
 
     except Exception as e:

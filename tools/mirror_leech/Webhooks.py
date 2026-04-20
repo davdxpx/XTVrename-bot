@@ -254,3 +254,13 @@ def valid_http_url(url: str) -> bool:
     """Loose URL validator — anything with http/https and a host."""
     u = (url or "").strip().lower()
     return u.startswith(("http://", "https://")) and len(u) > 10
+
+
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------

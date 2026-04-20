@@ -100,3 +100,13 @@ def snapshot(user_id: int) -> dict[str, Optional[QuotaInfo]]:
         if uid == user_id and _is_fresh(cached_at):
             out[pid] = info
     return out
+
+
+# --------------------------------------------------------------------------
+# Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global
+# Don't Remove Credit
+# Telegram Channel @XTVbots
+# Developed for the 𝕏TV Network @XTVglobal
+# Backup Channel @XTVhome
+# Contact on Telegram @davdxpx
+# --------------------------------------------------------------------------

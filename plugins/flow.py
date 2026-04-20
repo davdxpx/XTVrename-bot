@@ -20,6 +20,7 @@ from utils.state import clear_session, get_data, get_state, mark_for_db_persist,
 from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
 from utils.tmdb import tmdb
+from utils.ui_pagination import paginate_kb
 
 logger = get_logger("plugins.flow")
 logger.info("Loading plugins.flow...")
@@ -3094,46 +3095,233 @@ async def handle_correct_tmdb_selection(client, callback_query):
     await callback_query.message.delete()
     await update_auto_detected_message(client, msg_id, callback_query.from_user.id)
 
+# --------------------------------------------------------------------------
+# Rename-flow picker options (v1.6.2 expansion).
+#
+# Picker values are indexed because some labels contain characters that
+# don't round-trip cleanly through callback_data if we split on "_"
+# (e.g. "AAC 5.1", "DD+ Atmos", "MPEG-2"). The handler decodes the
+# index back to the label from these lists.
+#
+# SOURCE dedup: when the user toggles a SOURCE-group special (BluRay,
+# WEB-DL, BDRip, …) any previously-selected SOURCE-group label is
+# dropped automatically — a release can't be BluRay AND BDRip at once.
+# --------------------------------------------------------------------------
+_CODEC_OPTIONS: list[str] = [
+    "x264", "x265", "HEVC", "AVC", "AV1",
+    "VP9", "MPEG-2", "VC-1", "XviD", "DivX",
+]
+
+_AUDIO_OPTIONS: list[str] = [
+    # Atmos combos lead so they're easy to reach
+    "TrueHD Atmos", "DD+ Atmos", "DDP Atmos", "EAC3 Atmos",
+    "DTS-HD MA", "DTS-HD", "DTS:X", "DTS-ES",
+    "Atmos", "TrueHD",
+    "DDP5.1", "DDP7.1", "DDP2.0", "DDP", "DD+",
+    "EAC3", "DD5.1", "DD7.1", "DD2.0", "AC3", "DD",
+    "DTS", "AAC 5.1", "AAC 2.0", "AAC", "FLAC", "ALAC",
+    "MP3", "OPUS",
+    "DUAL", "Multi", "DL", "Dubbed", "MicDub", "LineDub",
+]
+
+_SPECIALS_OPTIONS: list[str] = [
+    # SOURCE (streaming + physical) — only one of these can coexist.
+    "BluRay", "UHD BluRay", "BDRip", "BRRip",
+    "WEB-DL", "WEBRip", "WEB",
+    "AMZN WEB-DL", "NF WEB-DL", "DSNP WEB-DL", "HULU WEB-DL",
+    "MAX WEB-DL", "HMAX WEB-DL", "ATVP WEB-DL", "PMTP WEB-DL",
+    "HDTV", "DVDRip", "DVD", "VHS", "HDRip", "CAM", "TS",
+    # HDR
+    "HDR", "HDR10", "HDR10+", "Dolby Vision",
+    "DV P5", "DV P7", "HLG", "SDR",
+    # Edition
+    "Extended", "Director's Cut", "Extended Edition", "Extended Cut",
+    "Ultimate Edition", "Special Edition", "Theatrical Cut",
+    "Final Cut", "IMAX", "IMAX Enhanced",
+    "Unrated", "Uncut", "Remastered",
+    # Release
+    "REMUX", "PROPER", "REPACK", "RERIP",
+    "Criterion", "INTERNAL", "LIMITED",
+    # Extras
+    "DUAL", "Multi", "Dual Audio", "Multi Audio",
+    "Dubbed", "MicDub", "LineDub", "Subbed",
+    "HardSubs", "SoftSubs", "HardCoded", "DL",
+]
+
+# SOURCE_LABELS is the subset of _SPECIALS_OPTIONS that counts as a
+# "source" for dedup purposes. Kept explicit rather than derived so a
+# future edit to the options list can't silently change dedup scope.
+_SOURCE_LABELS: set[str] = {
+    "BluRay", "UHD BluRay", "BDRip", "BRRip",
+    "WEB-DL", "WEBRip", "WEB",
+    "AMZN WEB-DL", "NF WEB-DL", "DSNP WEB-DL", "HULU WEB-DL",
+    "MAX WEB-DL", "HMAX WEB-DL", "ATVP WEB-DL", "PMTP WEB-DL",
+    "HDTV", "DVDRip", "DVD", "VHS", "HDRip", "CAM", "TS",
+}
+
+_PICKER_PER_PAGE = 9
+_PICKER_PER_ROW = 3
+
+
+def _picker_page(fs: dict, name: str) -> int:
+    """Read current page for a picker out of the file session."""
+    pages = fs.setdefault("picker_pages", {})
+    return int(pages.get(name, 0))
+
+
+def _set_picker_page(fs: dict, name: str, page: int) -> None:
+    pages = fs.setdefault("picker_pages", {})
+    pages[name] = max(0, int(page))
+
+
+def _build_codec_keyboard(msg_id: int, fs: dict) -> InlineKeyboardMarkup:
+    current = fs.get("codec", "")
+    locked = bool(fs.get("codec_locked"))
+    page = _picker_page(fs, "codec")
+    items = [(str(i), label) for i, label in enumerate(_CODEC_OPTIONS)]
+    none_text = "🚫 None (locked)" if locked else ("✅ None" if not current else "None")
+    extras = [
+        [InlineKeyboardButton(none_text, callback_data=f"set_codec_none_{msg_id}")],
+        [InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")],
+    ]
+    current_key = (
+        str(_CODEC_OPTIONS.index(current)) if current in _CODEC_OPTIONS else None
+    )
+    rows = paginate_kb(
+        items=items,
+        page=page,
+        per_page=_PICKER_PER_PAGE,
+        per_row=_PICKER_PER_ROW,
+        selected={current_key} if current_key else set(),
+        cb_template=lambda idx: f"set_codec_i{idx}_{msg_id}",
+        page_cb_template=lambda p: f"codec_pg_{p}_{msg_id}",
+        extra_rows=extras,
+    )
+    return InlineKeyboardMarkup(rows)
+
+
+def _build_audio_keyboard(msg_id: int, fs: dict) -> InlineKeyboardMarkup:
+    current = fs.get("audio", "")
+    locked = bool(fs.get("audio_locked"))
+    page = _picker_page(fs, "audio")
+    items = [(str(i), label) for i, label in enumerate(_AUDIO_OPTIONS)]
+    none_text = "🚫 None (locked)" if locked else ("✅ None" if not current else "None")
+    extras = [
+        [InlineKeyboardButton(none_text, callback_data=f"set_audio_none_{msg_id}")],
+        [InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")],
+    ]
+    current_key = (
+        str(_AUDIO_OPTIONS.index(current)) if current in _AUDIO_OPTIONS else None
+    )
+    rows = paginate_kb(
+        items=items,
+        page=page,
+        per_page=_PICKER_PER_PAGE,
+        per_row=_PICKER_PER_ROW,
+        selected={current_key} if current_key else set(),
+        cb_template=lambda idx: f"set_audio_i{idx}_{msg_id}",
+        page_cb_template=lambda p: f"audio_pg_{p}_{msg_id}",
+        extra_rows=extras,
+    )
+    return InlineKeyboardMarkup(rows)
+
+
+def _build_specials_keyboard(msg_id: int, fs: dict) -> InlineKeyboardMarkup:
+    current: list[str] = fs.get("specials", []) or []
+    locked = bool(fs.get("specials_locked"))
+    page = _picker_page(fs, "specials")
+    items = [(str(i), label) for i, label in enumerate(_SPECIALS_OPTIONS)]
+    selected_keys = {
+        str(i) for i, label in enumerate(_SPECIALS_OPTIONS) if label in current
+    }
+    lock_label = "🚫 None (locked)" if locked else "🚫 None (lock)"
+    extras = [
+        [
+            InlineKeyboardButton("❌ Clear All", callback_data=f"clear_spc_{msg_id}"),
+            InlineKeyboardButton(lock_label, callback_data=f"lock_spc_{msg_id}"),
+        ],
+        [InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")],
+    ]
+    rows = paginate_kb(
+        items=items,
+        page=page,
+        per_page=_PICKER_PER_PAGE,
+        per_row=_PICKER_PER_ROW,
+        selected=selected_keys,
+        cb_template=lambda idx: f"toggle_spc_i{idx}_{msg_id}",
+        page_cb_template=lambda p: f"specials_pg_{p}_{msg_id}",
+        extra_rows=extras,
+    )
+    return InlineKeyboardMarkup(rows)
+
+
+def _codec_prompt() -> str:
+    return (
+        "📼 **Select Codec:**\nChoose a codec for the template. "
+        "Pick **None** to lock — auto-fill won't overwrite it."
+    )
+
+
+def _audio_prompt() -> str:
+    return (
+        "🔊 **Select Audio:**\nChoose an audio tag for the template. "
+        "Pick **None** to lock — auto-fill won't overwrite it even if "
+        "Dual/Multi streams are detected."
+    )
+
+
+def _specials_prompt(selected_count: int) -> str:
+    hint = ""
+    if selected_count:
+        hint = f"\n**{selected_count}** currently selected."
+    return (
+        "🎬 **Select Specials:**\nToggle specials for the template "
+        "(multiple allowed). Only one **source** can be active at a "
+        "time — picking BDRip removes BluRay, etc."
+        f"{hint}"
+    )
+
+
 @Client.on_callback_query(filters.regex(r"^ch_codec_") & auth_filter)
 async def handle_change_codec(client, callback_query):
     msg_id = int(callback_query.data.split("_")[2])
     if msg_id not in file_sessions:
         await callback_query.answer("Session expired.", show_alert=True)
         return
-
     fs = file_sessions[msg_id]
-    current = fs.get("codec", "")
-    locked = bool(fs.get("codec_locked"))
-
-    codecs = ["x264", "x265", "HEVC"]
-    buttons = []
-
-    row = []
-    for c in codecs:
-        text = f"✅ {c}" if c == current else c
-        row.append(InlineKeyboardButton(text, callback_data=f"set_codec_{c}_{msg_id}"))
-        if len(row) == 3:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    none_text = "🚫 None (locked)" if locked else ("✅ None" if not current else "None")
-    buttons.append([InlineKeyboardButton(none_text, callback_data=f"set_codec_none_{msg_id}")])
-
-    buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
-
+    # Reset to page 0 when entering fresh (preserves deep-link state
+    # when a picker-page callback re-enters this handler, though that
+    # doesn't happen with the current grammar).
+    _set_picker_page(fs, "codec", 0)
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            "📼 **Select Codec:**\nChoose a codec for the template. "
-            "Pick **None** to lock — auto-fill won't overwrite it.",
-            reply_markup=InlineKeyboardMarkup(buttons)
+            _codec_prompt(),
+            reply_markup=_build_codec_keyboard(msg_id, fs),
         )
+
+
+@Client.on_callback_query(filters.regex(r"^codec_pg_(\d+)_(\d+)$") & auth_filter)
+async def handle_codec_page(client, callback_query):
+    m = re.match(r"^codec_pg_(\d+)_(\d+)$", callback_query.data)
+    if not m:
+        return
+    page, msg_id = int(m.group(1)), int(m.group(2))
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+    fs = file_sessions[msg_id]
+    _set_picker_page(fs, "codec", page)
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            _codec_prompt(),
+            reply_markup=_build_codec_keyboard(msg_id, fs),
+        )
+
 
 @Client.on_callback_query(filters.regex(r"^set_codec_") & auth_filter)
 async def handle_set_codec(client, callback_query):
     parts = callback_query.data.split("_")
-    codec = parts[2]
+    payload = parts[2]
     msg_id = int(parts[3])
 
     if msg_id not in file_sessions:
@@ -3141,14 +3329,25 @@ async def handle_set_codec(client, callback_query):
         return
 
     fs = file_sessions[msg_id]
-    if codec == "none":
+    if payload == "none":
         fs["codec"] = ""
         fs["codec_locked"] = True
+    elif payload.startswith("i") and payload[1:].isdigit():
+        idx = int(payload[1:])
+        if 0 <= idx < len(_CODEC_OPTIONS):
+            fs["codec"] = _CODEC_OPTIONS[idx]
+            fs["codec_locked"] = False
+        else:
+            await callback_query.answer("Unknown codec option.", show_alert=True)
+            return
     else:
-        fs["codec"] = codec
+        # Legacy callback (pre-v1.6.2) — tolerate it so in-flight
+        # sessions at upgrade time don't dead-end.
+        fs["codec"] = payload
         fs["codec_locked"] = False
 
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
+
 
 @Client.on_callback_query(filters.regex(r"^ch_audio_") & auth_filter)
 async def handle_change_audio(client, callback_query):
@@ -3156,39 +3355,37 @@ async def handle_change_audio(client, callback_query):
     if msg_id not in file_sessions:
         await callback_query.answer("Session expired.", show_alert=True)
         return
-
     fs = file_sessions[msg_id]
-    current = fs.get("audio", "")
-    locked = bool(fs.get("audio_locked"))
-
-    audios = ["DUAL", "DL", "Dubbed", "Multi", "MicDub", "LineDub", "DTS", "AC3", "Atmos"]
-    buttons = []
-
-    row = []
-    for a in audios:
-        text = f"✅ {a}" if a == current else a
-        row.append(InlineKeyboardButton(text, callback_data=f"set_audio_{a}_{msg_id}"))
-        if len(row) == 3:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    none_text = "🚫 None (locked)" if locked else ("✅ None" if not current else "None")
-    buttons.append([InlineKeyboardButton(none_text, callback_data=f"set_audio_none_{msg_id}")])
-    buttons.append([InlineKeyboardButton("← Back", callback_data=f"back_confirm_{msg_id}")])
-
+    _set_picker_page(fs, "audio", 0)
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            "🔊 **Select Audio:**\nChoose an audio tag for the template. "
-            "Pick **None** to lock — auto-fill won't overwrite it even if Dual/Multi streams are detected.",
-            reply_markup=InlineKeyboardMarkup(buttons)
+            _audio_prompt(),
+            reply_markup=_build_audio_keyboard(msg_id, fs),
         )
+
+
+@Client.on_callback_query(filters.regex(r"^audio_pg_(\d+)_(\d+)$") & auth_filter)
+async def handle_audio_page(client, callback_query):
+    m = re.match(r"^audio_pg_(\d+)_(\d+)$", callback_query.data)
+    if not m:
+        return
+    page, msg_id = int(m.group(1)), int(m.group(2))
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+    fs = file_sessions[msg_id]
+    _set_picker_page(fs, "audio", page)
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            _audio_prompt(),
+            reply_markup=_build_audio_keyboard(msg_id, fs),
+        )
+
 
 @Client.on_callback_query(filters.regex(r"^set_audio_") & auth_filter)
 async def handle_set_audio(client, callback_query):
     parts = callback_query.data.split("_")
-    audio = parts[2]
+    payload = parts[2]
     msg_id = int(parts[3])
 
     if msg_id not in file_sessions:
@@ -3196,14 +3393,23 @@ async def handle_set_audio(client, callback_query):
         return
 
     fs = file_sessions[msg_id]
-    if audio == "none":
+    if payload == "none":
         fs["audio"] = ""
         fs["audio_locked"] = True
+    elif payload.startswith("i") and payload[1:].isdigit():
+        idx = int(payload[1:])
+        if 0 <= idx < len(_AUDIO_OPTIONS):
+            fs["audio"] = _AUDIO_OPTIONS[idx]
+            fs["audio_locked"] = False
+        else:
+            await callback_query.answer("Unknown audio option.", show_alert=True)
+            return
     else:
-        fs["audio"] = audio
+        fs["audio"] = payload
         fs["audio_locked"] = False
 
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
+
 
 @Client.on_callback_query(filters.regex(r"^ch_specials_") & auth_filter)
 async def handle_change_specials(client, callback_query):
@@ -3211,42 +3417,39 @@ async def handle_change_specials(client, callback_query):
     if msg_id not in file_sessions:
         await callback_query.answer("Session expired.", show_alert=True)
         return
-
     fs = file_sessions[msg_id]
-    current = fs.get("specials", [])
-    locked = bool(fs.get("specials_locked"))
-
-    specials_options = ["BluRay", "WEB-DL", "WEBRip", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT", "BDRip"]
-    buttons = []
-
-    row = []
-    for s in specials_options:
-        text = f"✅ {s}" if s in current else s
-        row.append(InlineKeyboardButton(text, callback_data=f"toggle_spc_{s}_{msg_id}"))
-        if len(row) == 3:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    lock_label = "🚫 None (locked)" if locked else "🚫 None (lock)"
-    buttons.append([
-        InlineKeyboardButton("❌ Clear All", callback_data=f"clear_spc_{msg_id}"),
-        InlineKeyboardButton(lock_label, callback_data=f"lock_spc_{msg_id}"),
-    ])
-    buttons.append([InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")])
-
+    _set_picker_page(fs, "specials", 0)
+    selected = fs.get("specials", []) or []
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed). "
-            "Use **🚫 None (lock)** to prevent auto-fill from populating this field.",
-            reply_markup=InlineKeyboardMarkup(buttons)
+            _specials_prompt(len(selected)),
+            reply_markup=_build_specials_keyboard(msg_id, fs),
         )
+
+
+@Client.on_callback_query(filters.regex(r"^specials_pg_(\d+)_(\d+)$") & auth_filter)
+async def handle_specials_page(client, callback_query):
+    m = re.match(r"^specials_pg_(\d+)_(\d+)$", callback_query.data)
+    if not m:
+        return
+    page, msg_id = int(m.group(1)), int(m.group(2))
+    if msg_id not in file_sessions:
+        await callback_query.answer("Session expired.", show_alert=True)
+        return
+    fs = file_sessions[msg_id]
+    _set_picker_page(fs, "specials", page)
+    selected = fs.get("specials", []) or []
+    with contextlib.suppress(MessageNotModified):
+        await callback_query.message.edit_text(
+            _specials_prompt(len(selected)),
+            reply_markup=_build_specials_keyboard(msg_id, fs),
+        )
+
 
 @Client.on_callback_query(filters.regex(r"^toggle_spc_") & auth_filter)
 async def handle_toggle_specials(client, callback_query):
     parts = callback_query.data.split("_")
-    special = parts[2]
+    payload = parts[2]
     msg_id = int(parts[3])
 
     if msg_id not in file_sessions:
@@ -3254,43 +3457,39 @@ async def handle_toggle_specials(client, callback_query):
         return
 
     fs = file_sessions[msg_id]
-    current = fs.get("specials", [])
+    current: list[str] = fs.get("specials", []) or []
 
-    if special in current:
-        current.remove(special)
+    # Resolve the target label (prefer index form; fall back to raw
+    # label for legacy callbacks so upgrade-in-flight pickers keep
+    # working).
+    target: str | None = None
+    if payload.startswith("i") and payload[1:].isdigit():
+        idx = int(payload[1:])
+        if 0 <= idx < len(_SPECIALS_OPTIONS):
+            target = _SPECIALS_OPTIONS[idx]
+    if target is None:
+        target = payload if payload in _SPECIALS_OPTIONS else None
+    if target is None:
+        await callback_query.answer("Unknown special.", show_alert=True)
+        return
+
+    if target in current:
+        current.remove(target)
     else:
-        current.append(special)
+        # Per-source dedup: only one SOURCE label at a time.
+        if target in _SOURCE_LABELS:
+            current = [s for s in current if s not in _SOURCE_LABELS]
+        current.append(target)
 
     fs["specials"] = current
-    # Toggling any special means user is actively choosing — release lock.
     fs["specials_locked"] = False
-    locked = False
-
-    specials_options = ["BluRay", "WEB-DL", "WEBRip", "HDR", "REMUX", "PROPER", "REPACK", "UNCUT", "BDRip"]
-    buttons = []
-    row = []
-    for s in specials_options:
-        text = f"✅ {s}" if s in current else s
-        row.append(InlineKeyboardButton(text, callback_data=f"toggle_spc_{s}_{msg_id}"))
-        if len(row) == 3:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    lock_label = "🚫 None (locked)" if locked else "🚫 None (lock)"
-    buttons.append([
-        InlineKeyboardButton("❌ Clear All", callback_data=f"clear_spc_{msg_id}"),
-        InlineKeyboardButton(lock_label, callback_data=f"lock_spc_{msg_id}"),
-    ])
-    buttons.append([InlineKeyboardButton("✅ Done", callback_data=f"back_confirm_{msg_id}")])
 
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
-            "🎬 **Select Specials:**\nToggle specials for the template (multiple allowed). "
-            "Use **🚫 None (lock)** to prevent auto-fill from populating this field.",
-            reply_markup=InlineKeyboardMarkup(buttons)
+            _specials_prompt(len(current)),
+            reply_markup=_build_specials_keyboard(msg_id, fs),
         )
+
 
 @Client.on_callback_query(filters.regex(r"^clear_spc_") & auth_filter)
 async def handle_clear_specials(client, callback_query):
@@ -3303,6 +3502,7 @@ async def handle_clear_specials(client, callback_query):
     file_sessions[msg_id]["specials"] = []
 
     await update_confirmation_message(client, msg_id, callback_query.from_user.id)
+
 
 @Client.on_callback_query(filters.regex(r"^lock_spc_") & auth_filter)
 async def handle_lock_specials(client, callback_query):
