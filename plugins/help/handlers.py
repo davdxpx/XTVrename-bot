@@ -1578,7 +1578,7 @@ async def handle_help_callbacks(client, callback_query):
         # Per-subtopic pages for the Mirror-Leech guide reached via
         # All Tools → Mirror-Leech. Each page is one short screen with
         # its own Back button to the Mirror-Leech hub.
-        from tools.mirror_leech.DestinationGuides import get_guide
+        from plugins.help.mirror_leech_guides import get_guide
         from tools.mirror_leech.uploaders import available_uploaders
 
         topic = data.replace("help_ml_", "")

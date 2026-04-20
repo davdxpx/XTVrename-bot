@@ -42,12 +42,12 @@ from pyrogram.types import (
 )
 
 from config import Config
+from plugins.help.mirror_leech_guides import get_guide
 from tools.mirror_leech import ContextStore
 from tools.mirror_leech.Controller import (
     UnsupportedSourceError,
     pick_downloader,
 )
-from tools.mirror_leech.DestinationGuides import get_guide
 from tools.mirror_leech.UIChrome import frame_plain as frame
 from tools.mirror_leech.uploaders import available_uploaders
 from utils.telegram.log import get_logger
