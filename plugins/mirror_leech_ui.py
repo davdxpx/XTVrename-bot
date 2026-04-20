@@ -547,16 +547,19 @@ async def _render_cfg_root(
         lines.append("")
 
     rows: list[list[InlineKeyboardButton]] = []
+    visible_count = 0
     for cls in all_uploaders():
-        avail = cls.available()
+        if not cls.available():
+            # Hide providers the host hasn't enabled (missing binary, missing
+            # Python package, missing env var). Admin panel at /admin →
+            # Mirror-Leech Config still lists everything for diagnostics.
+            continue
+        visible_count += 1
         try:
-            configured = avail and await cls().is_configured(user_id)
+            configured = await cls().is_configured(user_id)
         except Exception:
             configured = False
-        if not avail:
-            badge = "🚫"
-            suffix = "unavailable on this host"
-        elif configured:
+        if configured:
             badge = "✅"
             suffix = "linked"
         elif cls.needs_credentials:
@@ -574,12 +577,21 @@ async def _render_cfg_root(
             ]
         )
 
-    rows.append([InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")])
-    rows.append([InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")])
+    if visible_count == 0:
+        body = (
+            "> 🚧 No destinations have been enabled by the host admin yet.\n"
+            "> Please ask the admin to configure Mirror-Leech providers\n"
+            "> (Google Drive, Rclone, MEGA, …) before using this feature."
+        )
+        rows = [[InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")]]
+        text = frame("☁️ **Mirror-Leech — Destinations**", body)
+    else:
+        rows.append([InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")])
+        rows.append([InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")])
 
-    body = ("\n".join(lines) + "\n"
-            if lines else "") + "> Tap a provider to link, test, or clear."
-    text = frame("☁️ **Mirror-Leech — Destinations**", body)
+        body = ("\n".join(lines) + "\n"
+                if lines else "") + "> Tap a provider to link, test, or clear."
+        text = frame("☁️ **Mirror-Leech — Destinations**", body)
     try:
         await client.edit_message_text(
             chat_id=chat_id,
