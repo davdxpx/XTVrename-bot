@@ -8,11 +8,33 @@ registry to render destination buttons.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Optional, Type
 
 if TYPE_CHECKING:
     from tools.mirror_leech.Tasks import MLContext, UploadResult
+
+
+@dataclass(frozen=True)
+class QuotaInfo:
+    """Per-destination storage usage snapshot.
+
+    `total_bytes` and `free_bytes` may be None for providers that expose
+    only one of the two (e.g. an S3-like endpoint might surface
+    used_bytes without a hard cap). Callers should handle every field
+    being None gracefully and render only what's available.
+    """
+
+    used_bytes: Optional[int] = None
+    total_bytes: Optional[int] = None
+    free_bytes: Optional[int] = None
+
+    @property
+    def fraction_used(self) -> Optional[float]:
+        if self.total_bytes and self.total_bytes > 0 and self.used_bytes is not None:
+            return max(0.0, min(1.0, self.used_bytes / self.total_bytes))
+        return None
 
 
 class Uploader(ABC):
@@ -53,6 +75,12 @@ class Uploader(ABC):
         self, ctx: "MLContext", local_path: Path
     ) -> "UploadResult":
         """Upload `local_path` to the user's configured destination."""
+
+    async def get_quota(self, user_id: int) -> Optional[QuotaInfo]:
+        """Return storage usage for this destination, or None when the
+        provider doesn't expose a quota API (S3-like, generic WebDAV
+        without DAV:quota, ...). Default is None so uploaders opt in."""
+        return None
 
 
 _registry: list[Type[Uploader]] = []
