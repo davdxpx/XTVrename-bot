@@ -956,9 +956,8 @@ async def _render_queue(
     message_id: int | None,
     user_id: int,
 ) -> None:
-    from tools.mirror_leech.Tasks import ml_worker_pool
-
     from tools.mirror_leech import Queue as _Queue
+    from tools.mirror_leech.Tasks import ml_worker_pool
 
     live_tasks = ml_worker_pool.list_for_user(user_id)[:20]
     persistent = await _Queue.list_for_user(user_id, limit=20)
@@ -1059,10 +1058,7 @@ async def _render_queue(
                 ]
             )
 
-    if not lines:
-        body = "> 📭 Your Mirror-Leech queue is empty."
-    else:
-        body = "\n".join(lines)
+    body = "\n".join(lines) if lines else "> 📭 Your Mirror-Leech queue is empty."
     rows.append([InlineKeyboardButton("↻ Refresh", callback_data="ml_queue")])
 
     text = frame("🗂 **Mirror-Leech — Your Queue**", body)
