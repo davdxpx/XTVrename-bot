@@ -14,6 +14,7 @@ this file is the wiring layer that knows about Pyrogram.
 
 Callback-data grammar (see Phase D plan for the full table):
     ml_cfg                         → user config root
+    ml_cfg_qref                    → force-refresh quota snapshots
     ml_cfg_up_<provider>           → per-provider config screen
     ml_cfg_test_<provider>         → test connection
     ml_cfg_clr_<provider>          → clear stored credential
@@ -1085,13 +1086,56 @@ async def ml_cfg_root(client: Client, callback_query: CallbackQuery) -> None:
     await callback_query.answer()
 
 
+def _fmt_bytes(n: int) -> str:
+    """Render `n` bytes as a compact human label (B/KB/MB/GB/TB)."""
+    step = 1024.0
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(n) < step or unit == "TB":
+            return f"{n:.1f} {unit}" if unit != "B" else f"{int(n)} B"
+        n /= step
+    return f"{n:.1f} PB"
+
+
+def _quota_bar(fraction: float, width: int = 14) -> str:
+    filled = int(round(fraction * width))
+    return "▓" * filled + "░" * (width - filled)
+
+
+def _render_quota_line(provider: str, info) -> str | None:
+    """Return a single markdown line describing quota for a provider,
+    or None if nothing useful is known."""
+    from tools.mirror_leech.uploaders import QuotaInfo
+
+    if not isinstance(info, QuotaInfo):
+        return None
+    if info.used_bytes is None and info.total_bytes is None:
+        return None
+    frac = info.fraction_used
+    if frac is not None and info.total_bytes:
+        warn = ""
+        if frac >= 0.98:
+            warn = " 🚨"
+        elif frac >= 0.90:
+            warn = " ⚠"
+        return (
+            f"> `{provider}`  `{_quota_bar(frac)}`  "
+            f"{_fmt_bytes(info.used_bytes or 0)} / "
+            f"{_fmt_bytes(info.total_bytes)} ({frac * 100:.0f}%){warn}"
+        )
+    if info.used_bytes is not None:
+        return f"> `{provider}`  used **{_fmt_bytes(info.used_bytes)}**"
+    return None
+
+
 async def _render_cfg_root(
     client: Client,
     chat_id: int,
     message_id: int,
     user_id: int,
 ) -> None:
-    from tools.mirror_leech import Secrets
+    import asyncio as _asyncio
+
+    from tools.mirror_leech import QuotaCache, Secrets
     from tools.mirror_leech.uploaders import all_uploaders
 
     lines: list[str] = []
@@ -1104,6 +1148,7 @@ async def _render_cfg_root(
 
     rows: list[list[InlineKeyboardButton]] = []
     visible_count = 0
+    configured_ids: list[str] = []
     for cls in all_uploaders():
         if not cls.available():
             # Hide providers the host hasn't enabled (missing binary, missing
@@ -1118,6 +1163,7 @@ async def _render_cfg_root(
         if configured:
             badge = "✅"
             suffix = "linked"
+            configured_ids.append(cls.id)
         elif cls.needs_credentials:
             badge = "🔑"
             suffix = "link to enable"
@@ -1132,6 +1178,23 @@ async def _render_cfg_root(
                 )
             ]
         )
+
+    # Quota widget: cache-only fetch (fast), then schedule background
+    # refreshes for any linked provider the cache doesn't know yet. First
+    # cold open shows no bars; next open after ~10s shows populated data.
+    quota_lines: list[str] = []
+    if configured_ids:
+        snap = QuotaCache.snapshot(user_id)
+        for pid in configured_ids:
+            info = snap.get(pid)
+            if info is not None:
+                line = _render_quota_line(pid, info)
+                if line:
+                    quota_lines.append(line)
+            else:
+                # Fire-and-forget — refresh runs in background, the next
+                # settings open picks it up from cache.
+                _asyncio.create_task(QuotaCache.get(user_id, pid))
 
     if visible_count == 0:
         body = (
@@ -1155,11 +1218,23 @@ async def _render_cfg_root(
         rows.append(
             [InlineKeyboardButton(preset_label, callback_data="ml_preset_list")]
         )
-        rows.append([InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")])
+        queue_row = [InlineKeyboardButton("🗂 My Queue", callback_data="ml_queue")]
+        if configured_ids:
+            queue_row.append(
+                InlineKeyboardButton(
+                    "🔄 Refresh quotas", callback_data="ml_cfg_qref"
+                )
+            )
+        rows.append(queue_row)
         rows.append([InlineKeyboardButton("❌ Close", callback_data="ml_cfg_close")])
 
-        body = ("\n".join(lines) + "\n"
-                if lines else "") + "> Tap a provider to link, test, or clear."
+        body_parts: list[str] = []
+        if lines:
+            body_parts.append("\n".join(lines))
+        if quota_lines:
+            body_parts.append("**Storage usage**\n" + "\n".join(quota_lines))
+        body_parts.append("> Tap a provider to link, test, or clear.")
+        body = "\n".join(body_parts)
         text = frame("☁️ **Mirror-Leech — Destinations**", body)
     try:
         await client.edit_message_text(
@@ -1172,6 +1247,42 @@ async def _render_cfg_root(
         await client.send_message(
             chat_id, text, reply_markup=InlineKeyboardMarkup(rows)
         )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_cfg_qref$"))
+async def ml_cfg_quota_refresh(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Invalidate the cached quota for every linked provider + re-render.
+    Synchronous from the user's POV — quotas show up once the underlying
+    requests finish (a few seconds)."""
+    import asyncio as _asyncio
+
+    from tools.mirror_leech import QuotaCache
+    from tools.mirror_leech.uploaders import available_uploaders
+
+    user_id = callback_query.from_user.id
+    QuotaCache.invalidate(user_id)
+    await callback_query.answer("Refreshing…")
+
+    configured_ids: list[str] = []
+    for cls in available_uploaders():
+        try:
+            if await cls().is_configured(user_id):
+                configured_ids.append(cls.id)
+        except Exception:
+            continue
+    if configured_ids:
+        await _asyncio.gather(
+            *(QuotaCache.get(user_id, pid, force_refresh=True) for pid in configured_ids),
+            return_exceptions=True,
+        )
+    await _render_cfg_root(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        user_id,
+    )
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cfg_close$"))
