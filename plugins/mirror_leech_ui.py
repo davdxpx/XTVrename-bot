@@ -659,6 +659,14 @@ _PROVIDER_HINTS: dict[str, str] = {
         "Native Backblaze B2 — use this over the S3 endpoint when you want "
         "B2-specific features (capability info, hash verification)."
     ),
+    "webdav": (
+        "Generic WebDAV — covers Nextcloud, ownCloud, Synology, QNAP, and "
+        "any server speaking WebDAV with Basic auth."
+    ),
+    "seafile": (
+        "Seafile via its native REST API. Needs an API token from your "
+        "Seafile profile plus the target library's UUID."
+    ),
 }
 
 
@@ -968,6 +976,36 @@ _PROVIDER_PASTE_FORMAT: dict[str, dict[str, str]] = {
         ),
         "mode": "b2_config",
     },
+    "webdav": {
+        "prompt": (
+            "Send your WebDAV config as `key: value` lines. Required:\n"
+            "```\n"
+            "url: https://cloud.example.com/remote.php/dav/files/alice/\n"
+            "username: alice\n"
+            "password: <app-password-NOT-account-password>\n"
+            "folder: MirrorLeech\n"
+            "```\n"
+            "`folder` is optional and relative to the WebDAV root. For "
+            "Nextcloud / ownCloud, create an **app password** under "
+            "Settings → Security instead of pasting your account password."
+        ),
+        "mode": "webdav_config",
+    },
+    "seafile": {
+        "prompt": (
+            "Send your Seafile config as `key: value` lines:\n"
+            "```\n"
+            "server_url: https://cloud.example.com\n"
+            "library_id: 11111111-2222-3333-4444-555555555555\n"
+            "api_token: <token from Profile → Settings → API Token>\n"
+            "parent_dir: /MirrorLeech\n"
+            "```\n"
+            "`parent_dir` is optional and defaults to the library root. "
+            "The library UUID appears in the URL when you open a library "
+            "in the Seafile web UI."
+        ),
+        "mode": "seafile_config",
+    },
 }
 
 # In-memory waiting state: user_id -> {"provider": str, "step": str, "tmp": ...}
@@ -987,6 +1025,16 @@ _KEY_VALUE_CONFIG_SCHEMAS: dict[str, dict[str, tuple[str, ...]]] = {
         "secrets": ("app_key_id", "app_key"),
         "plain": ("bucket", "prefix"),
         "required": ("app_key_id", "app_key", "bucket"),
+    },
+    "webdav_config": {
+        "secrets": ("password",),
+        "plain": ("url", "username", "folder"),
+        "required": ("url", "username", "password"),
+    },
+    "seafile_config": {
+        "secrets": ("api_token",),
+        "plain": ("server_url", "library_id", "parent_dir"),
+        "required": ("server_url", "library_id", "api_token"),
     },
 }
 
