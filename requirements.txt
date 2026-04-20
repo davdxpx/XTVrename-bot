@@ -24,3 +24,7 @@ msal>=1.26
 boxsdk>=3.9
 boto3>=1.34
 b2sdk>=2.1
+# Optional: natural-language time parsing for the /ml "Schedule →
+# Custom…" flow. When absent, the flow falls back to a handful of
+# strptime formats (ISO, German, bare HH:MM) so the feature still works.
+dateparser>=1.2

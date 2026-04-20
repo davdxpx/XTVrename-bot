@@ -40,6 +40,7 @@ class Database:
             self.myfiles_activity = None
             self.myfiles_quotas = None
             self.myfiles_shares = None
+            self.ml_queue = None
         else:
             try:
                 self.client = AsyncIOMotorClient(
@@ -77,6 +78,9 @@ class Database:
             self.myfiles_activity = self.db[_schema.MYFILES_ACTIVITY_COLLECTION]
             self.myfiles_quotas = self.db[_schema.MYFILES_QUOTAS_COLLECTION]
             self.myfiles_shares = self.db[_schema.MYFILES_SHARES_COLLECTION]
+            # Mirror-Leech persistent queue (scheduled + retry-backoff
+            # bookkeeping). Indexes are created lazily by Queue.ensure_indexes().
+            self.ml_queue = self.db[_schema.ML_QUEUE_COLLECTION]
 
     def _invalidate_settings_cache(self, user_id=None):
         doc_id = self._get_doc_id(user_id)

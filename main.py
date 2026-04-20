@@ -299,6 +299,15 @@ if __name__ == "__main__":
         app.loop.create_task(db_cleanup())
         app.loop.create_task(state_cleanup())
 
+        # Mirror-Leech persistent-queue worker: drains scheduled uploads
+        # and retries transient failures with exponential backoff. Safe
+        # no-op when Mongo is offline — the worker just loops.
+        try:
+            from tools.mirror_leech.Worker import start as _start_ml_worker
+            _start_ml_worker(app)
+        except Exception as e:
+            logger.warning(f"Could not start Mirror-Leech worker: {e}")
+
     except Exception as e:
         logger.warning(f"Could not schedule background tasks: {e}")
 

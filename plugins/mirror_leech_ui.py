@@ -27,7 +27,12 @@ Callback-data grammar (see Phase D plan for the full table):
     ml_opt_multi_<state_key>       → MyFiles multi-select entry
     ml_prov_<uploader>_<ctx_id>    → pick uploader for picker context
     ml_go_<ctx_id>                 → start task(s)
+    ml_sched_<ctx_id>              → open schedule picker for ctx
+    ml_schq_<when>_<ctx_id>        → quick-pick schedule (1h/night/morning)
+    ml_schc_<ctx_id>               → custom-time paste flow
     ml_cancel_<task_id>            → cancel running task
+    ml_retry_<task_id>             → manual retry on permanent-failed queue row
+    ml_qdrop_<task_id>             → dismiss permanent-failed row (delete)
     ml_queue                       → user queue
     ml_admin                       → CEO admin screen
     ml_preset_list                 → list / manage destination presets
@@ -166,8 +171,11 @@ async def _render_uploader_picker(
             InlineKeyboardButton(
                 f"🚀 Start ({len(selected)})", callback_data=f"ml_go_{cid}"
             ),
-            InlineKeyboardButton("❌ Cancel", callback_data="ml_cancel_picker"),
+            InlineKeyboardButton("🕑 Schedule", callback_data=f"ml_sched_{cid}"),
         ]
+    )
+    rows.append(
+        [InlineKeyboardButton("❌ Cancel", callback_data="ml_cancel_picker")]
     )
 
     from tools.mirror_leech.downloaders import downloader_by_id
@@ -463,6 +471,371 @@ async def ml_start_task(client: Client, callback_query: CallbackQuery) -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# Scheduling — persist the task now, run it later
+# ---------------------------------------------------------------------------
+#
+# The picker still drives which source + destinations the task will use;
+# the schedule screen just turns that selection into a persistent queue
+# row with a future `scheduled_at`. The background worker (Worker.py)
+# then picks it up when the time arrives. We deliberately do NOT support
+# scheduling for multi-file batches in this first iteration — each file
+# would need its own queue row and the UX of previewing N schedules at
+# once is messy; users wanting that can just wait to queue later.
+
+_SCHEDULE_QUICK = {
+    "1h": "In 1 hour",
+    "night": "Tonight / next 3 AM",
+    "morning": "Tomorrow 9 AM",
+}
+
+
+def _schedule_at(kind: str) -> float | None:
+    """Resolve a quick-pick name to a unix timestamp. Returns None for
+    unknown kinds so the caller can surface a clear error."""
+    import time as _time
+    from datetime import datetime, timedelta
+
+    now = _time.time()
+    if kind == "1h":
+        return now + 3600
+    now_dt = datetime.now()
+    if kind == "night":
+        target = now_dt.replace(hour=3, minute=0, second=0, microsecond=0)
+        if target <= now_dt:
+            target += timedelta(days=1)
+        return target.timestamp()
+    if kind == "morning":
+        target = now_dt.replace(hour=9, minute=0, second=0, microsecond=0)
+        target += timedelta(days=1)
+        return target.timestamp()
+    return None
+
+
+def _fmt_eta(ts: float) -> str:
+    """Short, human-friendly rendering for a future timestamp."""
+    from datetime import datetime
+
+    return datetime.fromtimestamp(ts).strftime("%a %d %b %H:%M")
+
+
+async def _render_schedule_picker(
+    client: Client,
+    chat_id: int,
+    message_id: int,
+    cid: str,
+) -> None:
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await client.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text="⌛ Picker expired — run /ml again to retry.",
+        )
+        return
+
+    rows = [
+        [
+            InlineKeyboardButton("📅 In 1 hour", callback_data=f"ml_schq_1h_{cid}"),
+            InlineKeyboardButton(
+                "🌙 Tonight 3 AM", callback_data=f"ml_schq_night_{cid}"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "☀️ Tomorrow 9 AM", callback_data=f"ml_schq_morning_{cid}"
+            ),
+            InlineKeyboardButton("✏️ Custom…", callback_data=f"ml_schc_{cid}"),
+        ],
+        [InlineKeyboardButton("← Back", callback_data=f"ml_schb_{cid}")],
+    ]
+    dests = ", ".join(f"`{u}`" for u in ctx.selected_uploaders) or "—"
+    preview = ctx.source
+    if len(preview) > 60:
+        preview = preview[:57] + "…"
+    body = (
+        f"> 🔗 `{preview}`\n"
+        f"> 📤 {dests}\n"
+        "\n"
+        "Pick when this upload should run.\n"
+        "Scheduled tasks survive bot restarts."
+    )
+    await client.edit_message_text(
+        chat_id=chat_id,
+        message_id=message_id,
+        text=frame("🕑 **Mirror-Leech — Schedule**", body),
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def _schedule_and_confirm(
+    client: Client,
+    callback_query: CallbackQuery,
+    cid: str,
+    scheduled_at: float,
+) -> None:
+    """Shared code path for both quick-picks and custom-time — writes
+    the queue row and edits the picker message into a confirmation."""
+    from tools.mirror_leech import Queue
+
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await callback_query.answer("Picker expired — run /ml again.", show_alert=True)
+        return
+    if ctx.user_id != callback_query.from_user.id:
+        await callback_query.answer(
+            "This picker belongs to another user.", show_alert=True
+        )
+        return
+    if not ctx.selected_uploaders:
+        await callback_query.answer(
+            "Pick at least one destination first.", show_alert=True
+        )
+        return
+    if ctx.file_ids:
+        await callback_query.answer(
+            "Scheduling isn't supported for multi-file batches yet.",
+            show_alert=True,
+        )
+        return
+
+    task_id = await Queue.enqueue(
+        user_id=ctx.user_id,
+        source_url=ctx.source,
+        downloader_id=ctx.candidate_downloader or None,
+        uploader_ids=list(ctx.selected_uploaders),
+        scheduled_at=scheduled_at,
+    )
+    if not task_id:
+        await callback_query.answer(
+            "Could not persist schedule — is Mongo reachable?", show_alert=True
+        )
+        return
+
+    ContextStore.drop(cid)
+    body = (
+        f"> ⏰ Runs **{_fmt_eta(scheduled_at)}**\n"
+        f"> 🆔 `{task_id}`\n"
+        f"> 📤 {', '.join(f'`{u}`' for u in ctx.selected_uploaders)}\n"
+        "\n"
+        "You'll get a message when the upload finishes.\n"
+        "Tap below to cancel before the worker picks it up."
+    )
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🗑 Cancel schedule", callback_data=f"ml_qdrop_{task_id}"
+                )
+            ],
+            [InlineKeyboardButton("📋 Open queue", callback_data="ml_queue")],
+        ]
+    )
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame("🕑 **Mirror-Leech — Scheduled**", body),
+            reply_markup=kb,
+        )
+    await callback_query.answer("Scheduled.")
+
+
+@Client.on_callback_query(filters.regex(r"^ml_sched_([A-Za-z0-9_-]{4,10})$"))
+async def ml_open_schedule(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    cid = callback_query.data.removeprefix("ml_sched_")
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await callback_query.answer("Picker expired — run /ml again.", show_alert=True)
+        return
+    if ctx.user_id != callback_query.from_user.id:
+        await callback_query.answer(
+            "This picker belongs to another user.", show_alert=True
+        )
+        return
+    if not ctx.selected_uploaders:
+        await callback_query.answer(
+            "Pick at least one destination first.", show_alert=True
+        )
+        return
+    if ctx.file_ids:
+        await callback_query.answer(
+            "Scheduling isn't supported for multi-file batches yet.",
+            show_alert=True,
+        )
+        return
+    await _render_schedule_picker(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        cid,
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(
+    filters.regex(r"^ml_schq_(1h|night|morning)_([A-Za-z0-9_-]{4,10})$")
+)
+async def ml_schedule_quick(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    payload = callback_query.data.removeprefix("ml_schq_")
+    kind, _, cid = payload.partition("_")
+    when = _schedule_at(kind)
+    if when is None:
+        await callback_query.answer("Unknown schedule preset.", show_alert=True)
+        return
+    await _schedule_and_confirm(client, callback_query, cid, when)
+
+
+@Client.on_callback_query(filters.regex(r"^ml_schc_([A-Za-z0-9_-]{4,10})$"))
+async def ml_schedule_custom(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Enter paste flow for a free-text time. Uses dateparser if
+    available, falls back to a small set of strptime formats so the
+    feature still works without the optional dep."""
+    cid = callback_query.data.removeprefix("ml_schc_")
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await callback_query.answer("Picker expired — run /ml again.", show_alert=True)
+        return
+    if ctx.user_id != callback_query.from_user.id:
+        await callback_query.answer(
+            "This picker belongs to another user.", show_alert=True
+        )
+        return
+    _paste_state[callback_query.from_user.id] = {
+        "provider": "__schedule__",
+        "cid": cid,
+    }
+    body = (
+        "> Send the scheduled time as a free-text message.\n"
+        "> Examples:\n"
+        "> `in 2 hours` · `tomorrow 18:00` · `2026-05-01 09:30`\n"
+        "\n"
+        "I'll confirm the exact runtime before saving."
+    )
+    await callback_query.message.edit_text(
+        frame("✏️ **Mirror-Leech — Custom Schedule**", body),
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("← Back", callback_data=f"ml_sched_{cid}")]]
+        ),
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.regex(r"^ml_schb_([A-Za-z0-9_-]{4,10})$"))
+async def ml_schedule_back(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Return from the schedule picker to the destination picker."""
+    cid = callback_query.data.removeprefix("ml_schb_")
+    await _render_uploader_picker(
+        client,
+        callback_query.message.chat.id,
+        callback_query.message.id,
+        cid,
+        callback_query.from_user.id,
+    )
+    await callback_query.answer()
+
+
+def _parse_free_text_time(raw: str) -> float | None:
+    """Parse a user-typed time string. Tries dateparser first (if
+    installed), then a small set of explicit strptime fallbacks. Returns
+    None if nothing parses or the resolved time is in the past."""
+    import time as _time
+    from datetime import datetime, timedelta
+
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        import dateparser  # type: ignore
+
+        dt = dateparser.parse(
+            raw,
+            settings={"PREFER_DATES_FROM": "future"},
+        )
+    except Exception:
+        dt = None
+    if dt is None:
+        for fmt in (
+            "%Y-%m-%d %H:%M",
+            "%Y-%m-%d %H:%M:%S",
+            "%d.%m.%Y %H:%M",
+            "%H:%M",
+        ):
+            try:
+                parsed = datetime.strptime(raw, fmt)
+                # Bare "HH:MM" → today at that time (or tomorrow if past).
+                if fmt == "%H:%M":
+                    now = datetime.now()
+                    parsed = parsed.replace(
+                        year=now.year, month=now.month, day=now.day
+                    )
+                    if parsed <= now:
+                        parsed += timedelta(days=1)
+                dt = parsed
+                break
+            except ValueError:
+                continue
+    if dt is None:
+        return None
+    ts = dt.timestamp()
+    if ts <= _time.time():
+        return None
+    return ts
+
+
+async def _ml_schedule_text(
+    client: Client, message: Message, state: dict
+) -> None:
+    """Paste-state handler for custom-schedule free-text."""
+    cid = state.get("cid") or ""
+    raw = message.text or ""
+    when = _parse_free_text_time(raw)
+    if when is None:
+        await message.reply_text(
+            "⚠️ Couldn't parse that time. Try `in 1 hour`, "
+            "`tomorrow 18:00`, or `2026-05-01 09:30`."
+        )
+        return
+
+    _paste_state.pop(message.from_user.id, None)
+
+    from tools.mirror_leech import Queue
+
+    ctx = ContextStore.get(cid)
+    if not ctx:
+        await message.reply_text("⌛ Picker expired — run /ml again.")
+        return
+    task_id = await Queue.enqueue(
+        user_id=ctx.user_id,
+        source_url=ctx.source,
+        downloader_id=ctx.candidate_downloader or None,
+        uploader_ids=list(ctx.selected_uploaders),
+        scheduled_at=when,
+    )
+    if not task_id:
+        await message.reply_text(
+            "❌ Could not persist schedule — is Mongo reachable?"
+        )
+        return
+    ContextStore.drop(cid)
+    await message.reply_text(
+        frame(
+            "🕑 **Mirror-Leech — Scheduled**",
+            f"> ⏰ Runs **{_fmt_eta(when)}**\n"
+            f"> 🆔 `{task_id}`\n"
+            f"> 📤 {', '.join(f'`{u}`' for u in ctx.selected_uploaders)}\n"
+            "\n"
+            "Open `/mlqueue` to see all pending tasks.",
+        )
+    )
+
+
 @Client.on_callback_query(filters.regex(r"^ml_cancel_([0-9a-f]{6,16})$"))
 async def ml_cancel_running(client: Client, callback_query: CallbackQuery) -> None:
     """Signal cancel on a running task and ack the user."""
@@ -478,6 +851,79 @@ async def ml_cancel_running(client: Client, callback_query: CallbackQuery) -> No
         return
     ml_worker_pool.cancel(task_id)
     await callback_query.answer("Cancel requested.")
+
+
+@Client.on_callback_query(filters.regex(r"^ml_retry_([0-9a-f]{6,16})$"))
+async def ml_retry_permanent(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Reset a permanent-failed row back to pending. The worker picks
+    it up on the next tick."""
+    from tools.mirror_leech import Queue
+
+    task_id = callback_query.data.removeprefix("ml_retry_")
+    entry = await Queue.get(task_id)
+    if not entry:
+        await callback_query.answer(
+            "Task not found — already dismissed?", show_alert=True
+        )
+        return
+    if entry.user_id != callback_query.from_user.id:
+        await callback_query.answer("Not your task.", show_alert=True)
+        return
+    if entry.state != Queue.STATE_PERMANENT_FAIL:
+        await callback_query.answer(
+            f"Can't retry — state is `{entry.state}`.", show_alert=True
+        )
+        return
+    ok = await Queue.reset_for_manual_retry(task_id)
+    if not ok:
+        await callback_query.answer("Retry failed — try again later.", show_alert=True)
+        return
+    await callback_query.answer("Requeued — worker will pick it up shortly.")
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame(
+                "🔁 **Mirror-Leech — Requeued**",
+                f"> 🆔 `{task_id}`\n"
+                f"> Attempt counter reset.\n"
+                "\n"
+                "Track progress in `/mlqueue`.",
+            )
+        )
+
+
+@Client.on_callback_query(filters.regex(r"^ml_qdrop_([0-9a-f]{6,16})$"))
+async def ml_queue_drop(
+    client: Client, callback_query: CallbackQuery
+) -> None:
+    """Delete a persistent queue row. Used to cancel a future-scheduled
+    task and to dismiss permanent-failed notifications."""
+    from tools.mirror_leech import Queue
+
+    task_id = callback_query.data.removeprefix("ml_qdrop_")
+    entry = await Queue.get(task_id)
+    if not entry:
+        await callback_query.answer("Already gone.", show_alert=True)
+        return
+    if entry.user_id != callback_query.from_user.id:
+        await callback_query.answer("Not your task.", show_alert=True)
+        return
+    if entry.state == Queue.STATE_RUNNING:
+        await callback_query.answer(
+            "Task is running — use Cancel on the live task.", show_alert=True
+        )
+        return
+    await Queue.delete(task_id)
+    await callback_query.answer("Removed.")
+    with contextlib.suppress(Exception):
+        await callback_query.message.edit_text(
+            frame(
+                "🗑 **Mirror-Leech — Removed**",
+                f"> 🆔 `{task_id}`\n"
+                "> Row deleted from the persistent queue.",
+            )
+        )
 
 
 @Client.on_message(filters.command("mlqueue") & filters.private)
@@ -504,21 +950,33 @@ async def _render_queue(
 ) -> None:
     from tools.mirror_leech.Tasks import ml_worker_pool
 
-    tasks = ml_worker_pool.list_for_user(user_id)[:20]
+    from tools.mirror_leech import Queue as _Queue
+
+    live_tasks = ml_worker_pool.list_for_user(user_id)[:20]
+    persistent = await _Queue.list_for_user(user_id, limit=20)
     rows: list[list[InlineKeyboardButton]] = []
-    if not tasks:
-        body = "> 📭 Your Mirror-Leech queue is empty."
-    else:
-        icon = {
-            "queued": "⏳",
-            "downloading": "⬇️",
-            "uploading": "☁️",
-            "done": "✅",
-            "failed": "❌",
-            "cancelled": "🚫",
-        }
-        lines: list[str] = []
-        for t in tasks:
+
+    icon = {
+        "queued": "⏳",
+        "downloading": "⬇️",
+        "uploading": "☁️",
+        "done": "✅",
+        "failed": "❌",
+        "cancelled": "🚫",
+        # persistent-queue-only states
+        _Queue.STATE_PENDING: "🕑",
+        _Queue.STATE_RUNNING: "🔄",
+        _Queue.STATE_FAILED: "↻",
+        _Queue.STATE_PERMANENT_FAIL: "⛔",
+    }
+
+    lines: list[str] = []
+    seen: set[str] = set()
+
+    if live_tasks:
+        lines.append("**Live tasks**")
+        for t in live_tasks:
+            seen.add(t.id)
             lines.append(
                 f"{icon.get(t.status, '•')} `{t.id}` · {t.status} · "
                 f"{t.progress_fraction * 100:.0f}%  ·  `{t.source[:50]}`"
@@ -532,6 +990,70 @@ async def _render_queue(
                         )
                     ]
                 )
+
+    scheduled = [
+        e for e in persistent
+        if e.task_id not in seen and e.state == _Queue.STATE_PENDING
+    ]
+    retrying = [
+        e for e in persistent
+        if e.task_id not in seen and e.state == _Queue.STATE_FAILED
+    ]
+    perm_failed = [
+        e for e in persistent
+        if e.task_id not in seen and e.state == _Queue.STATE_PERMANENT_FAIL
+    ]
+
+    if scheduled:
+        lines.append("")
+        lines.append("**Scheduled**")
+        for e in scheduled:
+            lines.append(
+                f"🕑 `{e.task_id}` · {_fmt_eta(e.scheduled_at)} · "
+                f"`{e.source_url[:50]}`"
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"🗑 Cancel `{e.task_id}`",
+                        callback_data=f"ml_qdrop_{e.task_id}",
+                    )
+                ]
+            )
+
+    if retrying:
+        lines.append("")
+        lines.append("**Retrying**")
+        for e in retrying:
+            when = _fmt_eta(e.next_retry_at) if e.next_retry_at else "—"
+            lines.append(
+                f"↻ `{e.task_id}` · attempt {e.attempt}/{e.max_attempts} · "
+                f"next {when}"
+            )
+
+    if perm_failed:
+        lines.append("")
+        lines.append("**Permanent failures**")
+        for e in perm_failed:
+            lines.append(
+                f"⛔ `{e.task_id}` · `{(e.last_error or '')[:60]}`"
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"🔁 Retry `{e.task_id}`",
+                        callback_data=f"ml_retry_{e.task_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "🗑",
+                        callback_data=f"ml_qdrop_{e.task_id}",
+                    ),
+                ]
+            )
+
+    if not lines:
+        body = "> 📭 Your Mirror-Leech queue is empty."
+    else:
         body = "\n".join(lines)
     rows.append([InlineKeyboardButton("↻ Refresh", callback_data="ml_queue")])
 
@@ -1174,6 +1696,11 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
     # Folder-template editor: single free-text step too.
     if state.get("provider") == "__tmpl__":
         await _ml_tmpl_text(client, message, state)
+        return
+
+    # Custom-schedule free-text (e.g. "tomorrow 18:00").
+    if state.get("provider") == "__schedule__":
+        await _ml_schedule_text(client, message, state)
         return
 
     provider = state["provider"]
