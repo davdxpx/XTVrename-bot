@@ -903,6 +903,224 @@ _BOX = DestinationGuide(
 
 
 # ---------------------------------------------------------------------------
+# S3 (generic) — 3 pages (pick backend, credentials, paste) + troubleshooting
+# ---------------------------------------------------------------------------
+_S3 = DestinationGuide(
+    provider_id="s3",
+    display_name="S3-compatible",
+    summary=(
+        "One uploader for AWS S3, Wasabi, Cloudflare R2, MinIO, iDrive "
+        "e2, Storj S3 Gateway, and anything else speaking the S3 API."
+    ),
+    required_values=["endpoint_url", "region", "bucket", "access_key", "secret_key"],
+    pages=[
+        GuidePage(
+            title="Step 1 / 3 — Pick a backend and bucket",
+            body=(
+                "> You'll need one S3-compatible bucket. The endpoint and\n"
+                "> region values depend on the provider.\n\n"
+                "**AWS S3** — console.aws.amazon.com/s3\n"
+                "    endpoint: `https://s3.<region>.amazonaws.com`\n"
+                "**Wasabi** — console.wasabisys.com/#/file_manager\n"
+                "    endpoint: `https://s3.<region>.wasabisys.com`\n"
+                "**Cloudflare R2** — dash.cloudflare.com → R2\n"
+                "    endpoint: `https://<account>.r2.cloudflarestorage.com`\n"
+                "    region: `auto`\n"
+                "**Backblaze B2 (S3 API)** — secure.backblaze.com → Buckets\n"
+                "    endpoint: `https://s3.<region>.backblazeb2.com`\n"
+                "**MinIO (self-hosted)** — whatever URL you serve MinIO on\n"
+                "**iDrive e2** — idrivee2.com → Buckets\n"
+                "    endpoint: `https://<region>.e2.idrivee2.com`\n\n"
+                "Create the bucket in the provider's console before\n"
+                "continuing — the bot doesn't auto-create buckets."
+            ),
+        ),
+        GuidePage(
+            title="Step 2 / 3 — Generate access credentials",
+            body=(
+                "> Every S3-compatible provider uses the same two values:\n"
+                "> an **access key** and a **secret key**. Names for the\n"
+                "> creation screen differ, though.\n\n"
+                "**AWS** — IAM → Users → **Create access key** → use case\n"
+                "    `Third-party service`. Attach a policy limiting the\n"
+                "    key to just the target bucket (least privilege).\n"
+                "**Wasabi** — Access Keys → **Create New Access Key**.\n"
+                "**Cloudflare R2** → Manage R2 API Tokens → **Create API\n"
+                "    token**. Scope = *Object Read & Write*, restrict to\n"
+                "    the one bucket. R2 shows both keys once — save them.\n"
+                "**Backblaze B2 (S3 API)** — App Keys → **Add a New\n"
+                "    Application Key**. The *keyID* is the access_key,\n"
+                "    the *applicationKey* is the secret_key.\n"
+                "**MinIO** — Access Keys → Create. Or use the `mc admin\n"
+                "    user add` CLI.\n"
+                "**iDrive e2** — Access Keys → Create.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 3 / 3 — Link to the bot",
+            body=(
+                "> Paste all values as `key: value` lines in a single\n"
+                "> message. The bot encrypts access_key + secret_key with\n"
+                "> Fernet and deletes your message.\n\n"
+                "Tap **📝 Paste / update credentials** below, then send:\n"
+                "```\n"
+                "endpoint: https://s3.eu-central-1.wasabisys.com\n"
+                "region: eu-central-1\n"
+                "bucket: mybucket\n"
+                "access_key: AKIA...\n"
+                "secret_key: wJalrXUt...\n"
+                "prefix: optional/sub/path\n"
+                "```\n"
+                "`prefix` is optional — every uploaded file lands under it\n"
+                "if set. `endpoint` is optional for AWS (gets inferred from\n"
+                "`region`).\n\n"
+                "Verify with **🔌 Test connection** — the bot does a\n"
+                "HEAD on the bucket and replies `bucket ok: <name>`."
+            ),
+        ),
+        _trouble_page(
+            "S3-compatible",
+            [
+                (
+                    "`SignatureDoesNotMatch`",
+                    "secret_key typo, or the key rotates trailing whitespace. "
+                    "Re-copy from the provider console paying attention to "
+                    "any `+` / `/` characters, and make sure no shell auto-"
+                    "escaped them.",
+                ),
+                (
+                    "`AccessDenied` on `head_bucket`",
+                    "The key is valid but doesn't have `s3:ListBucket` or "
+                    "`s3:GetBucketLocation`. Broaden the IAM policy (or for "
+                    "R2, widen the token scope to the target bucket).",
+                ),
+                (
+                    "`NoSuchBucket`",
+                    "Bucket doesn't exist in the region you specified. "
+                    "Either create it in the provider console, fix the "
+                    "`bucket` value, or switch `region` to the bucket's "
+                    "actual region.",
+                ),
+                (
+                    "Cloudflare R2 rejects uploads",
+                    "R2 ignores `region` and requires `region: auto`. Also "
+                    "make sure the endpoint uses your R2 account id, not "
+                    "the generic `r2.cloudflarestorage.com` host.",
+                ),
+                (
+                    "MinIO self-signed cert errors",
+                    "boto3 verifies TLS by default. Either put a valid "
+                    "cert in front of MinIO, or add a reverse proxy that "
+                    "terminates TLS cleanly. Disabling verification is "
+                    "not exposed as a knob in the bot on purpose.",
+                ),
+                (
+                    "Files upload but return no usable URL",
+                    "Private buckets return a canonical URL that isn't "
+                    "publicly accessible. Either flip the bucket to public-"
+                    "read, put a CDN in front, or implement signed URLs in "
+                    "a downstream workflow.",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
+# Backblaze B2 (native) — 2 pages (app key, paste) + troubleshooting
+# ---------------------------------------------------------------------------
+_B2 = DestinationGuide(
+    provider_id="b2",
+    display_name="Backblaze B2 (native)",
+    summary=(
+        "Native B2 SDK — pick this over the S3 endpoint for B2-specific "
+        "features like app-key capability info and hash verification."
+    ),
+    required_values=["app_key_id", "app_key", "bucket"],
+    pages=[
+        GuidePage(
+            title="Step 1 / 2 — Create a B2 app key",
+            body=(
+                "> B2 app keys are scoped and restrictable — you can pin\n"
+                "> one key to a single bucket with specific capabilities.\n\n"
+                "**1.** Open https://secure.backblaze.com/app_keys.htm\n"
+                "**2.** **Add a New Application Key**.\n"
+                "**3.** Name the key (shows up in audit logs).\n"
+                "**4.** **Allow access to Bucket:** pick the bucket you\n"
+                "    want the bot to upload to. *Restricting to one bucket\n"
+                "    is recommended* — a leaked key can only harm that one.\n"
+                "**5.** **Type of Access:** **Read and Write** (the bot\n"
+                "    needs both so it can hash-verify uploads after the\n"
+                "    fact via `b2_get_file_info`).\n"
+                "**6.** File name prefix / duration — leave empty unless\n"
+                "    you want extra limits.\n"
+                "**7.** **Create New Key**. Backblaze shows the `keyID`\n"
+                "    and `applicationKey` **once** — copy both now.\n"
+            ),
+        ),
+        GuidePage(
+            title="Step 2 / 2 — Link to the bot",
+            body=(
+                "> Paste as `key: value` lines in a single message. The\n"
+                "> bot encrypts app_key_id + app_key with Fernet and\n"
+                "> deletes your message.\n\n"
+                "Tap **📝 Paste / update credentials** below, then send:\n"
+                "```\n"
+                "app_key_id: 005a1b2c3d...\n"
+                "app_key: K005f6g7h...\n"
+                "bucket: mybucket\n"
+                "prefix: optional/sub/path\n"
+                "```\n"
+                "`prefix` is optional.\n\n"
+                "Verify with **🔌 Test connection** — the bot resolves the\n"
+                "bucket by name and replies `bucket ok: <name>` on success.\n"
+                "Resolution failures usually mean the app key is scoped to\n"
+                "a different bucket."
+            ),
+        ),
+        _trouble_page(
+            "Backblaze B2",
+            [
+                (
+                    "`unauthorized` on `authorize_account`",
+                    "keyID or applicationKey is wrong, or the key was "
+                    "deleted in the B2 console. Create a fresh key (the "
+                    "applicationKey value is only shown once) and re-paste.",
+                ),
+                (
+                    "`bad_request` / `caps exceeded`",
+                    "App key doesn't include `writeFiles` + `readFiles`. "
+                    "Create a new key with **Read and Write** access — "
+                    "you can't grow capabilities on an existing key.",
+                ),
+                (
+                    "`bucket_name_not_found`",
+                    "Either the bucket name is wrong, or the app key is "
+                    "restricted to a different bucket. Match them up in "
+                    "the B2 console's **App Keys** tab.",
+                ),
+                (
+                    "Slow uploads past 100 MB",
+                    "B2 SDK's default upload concurrency is conservative. "
+                    "For speed-critical users, consider switching to the "
+                    "generic S3 uploader pointed at the B2 S3 endpoint — "
+                    "boto3's multipart-upload code is more aggressive.",
+                ),
+                (
+                    "Download URL returns `not_authorized`",
+                    "The bucket is private. B2 public-readability is a "
+                    "per-bucket flag — flip the bucket to Public in the "
+                    "B2 console if you want the returned URLs to serve "
+                    "directly without extra auth.",
+                ),
+            ],
+        ),
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 GUIDES: dict[str, DestinationGuide] = {
@@ -915,6 +1133,8 @@ GUIDES: dict[str, DestinationGuide] = {
     "dropbox": _DROPBOX,
     "onedrive": _ONEDRIVE,
     "box": _BOX,
+    "s3": _S3,
+    "b2": _B2,
     # Intentionally no "ddl" entry: DDL is host-admin-only (env var based);
     # when it's available the user has nothing to configure, and when it
     # isn't available it's already hidden from the public settings menu.

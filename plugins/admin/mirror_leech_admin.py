@@ -85,7 +85,7 @@ def _render_text_onboarding(enabled: bool, secrets_ok: bool) -> str:
         f"**SECRETS_KEY:** {kb}\n\n"
         "What this unlocks:\n"
         "> 🔗 Mirror any HTTP(S) / yt-dlp / RSS / Telegram file\n"
-        "> ☁️ Fan out to GDrive · rclone · MEGA · GoFile · Pixeldrain · Telegram · DDL · Dropbox · OneDrive · Box\n"
+        "> ☁️ Fan out to GDrive · rclone · MEGA · GoFile · Pixeldrain · Telegram · DDL · Dropbox · OneDrive · Box · S3 · B2\n"
         "> 🧩 “☁️ Mirror-Leech Options” on every MyFiles entry\n"
         "> 📊 `/mlqueue` to track + cancel running jobs\n\n"
         "**Setup steps**\n"

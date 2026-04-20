@@ -651,6 +651,14 @@ _PROVIDER_HINTS: dict[str, str] = {
         "Needs a refresh token + client_id + client_secret from a Box custom "
         "app with Read/Write-all-files scopes."
     ),
+    "s3": (
+        "Generic S3-compatible destination. Works with AWS, Wasabi, Cloudflare "
+        "R2, MinIO, iDrive e2, Storj, and anything else speaking the S3 API."
+    ),
+    "b2": (
+        "Native Backblaze B2 — use this over the S3 endpoint when you want "
+        "B2-specific features (capability info, hash verification)."
+    ),
 }
 
 
@@ -931,10 +939,81 @@ _PROVIDER_PASTE_FORMAT: dict[str, dict[str, str]] = {
         ),
         "mode": "three_secrets:refresh_token,client_id,client_secret",
     },
+    "s3": {
+        "prompt": (
+            "Send your S3 config as `key: value` lines. Required:\n"
+            "```\n"
+            "endpoint: https://s3.eu-central-1.wasabisys.com\n"
+            "region: eu-central-1\n"
+            "bucket: mybucket\n"
+            "access_key: AKIA...\n"
+            "secret_key: wJalrXUt...\n"
+            "prefix: optional/sub/path\n"
+            "```\n"
+            "`endpoint` is optional for AWS (default endpoint inferred from "
+            "region). `prefix` is optional."
+        ),
+        "mode": "s3_config",
+    },
+    "b2": {
+        "prompt": (
+            "Send your Backblaze B2 config as `key: value` lines:\n"
+            "```\n"
+            "app_key_id: 005a1b2c3d...\n"
+            "app_key: K005f6g7h...\n"
+            "bucket: mybucket\n"
+            "prefix: optional/sub/path\n"
+            "```\n"
+            "Create the app key at secure.backblaze.com → App Keys."
+        ),
+        "mode": "b2_config",
+    },
 }
 
 # In-memory waiting state: user_id -> {"provider": str, "step": str, "tmp": ...}
 _paste_state: dict[int, dict] = {}
+
+
+# Multiline `key: value` paste modes. Each entry declares which keys are
+# treated as secrets (Fernet-encrypted) vs plain config fields, plus the
+# minimum set required before we accept the submission.
+_KEY_VALUE_CONFIG_SCHEMAS: dict[str, dict[str, tuple[str, ...]]] = {
+    "s3_config": {
+        "secrets": ("access_key", "secret_key"),
+        "plain": ("endpoint_url", "region", "bucket", "prefix"),
+        "required": ("access_key", "secret_key", "bucket"),
+    },
+    "b2_config": {
+        "secrets": ("app_key_id", "app_key"),
+        "plain": ("bucket", "prefix"),
+        "required": ("app_key_id", "app_key", "bucket"),
+    },
+}
+
+
+def _parse_key_value_paste(raw: str) -> dict[str, str]:
+    """Parse `key: value` lines into a flat dict.
+
+    Comments (`#` prefix), blank lines, and malformed lines are skipped.
+    Keys are lowercased and trimmed; the alias `endpoint` normalises to
+    `endpoint_url` so users can paste either form interchangeably.
+    """
+    out: dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            continue
+        k, _, v = line.partition(":")
+        k = k.strip().lower()
+        v = v.strip()
+        if not k or not v:
+            continue
+        if k == "endpoint":
+            k = "endpoint_url"
+        out[k] = v
+    return out
 
 
 @Client.on_callback_query(filters.regex(r"^ml_cfg_paste_([a-z0-9_]+)$"))
@@ -1037,6 +1116,26 @@ async def _ml_paste_text(client: Client, message: Message) -> None:
             await Accounts.set_plain(
                 message.from_user.id, provider, "destination", raw
             )
+        elif mode in _KEY_VALUE_CONFIG_SCHEMAS:
+            schema = _KEY_VALUE_CONFIG_SCHEMAS[mode]
+            entries = _parse_key_value_paste(raw)
+            missing = [f for f in schema["required"] if f not in entries]
+            if missing:
+                await message.reply_text(
+                    "⚠️ Missing required keys: " + ", ".join(missing)
+                )
+                return
+            for key, value in entries.items():
+                if key in schema["secrets"]:
+                    await Accounts.set_secret(
+                        message.from_user.id, provider, key, value
+                    )
+                elif key in schema["plain"]:
+                    await Accounts.set_plain(
+                        message.from_user.id, provider, key, value
+                    )
+                # Unknown keys are ignored so pasting rclone-style configs
+                # with extra fields doesn't reject valid credentials.
         else:
             await message.reply_text(f"⚠️ Unsupported paste mode `{mode}`.")
             return
