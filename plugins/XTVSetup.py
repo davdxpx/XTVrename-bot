@@ -278,12 +278,11 @@ async def pro_setup_what(client, callback_query):
     await callback_query.answer()
     body = "\n".join(
         [
-            "**The upload limits:**",
+            "> **📊 Telegram upload limits**",
+            "> Standard bots: **2 GB** per file",
+            "> Premium accounts: **4 GB** per file",
             "",
-            "• Standard Telegram bots — cap **2 GB** per file",
-            "• Telegram **Premium** accounts — cap **4 GB** per file",
-            "",
-            "**What 𝕏TV Pro™ does:**",
+            "**What 𝕏TV Pro™ does**",
             "",
             "𝕏TV Pro™ logs in a Premium **userbot** session and routes any",
             "file larger than 2 GB through it. The bot copies the file to a",
@@ -452,12 +451,11 @@ async def delete_setup_ask(client, callback_query):
         return
     text = frame(
         "🗑 **𝕏TV Pro™ — Delete Session?**",
-        "**This action will:**\n"
-        "\n"
-        "• Stop the running userbot process\n"
-        "• Erase the session string and credentials from the database\n"
-        "• Reset all lifetime upload telemetry counters\n"
-        "• Immediately disable the 4 GB upload tunnel\n"
+        "> **This action will**\n"
+        "> Stop the running userbot process\n"
+        "> Erase the session string and credentials from the database\n"
+        "> Reset all lifetime upload telemetry counters\n"
+        "> Immediately disable the 4 GB upload tunnel\n"
         "\n"
         "Re-Setup from scratch is the only way back.\n"
         "\n"
@@ -757,10 +755,9 @@ async def finalize_setup(userbot, user_id, msg):
                     "❌ **𝕏TV Pro™ — Premium Account Required**",
                     "**Your account doesn't have Telegram Premium.**\n"
                     "\n"
-                    "To unlock 4 GB uploads, either:\n"
-                    "\n"
-                    "• Subscribe to Telegram Premium on this account, or\n"
-                    "• Re-run setup with a different account that already has Premium\n"
+                    "To unlock 4 GB uploads, either subscribe to Telegram Premium "
+                    "on this account, or re-run setup with a different account "
+                    "that already has Premium.\n"
                     "\n"
                     "> Premium is required because the userbot inherits its\n"
                     "> 4 GB upload cap from the underlying account tier.",
@@ -810,9 +807,10 @@ async def finalize_setup(userbot, user_id, msg):
                     "✅ **𝕏TV Pro™ — Setup Complete**",
                     f"Successfully authenticated as **{me.first_name}**.\n"
                     "\n"
-                    "• Session string stored Fernet-encrypted in the database\n"
-                    "• Userbot process hot-started — no restart required\n"
-                    "• Tunnel ready for the 🆔 Change Tunnel step\n"
+                    "> **What just happened**\n"
+                    "> Session string stored Fernet-encrypted in the database\n"
+                    "> Userbot process hot-started — no restart required\n"
+                    "> Tunnel ready for the 🆔 Change Tunnel step\n"
                     "\n"
                     "**𝕏TV Pro™ is now active and ready to process >2 GB files.**",
                 ),
