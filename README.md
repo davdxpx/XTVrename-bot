@@ -21,7 +21,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 ---
 
 <details>
-<summary>📋 What's New in v1.6.1 — Mirror-Leech Mega Expansion</summary>
+<summary>📋 What's New in v1.6.0</summary>
 
 *   **☁️ Nine new uploaders — 14 destinations total**: The Mirror-Leech provider roster grew from five to fourteen. **Cloud-Giants**: **Dropbox** (resumable upload sessions for files > 150 MB, OAuth refresh-token flow), **OneDrive** (Microsoft Graph with MSAL-refreshed tokens, 10 MiB chunks past 4 MB), **Box** (chunked uploader for files ≥ 50 MB, rotating-refresh-token persistence). **S3-family**: generic **S3** (covers AWS / Wasabi / Cloudflare R2 / Storj / MinIO / iDrive e2 via boto3 — auto-multipart past ~8 MB) and **Backblaze B2 native** (b2sdk, capability-aware). **Self-hosted**: generic **WebDAV** (Nextcloud / ownCloud / Synology / QNAP / Apache mod_dav — iCloud Drive too via a WebDAV bridge) and **Seafile native** (REST API, per-library upload tokens). Each provider is auto-hidden from user menus when its Python package / binary / env var is missing — admins still see unavailable providers in `/admin → Mirror-Leech Config` for diagnostics.
 *   **🎯 Destination Presets**: Named fan-out groups — tap **"🎯 Archive"** and the bot queues the same file to S3 + B2 + Dropbox in one move, instead of re-ticking three checkboxes every time. Up to 5 presets per user, 8 providers per preset. Drafts live in memory until you tap **Save** so half-finished edits never hit the database. The `/ml` picker surfaces your presets as one-tap quick-selects when at least one of their providers is configured.
@@ -34,10 +34,7 @@ The **𝕏TV MediaStudio™** is a high-performance, enterprise-grade **Telegram
 *   **🔒 SECRETS_KEY Help — Admin-Only**: The `/help → Mirror-Leech → SECRETS_KEY generator` entry is now gated behind `is_admin()`. Non-admins triggering the callback directly get an admin-only alert.
 *   **🧪 XTVSetup Plugin Polish**: `plugins/xtv_pro_setup.py` → `plugins/XTVSetup.py` (rename via `git mv` preserves history). Header formatting unified with `frame_plain()` chrome, `<blockquote>` HTML replaced with markdown `> `, 8 back-button label variants collapsed into one consistent `← Back`. `_cancel_kb()` / `_error_screen()` helpers dedupe 22 inline copies.
 
-</details>
-
-<details>
-<summary>📋 What's New in v1.6.0</summary>
+---
 
 *   **🎬 Movie Auto-Detect Confirmation — Fully Working**: Change Specials / Audio / Codec buttons now appear reliably for Movies when your template uses the matching placeholders. Root cause was a long-standing singular-vs-plural template-key mismatch (`fs["type"] == "movie"` looked up against `DEFAULT_FILENAME_TEMPLATES["movies"]`) that made the three buttons silently vanish. Series happened to work only because singular == plural there. Fixed via a new `utils.detect.template_key_for()` normalizer + DB key aliasing (`database._normalize_template_keys()`) so both legacy and canonical template keys resolve correctly.
 *   **🔊 Runtime Dual / Multi Audio Auto-Fill (FFprobe)**: Before the final rename the bot now probes the actual audio streams of the downloaded file via `ffprobe`. 2 distinct streams → `DUAL`, 3+ streams → `Multi`. Applies to **Movies, Series and batch flows** — not just Movies. Fills the `{Audio}` placeholder automatically whenever the user did not already set it and did not explicitly lock it. Graceful no-op when `ffprobe` is missing, the file is a subtitle, or the user chose to lock the field.
