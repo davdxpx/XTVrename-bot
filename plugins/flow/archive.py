@@ -306,6 +306,12 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             "specials": metadata.get("specials", []),
             "codec": metadata.get("codec", ""),
             "audio": metadata.get("audio", ""),
+            # Per-category detector output (PR B).
+            "source": (metadata.get("detected_groups") or {}).get("source") or "",
+            "hdr": (metadata.get("detected_groups") or {}).get("hdr") or "",
+            "edition": [(metadata.get("detected_groups") or {}).get("edition")] if (metadata.get("detected_groups") or {}).get("edition") else [],
+            "release": list((metadata.get("detected_groups") or {}).get("release") or []),
+            "extras": list((metadata.get("detected_groups") or {}).get("extras") or []),
             "has_batch_pro": has_batch_pro,
         }
 

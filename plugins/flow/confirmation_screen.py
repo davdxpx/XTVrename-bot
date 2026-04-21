@@ -44,9 +44,83 @@ from utils.queue_manager import queue_manager
 from utils.state import clear_session, get_data, get_state, set_state, update_data
 from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
+from utils.template import safe_format
 from utils.tmdb import tmdb
 
 logger = get_logger("plugins.flow.confirmation_screen")
+
+
+# --- Placeholder-reference helpers ------------------------------------------
+# Both ``update_auto_detected_message`` and ``update_confirmation_message``
+# gate detail rows + picker buttons on which placeholders the active
+# filename template references. PR B added {Source}, {HDR}, {Edition},
+# {Release}, {Extras} as individually pickable; {Specials} stays as the
+# legacy catch-all aggregate so existing templates still work.
+
+def _template_refs(template: str) -> dict[str, bool]:
+    return {
+        "specials": "{Specials}" in template,
+        "codec":    "{Codec}" in template,
+        "audio":    "{Audio}" in template,
+        "source":   "{Source}" in template,
+        "hdr":      "{HDR}" in template,
+        "edition":  "{Edition}" in template,
+        "release":  "{Release}" in template,
+        "extras":   "{Extras}" in template,
+    }
+
+
+def _join(val):
+    """Render a list or str value as the '|'-joined display string we use
+    inside the confirm screen."""
+    if isinstance(val, list):
+        return " | ".join(s for s in val if s)
+    return str(val or "")
+
+
+def _filename_preview(fs: dict, sd: dict | None, template: str, channel: str) -> str:
+    """Render ``template`` with the session's current values so the user
+    sees what the output filename will look like live as they pick.
+
+    Builds a minimal fmt dict with zero I/O — no ffprobe, no TMDb call —
+    because the preview has to re-render on every picker tap. Values
+    come from either ``fs`` (per-file session picks) or ``sd`` (the
+    rename-wide session data). Placeholders with no value resolve to an
+    empty string; malformed templates return the raw template so the
+    user sees what they broke.
+    """
+    season = fs.get("season")
+    episode = fs.get("episode")
+    season_str = f"S{int(season):02d}" if season else ""
+    ep_str = format_episode_str(episode)
+
+    title = fs.get("title") or (sd.get("title") if sd else "") or ""
+    year = fs.get("year") or (sd.get("year") if sd else "") or ""
+    language = fs.get("language") or (sd.get("language") if sd else "") or ""
+
+    fmt = {
+        "Title": str(title),
+        "Year": str(year) if year else "",
+        "Quality": fs.get("quality") or "",
+        "Season": season_str,
+        "Episode": ep_str,
+        "Season_Episode": f"{season_str}{ep_str}",
+        "Language": language,
+        "Channel": channel or "",
+        # New split categories
+        "Source": fs.get("source") or "",
+        "HDR": fs.get("hdr") or "",
+        "Edition": _join(fs.get("edition")),
+        "Release": _join(fs.get("release")),
+        "Extras": _join(fs.get("extras")),
+        # Legacy aggregates
+        "Specials": _join(fs.get("specials")),
+        "Codec": fs.get("codec") or "",
+        "Audio": fs.get("audio") or "",
+        "filename": (fs.get("original_name") or "").rsplit(".", 1)[0],
+    }
+    result, err = safe_format(template, fmt)
+    return result if not err else template
 
 
 async def handle_auto_detection(client, message):
@@ -183,6 +257,12 @@ async def handle_auto_detection(client, message):
         "specials": metadata.get("specials", []),
         "codec": metadata.get("codec", ""),
         "audio": metadata.get("audio", ""),
+        # Per-category detector output (PR B).
+        "source": (metadata.get("detected_groups") or {}).get("source") or "",
+        "hdr": (metadata.get("detected_groups") or {}).get("hdr") or "",
+        "edition": [(metadata.get("detected_groups") or {}).get("edition")] if (metadata.get("detected_groups") or {}).get("edition") else [],
+        "release": list((metadata.get("detected_groups") or {}).get("release") or []),
+        "extras": list((metadata.get("detected_groups") or {}).get("extras") or []),
         "has_batch_pro": has_batch_pro,
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})
@@ -222,18 +302,26 @@ async def update_auto_detected_message(client, msg_id, user_id):
     template_key = template_key_for(fs["type"], is_subtitle=fs["is_subtitle"])
     template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
 
-    has_specials = "{Specials}" in template
-    has_codec = "{Codec}" in template
-    has_audio = "{Audio}" in template
+    refs = _template_refs(template)
 
-    if has_specials and fs.get('specials'):
-        specials_str = " | ".join(fs['specials'])
-        text += f"**Detected Specials:** `{specials_str}`\n"
-
-    if has_codec and fs.get('codec'):
+    # Detected value lines — only rendered when the active template
+    # actually references the placeholder, so users aren't shown data
+    # their filename doesn't use.
+    if refs["source"] and fs.get("source"):
+        text += f"**Detected Source:** `{fs['source']}`\n"
+    if refs["hdr"] and fs.get("hdr"):
+        text += f"**Detected HDR:** `{fs['hdr']}`\n"
+    if refs["edition"] and fs.get("edition"):
+        text += f"**Detected Edition:** `{' | '.join(fs['edition'])}`\n"
+    if refs["release"] and fs.get("release"):
+        text += f"**Detected Release:** `{' | '.join(fs['release'])}`\n"
+    if refs["extras"] and fs.get("extras"):
+        text += f"**Detected Extras:** `{' | '.join(fs['extras'])}`\n"
+    if refs["specials"] and fs.get("specials"):
+        text += f"**Detected Specials:** `{' | '.join(fs['specials'])}`\n"
+    if refs["codec"] and fs.get("codec"):
         text += f"**Detected Codec:** `{fs['codec']}`\n"
-
-    if has_audio and fs.get('audio'):
+    if refs["audio"] and fs.get("audio"):
         text += f"**Detected Audio:** `{fs['audio']}`\n"
 
     if fs["is_subtitle"]:
@@ -243,6 +331,14 @@ async def update_auto_detected_message(client, msg_id, user_id):
 
     if fs["type"] == "series":
         text += f"**Season:** `{fs['season']}` | **Episode:** `{format_episode_str(fs['episode'])}`\n"
+
+    # --- Live filename preview ---------------------------------------------
+    # Rebuilds every refresh so picker changes show up instantly.
+    sd = get_data(user_id) or {}
+    channel = sd.get("channel") or await db.get_channel(user_id)
+    preview = _filename_preview(fs, sd, template, channel)
+    if preview:
+        text += f"\n**Output:** `{preview}`\n"
 
     buttons = []
     buttons.append([InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")])
@@ -259,12 +355,26 @@ async def update_auto_detected_message(client, msg_id, user_id):
     if not fs["is_subtitle"]:
         dynamic_buttons.append(InlineKeyboardButton("Quality", callback_data=f"qual_menu_{msg_id}"))
 
-    if has_codec:
-        dynamic_buttons.append(InlineKeyboardButton("📼 Change Codec", callback_data=f"ch_codec_{msg_id}"))
-    if has_specials:
-        dynamic_buttons.append(InlineKeyboardButton("🎬 Change Specials", callback_data=f"ch_specials_{msg_id}"))
-    if has_audio:
-        dynamic_buttons.append(InlineKeyboardButton("🔊 Change Audio", callback_data=f"ch_audio_{msg_id}"))
+    # Category-specific pickers — each gated on its own placeholder.
+    if refs["codec"]:
+        dynamic_buttons.append(InlineKeyboardButton("📼 Codec", callback_data=f"ch_codec_{msg_id}"))
+    if refs["audio"]:
+        dynamic_buttons.append(InlineKeyboardButton("🔊 Audio", callback_data=f"ch_audio_{msg_id}"))
+    if refs["source"]:
+        dynamic_buttons.append(InlineKeyboardButton("🎬 Source", callback_data=f"ch_src_{msg_id}"))
+    if refs["hdr"]:
+        dynamic_buttons.append(InlineKeyboardButton("🌈 HDR", callback_data=f"ch_hdr_{msg_id}"))
+    if refs["edition"]:
+        dynamic_buttons.append(InlineKeyboardButton("🎭 Edition", callback_data=f"ch_edi_{msg_id}"))
+    if refs["release"]:
+        dynamic_buttons.append(InlineKeyboardButton("📦 Release", callback_data=f"ch_rel_{msg_id}"))
+    if refs["extras"]:
+        dynamic_buttons.append(InlineKeyboardButton("➕ Extras", callback_data=f"ch_ext_{msg_id}"))
+    # Legacy `{Specials}` catch-all: only shown when the user's template
+    # still uses it. Fine to show alongside the split pickers for users
+    # mid-migration.
+    if refs["specials"]:
+        dynamic_buttons.append(InlineKeyboardButton("🎞 Specials", callback_data=f"ch_specials_{msg_id}"))
 
     current_row = []
     for btn in dynamic_buttons:
@@ -306,18 +416,25 @@ async def update_confirmation_message(client, msg_id, user_id):
     template_key = template_key_for(media_type, is_subtitle=is_sub)
     template = templates.get(template_key, Config.DEFAULT_FILENAME_TEMPLATES.get(template_key, ""))
 
-    has_specials = "{Specials}" in template
-    has_codec = "{Codec}" in template
-    has_audio = "{Audio}" in template
+    refs = _template_refs(template)
 
-    if has_specials and fs.get('specials'):
-        specials_str = " | ".join(fs['specials'])
-        text += f"**Detected Specials:** `{specials_str}`\n"
-
-    if has_codec and fs.get('codec'):
+    # Detected value lines — gated by the active template's placeholders
+    # so users don't see data the filename won't actually use.
+    if refs["source"] and fs.get("source"):
+        text += f"**Detected Source:** `{fs['source']}`\n"
+    if refs["hdr"] and fs.get("hdr"):
+        text += f"**Detected HDR:** `{fs['hdr']}`\n"
+    if refs["edition"] and fs.get("edition"):
+        text += f"**Detected Edition:** `{' | '.join(fs['edition'])}`\n"
+    if refs["release"] and fs.get("release"):
+        text += f"**Detected Release:** `{' | '.join(fs['release'])}`\n"
+    if refs["extras"] and fs.get("extras"):
+        text += f"**Detected Extras:** `{' | '.join(fs['extras'])}`\n"
+    if refs["specials"] and fs.get("specials"):
+        text += f"**Detected Specials:** `{' | '.join(fs['specials'])}`\n"
+    if refs["codec"] and fs.get("codec"):
         text += f"**Detected Codec:** `{fs['codec']}`\n"
-
-    if has_audio and fs.get('audio'):
+    if refs["audio"] and fs.get("audio"):
         text += f"**Detected Audio:** `{fs['audio']}`\n"
 
     if is_sub:
@@ -327,6 +444,12 @@ async def update_confirmation_message(client, msg_id, user_id):
 
     if media_type == "series":
         text += f"**Season:** `{fs['season']}` | **Episode:** `{format_episode_str(fs['episode'])}`\n"
+
+    # --- Live filename preview ---------------------------------------------
+    channel = sd.get("channel") or await db.get_channel(user_id)
+    preview = _filename_preview(fs, sd, template, channel)
+    if preview:
+        text += f"\n**Output:** `{preview}`\n"
 
     buttons = []
     row1 = [InlineKeyboardButton("✅ Accept", callback_data=f"confirm_{msg_id}")]
@@ -347,19 +470,32 @@ async def update_confirmation_message(client, msg_id, user_id):
             )
         )
 
-    row3 = []
-    if has_codec:
-        row3.append(InlineKeyboardButton("📼 Change Codec", callback_data=f"ch_codec_{msg_id}"))
-    if has_specials:
-        row3.append(InlineKeyboardButton("🎬 Change Specials", callback_data=f"ch_specials_{msg_id}"))
-    if has_audio:
-        row3.append(InlineKeyboardButton("🔊 Change Audio", callback_data=f"ch_audio_{msg_id}"))
+    # Category picker row (template-gated).
+    picker_btns = []
+    if refs["codec"]:
+        picker_btns.append(InlineKeyboardButton("📼 Codec", callback_data=f"ch_codec_{msg_id}"))
+    if refs["audio"]:
+        picker_btns.append(InlineKeyboardButton("🔊 Audio", callback_data=f"ch_audio_{msg_id}"))
+    if refs["source"]:
+        picker_btns.append(InlineKeyboardButton("🎬 Source", callback_data=f"ch_src_{msg_id}"))
+    if refs["hdr"]:
+        picker_btns.append(InlineKeyboardButton("🌈 HDR", callback_data=f"ch_hdr_{msg_id}"))
+    if refs["edition"]:
+        picker_btns.append(InlineKeyboardButton("🎭 Edition", callback_data=f"ch_edi_{msg_id}"))
+    if refs["release"]:
+        picker_btns.append(InlineKeyboardButton("📦 Release", callback_data=f"ch_rel_{msg_id}"))
+    if refs["extras"]:
+        picker_btns.append(InlineKeyboardButton("➕ Extras", callback_data=f"ch_ext_{msg_id}"))
+    if refs["specials"]:
+        picker_btns.append(InlineKeyboardButton("🎞 Specials", callback_data=f"ch_specials_{msg_id}"))
 
     buttons.append(row1)
     if row2:
         buttons.append(row2)
-    if row3:
-        buttons.append(row3)
+    # Pack picker buttons 2 per row so a template with 6 references
+    # doesn't produce one giant unwrappable row.
+    for i in range(0, len(picker_btns), 2):
+        buttons.append(picker_btns[i:i + 2])
 
     buttons.append(
         [InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_file_{msg_id}")]
