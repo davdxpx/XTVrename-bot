@@ -1169,21 +1169,25 @@ class Database:
             return []
 
     async def get_top_users_today(self, limit=10, skip=0, date: str | None = None):
-        if self.settings is None:
+        # Usage lives on the ``MediaStudio-users`` doc as a top-level
+        # ``usage`` subdoc (post-mediastudio_layout). Before PR D the query
+        # below ran against the settings collection's pass-through ``find``
+        # searching for legacy ``user_<id>`` docs — that collection never
+        # held new quota data, so the leaderboard always came back empty.
+        if self.users is None:
             return [], 0
 
         target_date = date or datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
         try:
             query = {
-                "_id": {"$regex": "^user_"},
                 "usage.date": target_date,
-                "usage.egress_mb": {"$gt": 0}
+                "usage.egress_mb": {"$gt": 0},
             }
 
-            cursor = self.settings.find(query).sort("usage.egress_mb", -1).skip(skip).limit(limit)
+            cursor = self.users.find(query).sort("usage.egress_mb", -1).skip(skip).limit(limit)
             users = await cursor.to_list(length=limit)
-            total = await self.settings.count_documents(query)
+            total = await self.users.count_documents(query)
 
             return users, total
         except Exception as e:

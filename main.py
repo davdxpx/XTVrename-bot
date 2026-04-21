@@ -178,6 +178,19 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"consolidate_nonpublic_settings migration issue: {e}")
 
+    # --- Rescue data stranded in legacy _id: "global_settings" / "user_*" docs ---
+    # See db/migrations/rescue_legacy_settings.py for the full rationale.
+    # Drains leftover data that's invisible to the shim into the correct
+    # per-concern / per-user targets. Idempotent, backed up, safe to re-run.
+    try:
+        from db import db
+        from db.migrations.rescue_legacy_settings import run_rescue_legacy_settings
+
+        logger.info("Running DB migration: rescue_legacy_settings ...")
+        app.loop.run_until_complete(run_rescue_legacy_settings(db))
+    except Exception as e:
+        logger.warning(f"rescue_legacy_settings migration issue: {e}")
+
     # --- Restore YouTube cookies from DB (survives container redeploys) ---
     try:
         from tools.YouTubeTool import restore_youtube_cookies_from_db
