@@ -205,7 +205,17 @@ class SettingsCollectionShim:
             return None
         personal = user_doc.get("personal_settings") or {}
         # Emulate the legacy shape: doc with _id="user_<uid>" and keys flat.
+        # Top-level user-doc fields (``usage``, ``myfiles_state``,
+        # ``temp_pro_tunnel_id``, …) are surfaced at the same flat level
+        # as personal_settings so callers that did
+        #   doc = await db.settings.find_one({"_id": f"user_{uid}"})
+        #   usage = doc.get("usage", {})
+        # keep working unchanged after the write-side split now routes
+        # those keys to top-level.
         flat = {"_id": f"user_{uid}"}
+        for key in schema.USER_TOP_LEVEL_KEYS:
+            if key in user_doc:
+                flat[key] = user_doc[key]
         flat.update(personal)
         return flat
 
@@ -309,6 +319,26 @@ class SettingsCollectionShim:
 
         return last_result
 
+    @staticmethod
+    def _rewrite_user_field(key: str) -> str:
+        """Decide the path a user-doc field lands at.
+
+        Fields whose top-level segment is in ``schema.USER_TOP_LEVEL_KEYS``
+        (``usage``, ``myfiles_state``, ``temp_pro_tunnel_id``, …) keep
+        their dotted path verbatim — they're real top-level subdocs on
+        the user doc, not settings. Everything else goes under
+        ``personal_settings.<key>`` so it merges into the settings
+        namespace the rest of the bot reads from.
+
+        Before this split, quota writes like ``usage.egress_mb`` were
+        silently prefixed to ``personal_settings.usage.egress_mb`` while
+        the rest of the codebase reads top-level ``usage`` — the bucket
+        mismatch made uploads look like they weren't counting.
+        """
+        if schema.is_user_top_level_key(key):
+            return key
+        return f"personal_settings.{key}"
+
     async def _apply_personal_update(self, uid: int, update: dict, upsert: bool) -> Any:
         set_fields = _extract_set_fields(update)
         unset_fields = _extract_unset_fields(update)
@@ -316,14 +346,20 @@ class SettingsCollectionShim:
 
         rewritten: dict = {}
         if set_fields:
-            rewritten["$set"] = {f"personal_settings.{k}": v for k, v in set_fields.items()}
+            rewritten["$set"] = {
+                self._rewrite_user_field(k): v for k, v in set_fields.items()
+            }
         if unset_fields:
-            rewritten["$unset"] = {f"personal_settings.{k}": "" for k in unset_fields}
+            rewritten["$unset"] = {
+                self._rewrite_user_field(k): "" for k in unset_fields
+            }
         if other_ops:
             # For operators like $inc on personal settings: rewrite path too.
             for op, body in other_ops.items():
                 if isinstance(body, dict):
-                    rewritten[op] = {f"personal_settings.{k}": v for k, v in body.items()}
+                    rewritten[op] = {
+                        self._rewrite_user_field(k): v for k, v in body.items()
+                    }
                 else:
                     rewritten[op] = body
 
