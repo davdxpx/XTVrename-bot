@@ -81,6 +81,16 @@ class Database:
             # Mirror-Leech persistent queue (scheduled + retry-backoff
             # bookkeeping). Indexes are created lazily by Queue.ensure_indexes().
             self.ml_queue = self.db[_schema.ML_QUEUE_COLLECTION]
+            # Usage tracking — rich per-day / lifetime / daily-global rollups
+            # (PR E). Indexes are created by the usage_collection_v1 migration.
+            self.usage = self.db[_schema.USAGE_COLLECTION]
+            self.usage_alltime = self.db[_schema.USAGE_ALLTIME_COLLECTION]
+            self.usage_daily_global = self.db[_schema.USAGE_DAILY_GLOBAL_COLLECTION]
+            # UsageTracker facade — every write/read for usage counters
+            # goes through this object so the three collections stay in
+            # sync atomically. See db/usage.py.
+            from db.usage import init_usage_tracker
+            self.usage_tracker = init_usage_tracker(self)
 
     def _invalidate_settings_cache(self, user_id=None):
         doc_id = self._get_doc_id(user_id)
@@ -899,27 +909,57 @@ class Database:
             logger.error(f"Error updating feature toggle: {e}")
 
     async def get_user_usage(self, user_id: int) -> dict:
-        if self.settings is None:
+        """Return today's usage counters merged with lifetime totals so
+        callers that iterate ``usage.egress_mb`` + ``usage.egress_mb_alltime``
+        keep working after the usage_collection_v1 migration moved the
+        data out of user-doc subdocs.
+        """
+        if self.usage_tracker is None:
             return {}
         try:
-            doc = await self.settings.find_one({"_id": f"user_{user_id}"})
-            if not doc:
-                return {}
-            return doc.get("usage", {})
+            today = await self.usage_tracker.get_user_today(user_id)
+            alltime = await self.usage_tracker.get_user_alltime(user_id)
+            merged: dict = {}
+            if today:
+                merged.update(today)
+            if alltime:
+                # Expose lifetime counters under the legacy names that
+                # pre-PR-E readers expect.
+                merged["egress_mb_alltime"] = alltime.get(
+                    "egress_mb_alltime", merged.get("egress_mb_alltime", 0.0)
+                )
+                merged["file_count_alltime"] = alltime.get(
+                    "file_count_alltime", merged.get("file_count_alltime", 0)
+                )
+            return merged
         except Exception as e:
             logger.error(f"Error fetching usage for user {user_id}: {e}")
             return {}
 
     async def get_global_usage_today(self) -> float:
-        if self.settings is None:
+        """Total egress (confirmed + reserved) for the current UTC day
+        across all users. Reads from the daily-global rollup; falls back
+        to the legacy ``daily_stats`` collection when the rollup is cold
+        (first boot after migration but before any upload)."""
+        if self.usage_tracker is not None:
+            try:
+                doc = await self.usage_tracker.get_global_today()
+                if doc:
+                    return float(doc.get("total_egress_mb", 0.0)) + float(
+                        doc.get("total_reserved_egress_mb", 0.0)
+                    )
+            except Exception as e:
+                logger.warning(f"usage_tracker.get_global_today failed: {e}")
+
+        if self.daily_stats is None:
             return 0.0
-
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-
         try:
             doc = await self.daily_stats.find_one({"date": current_utc_date})
             if doc:
-                return float(doc.get("egress_mb", 0.0)) + float(doc.get("reserved_egress_mb", 0.0))
+                return float(doc.get("egress_mb", 0.0)) + float(
+                    doc.get("reserved_egress_mb", 0.0)
+                )
             return 0.0
         except Exception as e:
             logger.error(f"Error fetching global usage: {e}")
@@ -977,26 +1017,19 @@ class Database:
             return True, "", {}
 
         try:
-            doc = await self.settings.find_one({"_id": f"user_{user_id}"})
-            usage = doc.get("usage", {}) if doc else {}
-
-            if usage.get("date") != current_utc_date:
-                usage["date"] = current_utc_date
-                usage["egress_mb"] = 0.0
-                usage["reserved_egress_mb"] = 0.0
-                usage["file_count"] = 0
-                usage["quota_hits"] = 0
-
-                if "egress_mb_alltime" not in usage:
-                    usage["egress_mb_alltime"] = 0.0
-                if "file_count_alltime" not in usage:
-                    usage["file_count_alltime"] = 0
-
-                await self.settings.update_one(
-                    {"_id": f"user_{user_id}"},
-                    {"$set": {"usage": usage}},
-                    upsert=True
-                )
+            # Usage lives in MediaStudio-usage (PR E). A new day
+            # automatically becomes a new doc because the primary key
+            # includes the date — no manual "reset at midnight" needed
+            # like the old in-place subdoc model required.
+            usage = await self.usage_tracker.get_user_today(user_id) if self.usage_tracker else {}
+            if not usage:
+                usage = {
+                    "date": current_utc_date,
+                    "egress_mb": 0.0,
+                    "reserved_egress_mb": 0.0,
+                    "file_count": 0,
+                    "quota_hits": 0,
+                }
 
             current_utc = datetime.datetime.utcnow()
             tomorrow = current_utc + datetime.timedelta(days=1)
@@ -1025,136 +1058,112 @@ class Database:
             return True, "", {}
 
     async def reserve_quota(self, user_id: int, file_size_bytes: int):
-        if self.settings is None:
-            return
+        """Reserve MB on the user's day doc before upload starts.
 
+        Also keeps the legacy ``MediaStudio-daily-stats`` collection in
+        step so the admin dashboard's daily-history graph keeps working
+        until it's migrated to the new ``MediaStudio-usage-daily-global``
+        source in a follow-up PR.
+        """
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         incoming_mb = file_size_bytes / (1024 * 1024)
 
         try:
-
-            await self.daily_stats.update_one(
-                {"date": current_utc_date},
-                {"$inc": {"reserved_egress_mb": incoming_mb}},
-                upsert=True
-            )
-
-            user_doc = await self.settings.find_one({"_id": f"user_{user_id}"})
-            usage = user_doc.get("usage", {}) if user_doc else {}
-
-            if usage.get("date") != current_utc_date:
-                await self.settings.update_one(
-                    {"_id": f"user_{user_id}"},
-                    {"$set": {
-                        "usage.date": current_utc_date,
-                        "usage.egress_mb": 0.0,
-                        "usage.reserved_egress_mb": incoming_mb,
-                        "usage.file_count": 0,
-                        "usage.quota_hits": 0
-                    }},
-                    upsert=True
+            if self.daily_stats is not None:
+                await self.daily_stats.update_one(
+                    {"date": current_utc_date},
+                    {"$inc": {"reserved_egress_mb": incoming_mb}},
+                    upsert=True,
                 )
-            else:
-                await self.settings.update_one(
-                    {"_id": f"user_{user_id}"},
-                    {"$inc": {"usage.reserved_egress_mb": incoming_mb}},
-                    upsert=True
-                )
+            if self.usage_tracker is not None:
+                await self.usage_tracker.reserve_egress(user_id, incoming_mb)
         except Exception as e:
             logger.error(f"Error reserving quota: {e}")
 
     async def release_quota(self, user_id: int, file_size_bytes: int):
-        if self.settings is None:
-            return
-
+        """Undo a reservation (cancel / failure path)."""
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         incoming_mb = file_size_bytes / (1024 * 1024)
 
         try:
-
-            await self.daily_stats.update_one(
-                {"date": current_utc_date},
-                {"$inc": {"reserved_egress_mb": -incoming_mb}},
-                upsert=True
-            )
-
-            await self.settings.update_one(
-                {"_id": f"user_{user_id}"},
-                {"$inc": {"usage.reserved_egress_mb": -incoming_mb}},
-                upsert=True
-            )
+            if self.daily_stats is not None:
+                await self.daily_stats.update_one(
+                    {"date": current_utc_date},
+                    {"$inc": {"reserved_egress_mb": -incoming_mb}},
+                    upsert=True,
+                )
+            if self.usage_tracker is not None:
+                await self.usage_tracker.release_egress(user_id, incoming_mb)
         except Exception as e:
             logger.error(f"Error releasing quota: {e}")
 
     async def record_quota_hit(self, user_id: int):
-        if self.settings is None:
-            return
-
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-
         try:
-
-            await self.settings.update_one(
-                {"_id": f"user_{user_id}"},
-                {"$inc": {"usage.quota_hits": 1}},
-                upsert=True
-            )
-
-            await self.daily_stats.update_one(
-                {"date": current_utc_date},
-                {"$inc": {"quota_hits": 1}},
-                upsert=True
-            )
+            if self.usage_tracker is not None:
+                await self.usage_tracker.record_quota_hit(user_id)
+            if self.daily_stats is not None:
+                await self.daily_stats.update_one(
+                    {"date": current_utc_date},
+                    {"$inc": {"quota_hits": 1}},
+                    upsert=True,
+                )
         except Exception as e:
             logger.error(f"Error recording quota hit: {e}")
 
-    async def update_usage(self, user_id: int, processed_file_size_bytes: int, reserved_file_size_bytes: int = 0):
-        if self.settings is None:
-            return
+    async def update_usage(
+        self,
+        user_id: int,
+        processed_file_size_bytes: int,
+        reserved_file_size_bytes: int = 0,
+        *,
+        media_type: str | None = None,
+        tool_name: str | None = None,
+        pro_mode: bool = False,
+        processing_time_seconds: float | None = None,
+    ):
+        """Record a completed upload.
 
+        ``media_type`` and ``tool_name`` are optional breakdown keys the
+        tracker stores under ``by_type`` / ``by_tool`` sub-dicts on the
+        per-day + alltime + daily-global docs. ``pro_mode`` flags uploads
+        that went through the 𝕏TV Pro userbot (>2 GB files).
+
+        Old call sites that don't pass the new kwargs still work — the
+        tracker just skips the breakdown increments.
+        """
         current_utc_date = datetime.datetime.utcnow().strftime("%Y-%m-%d")
         processed_mb = processed_file_size_bytes / (1024 * 1024)
         reserved_mb = reserved_file_size_bytes / (1024 * 1024)
 
         try:
-
-            user_doc = await self.settings.find_one({"_id": f"user_{user_id}"})
-            usage = user_doc.get("usage", {}) if user_doc else {}
-
-            if usage.get("date") != current_utc_date:
-                await self.settings.update_one(
-                    {"_id": f"user_{user_id}"},
-                    {"$set": {
-                        "usage.date": current_utc_date,
-                        "usage.egress_mb": 0.0,
-                        "usage.reserved_egress_mb": 0.0,
-                        "usage.file_count": 0,
-                        "usage.quota_hits": 0
-                    }},
-                    upsert=True
+            if self.usage_tracker is not None:
+                await self.usage_tracker.record_upload(
+                    user_id,
+                    processed_mb,
+                    media_type=media_type,
+                    tool_name=tool_name,
+                    pro_mode=pro_mode,
                 )
+                if reserved_mb:
+                    await self.usage_tracker.release_egress(user_id, reserved_mb)
+                if processing_time_seconds:
+                    await self.usage_tracker.record_task_duration(
+                        user_id, processing_time_seconds
+                    )
 
-            await self.settings.update_one(
-                {"_id": f"user_{user_id}"},
-                {"$inc": {
-                    "usage.egress_mb": processed_mb,
-                    "usage.reserved_egress_mb": -reserved_mb,
-                    "usage.file_count": 1,
-                    "usage.egress_mb_alltime": processed_mb,
-                    "usage.file_count_alltime": 1
-                }},
-                upsert=True
-            )
-
-            await self.daily_stats.update_one(
-                {"date": current_utc_date},
-                {"$inc": {
-                    "egress_mb": processed_mb,
-                    "reserved_egress_mb": -reserved_mb,
-                    "file_count": 1
-                }},
-                upsert=True
-            )
+            if self.daily_stats is not None:
+                await self.daily_stats.update_one(
+                    {"date": current_utc_date},
+                    {
+                        "$inc": {
+                            "egress_mb": processed_mb,
+                            "reserved_egress_mb": -reserved_mb,
+                            "file_count": 1,
+                        }
+                    },
+                    upsert=True,
+                )
         except Exception as e:
             logger.error(f"Error updating usage: {e}")
 
@@ -1169,27 +1178,23 @@ class Database:
             return []
 
     async def get_top_users_today(self, limit=10, skip=0, date: str | None = None):
-        # Usage lives on the ``MediaStudio-users`` doc as a top-level
-        # ``usage`` subdoc (post-mediastudio_layout). Before PR D the query
-        # below ran against the settings collection's pass-through ``find``
-        # searching for legacy ``user_<id>`` docs — that collection never
-        # held new quota data, so the leaderboard always came back empty.
-        if self.users is None:
+        """Leaderboard of top users by egress for ``date`` (or today).
+
+        Reads from the MediaStudio-usage collection introduced in PR E —
+        the old code path searched for legacy ``user_<id>`` docs in
+        MediaStudio-Settings which never contained new usage data
+        post-mediastudio_layout.
+
+        Returns (rows, total). Each row is a usage doc with at least
+        ``uid``, ``date``, ``egress_mb``, ``file_count``.
+        """
+        if self.usage_tracker is None:
             return [], 0
-
         target_date = date or datetime.datetime.utcnow().strftime("%Y-%m-%d")
-
         try:
-            query = {
-                "usage.date": target_date,
-                "usage.egress_mb": {"$gt": 0},
-            }
-
-            cursor = self.users.find(query).sort("usage.egress_mb", -1).skip(skip).limit(limit)
-            users = await cursor.to_list(length=limit)
-            total = await self.users.count_documents(query)
-
-            return users, total
+            return await self.usage_tracker.get_leaderboard_day(
+                target_date, limit=limit, skip=skip
+            )
         except Exception as e:
             logger.error(f"Error fetching top users: {e}")
             return [], 0
