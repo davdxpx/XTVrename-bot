@@ -19,8 +19,16 @@ from utils.media.detect import analyze_filename, auto_match_tmdb, template_key_f
 from utils.state import clear_session, get_data, get_state, mark_for_db_persist, set_state, update_data
 from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
+from utils.template import validate_template
 from utils.tmdb import tmdb
 from utils.ui_pagination import paginate_kb
+
+# Placeholders accepted in the "enter new filename" general-rename flow.
+_GENERAL_RENAME_FIELDS = {
+    "Title", "Year", "Quality", "Season", "Episode",
+    "Season_Episode", "Language", "Channel", "Specials", "Codec", "Audio",
+    "filename",
+}
 
 logger = get_logger("plugins.flow")
 logger.info("Loading plugins.flow...")
@@ -598,6 +606,17 @@ async def handle_text_input(client, message):
         raise StopPropagation
     elif state == "awaiting_system_filename":
         template = message.text.strip()
+        ok, err = validate_template(
+            template,
+            allowed_fields={"title", "year", "season", "episode", "series_name"},
+        )
+        if not ok:
+            await message.reply_text(
+                f"❌ **Invalid system filename template**\n\n{err}\n\n"
+                f"You sent:\n`{template}`"
+            )
+            from pyrogram import StopPropagation
+            raise StopPropagation
         await db.update_template("system_filename", template, user_id=user_id)
         set_state(user_id, None)
         await message.reply_text(f"✅ System Filename template updated to:\n`{template}`")
@@ -628,6 +647,19 @@ async def handle_text_input(client, message):
             return
 
         new_name = message.text.strip()
+
+        if "{" in new_name or "}" in new_name:
+            ok, err = validate_template(new_name, allowed_fields=_GENERAL_RENAME_FIELDS)
+            if not ok:
+                await message.reply_text(
+                    f"❌ **Invalid filename template**\n\n{err}\n\n"
+                    f"You sent:\n`{new_name}`\n\n"
+                    "Please fix the braces (every `{` needs a matching `}`) "
+                    "and send the name again.",
+                    quote=True,
+                )
+                return
+
         update_data(user_id, "general_name", new_name)
 
         async def delayed_cleanup():

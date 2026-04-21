@@ -25,6 +25,7 @@ from utils.media.patterns import flatten_specials as _flatten_specials
 from utils.media.ffmpeg_tools import execute_ffmpeg, generate_ffmpeg_command, probe_file
 from utils.queue_manager import queue_manager
 from utils.telegram.progress import progress_for_pyrogram
+from utils.template import safe_format
 from utils.XTVengine import XTVEngine
 
 logger = logging.getLogger("TaskProcessor")
@@ -671,14 +672,14 @@ class TaskProcessor:
 
         if self.media_type == "general":
             template = self.data.get("general_name", "{filename}")
-            try:
-                base_name = template.format(**fmt_dict)
-                base_name = clean_filename(base_name, template)
-            except KeyError as e:
+            base_name, fmt_err = safe_format(template, fmt_dict)
+            if fmt_err:
                 logger.warning(
-                    f"KeyError {e} in general template '{template}', using fallback."
+                    f"General template {template!r} rejected ({fmt_err}); using fallback."
                 )
                 base_name = f"{safe_title}"
+            else:
+                base_name = clean_filename(base_name, template)
 
             logger.info(
                 f"[rename] user={self.user_id} mode=general "
@@ -705,12 +706,10 @@ class TaskProcessor:
                     "series", Config.DEFAULT_FILENAME_TEMPLATES["series"]
                 )
 
-            try:
-                base_name = template.format(**fmt_dict)
-                base_name = clean_filename(base_name, template)
-            except KeyError as e:
+            base_name, fmt_err = safe_format(template, fmt_dict)
+            if fmt_err:
                 logger.warning(
-                    f"KeyError {e} in template '{template}', using fallback."
+                    f"Series template {template!r} rejected ({fmt_err}); using fallback."
                 )
                 fallback_template = (
                     "{Title}.{Season_Episode}.{Quality}_[{Channel}]"
@@ -723,6 +722,8 @@ class TaskProcessor:
                     else f"{safe_title}.{season_episode}.{self.language}"
                 )
                 base_name = clean_filename(base_name, fallback_template)
+            else:
+                base_name = clean_filename(base_name, template)
 
             logger.info(
                 f"[rename] user={self.user_id} mode=series sub={self.is_subtitle} "
@@ -733,9 +734,17 @@ class TaskProcessor:
             )
 
             final_filename = f"{base_name}{ext}"
-            meta_title = self.templates.get("title", "").format(
-                title=self.title, season_episode=season_episode
+            title_template = self.templates.get("title", "")
+            meta_title, title_err = safe_format(
+                title_template,
+                {"title": self.title, "season_episode": season_episode},
             )
+            if title_err:
+                logger.warning(
+                    f"Series title template {title_template!r} rejected ({title_err}); "
+                    f"falling back to raw title."
+                )
+                meta_title = self.title or ""
         else:
             personal_type = self.data.get("personal_type")
             if personal_type:
@@ -753,12 +762,10 @@ class TaskProcessor:
                     "movies", Config.DEFAULT_FILENAME_TEMPLATES["movies"]
                 )
 
-            try:
-                base_name = template.format(**fmt_dict)
-                base_name = clean_filename(base_name, template)
-            except KeyError as e:
+            base_name, fmt_err = safe_format(template, fmt_dict)
+            if fmt_err:
                 logger.warning(
-                    f"KeyError {e} in template '{template}', using fallback."
+                    f"Movie template {template!r} rejected ({fmt_err}); using fallback."
                 )
                 fallback_template = (
                     "{Title}.{Year}.{Quality}_[{Channel}]"
@@ -771,6 +778,8 @@ class TaskProcessor:
                     else f"{safe_title}.{year_str}.{self.language}"
                 )
                 base_name = clean_filename(base_name, fallback_template)
+            else:
+                base_name = clean_filename(base_name, template)
 
             logger.info(
                 f"[rename] user={self.user_id} mode={self.media_type} sub={self.is_subtitle} "
@@ -780,11 +789,18 @@ class TaskProcessor:
             )
 
             final_filename = f"{base_name}{ext}"
-            meta_title = (
-                self.templates.get("title", "")
-                .format(title=self.title, season_episode="")
-                .strip()
+            title_template = self.templates.get("title", "")
+            meta_title, title_err = safe_format(
+                title_template,
+                {"title": self.title, "season_episode": ""},
             )
+            if title_err:
+                logger.warning(
+                    f"Movie title template {title_template!r} rejected ({title_err}); "
+                    f"falling back to raw title."
+                )
+                meta_title = self.title or ""
+            meta_title = meta_title.strip()
 
         self.output_path = os.path.join(self.download_dir, final_filename)
 
@@ -1530,11 +1546,14 @@ class TaskProcessor:
                                 "series_name": safe_title if self.media_type == "series" else "",
                             }
 
-                            # Fallback replacing standard brackets if they were used
-                            try:
-                                base_name = system_filename_template.format(**sys_fmt_dict)
-                            except KeyError:
-                                # We don't have fmt_dict here anymore, fallback to a safe title format
+                            base_name, sys_err = safe_format(
+                                system_filename_template, sys_fmt_dict
+                            )
+                            if sys_err:
+                                logger.warning(
+                                    f"System filename template {system_filename_template!r} "
+                                    f"rejected ({sys_err}); using safe title fallback."
+                                )
                                 base_name = f"{safe_title}" if safe_title else "unknown"
 
                             def clean_sys_filename(name, orig_template=""):
@@ -1769,12 +1788,23 @@ class TaskProcessor:
         file_size = os.path.getsize(self.output_path)
         size_str = self._humanbytes(file_size)
 
-        return template.format(
-            filename=filename,
-            size=size_str,
-            duration="",
-            random="".join(random.choices(string.ascii_letters + string.digits, k=8)),
+        caption, caption_err = safe_format(
+            template,
+            {
+                "filename": filename,
+                "size": size_str,
+                "duration": "",
+                "random": "".join(
+                    random.choices(string.ascii_letters + string.digits, k=8)
+                ),
+            },
         )
+        if caption_err:
+            logger.warning(
+                f"Caption template {template!r} rejected ({caption_err}); using filename."
+            )
+            return filename
+        return caption
 
     @staticmethod
     def _humanbytes(size: int) -> str:
