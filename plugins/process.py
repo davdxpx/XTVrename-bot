@@ -1401,7 +1401,26 @@ class TaskProcessor:
 
                 processed_size = os.path.getsize(self.output_path)
 
-                await db.update_usage(self.user_id, processed_size, reserved_file_size_bytes=original_size)
+                # PR E: record rich breakdown so the usage dashboard shows
+                # per-type (movie/series/…) and per-tool (rename/convert/…)
+                # counters. pro_mode flags uploads that used the 𝕏TV Pro
+                # userbot for >2 GB files.
+                media_type_key = self.media_type or None
+                tool_name_key = self.data.get("tool_name") or "rename"
+                pro_mode_flag = self.mode == "pro"
+                task_duration = None
+                if self.start_time:
+                    task_duration = max(0.0, time.time() - self.start_time)
+
+                await db.update_usage(
+                    self.user_id,
+                    processed_size,
+                    reserved_file_size_bytes=original_size,
+                    media_type=media_type_key,
+                    tool_name=tool_name_key,
+                    pro_mode=pro_mode_flag,
+                    processing_time_seconds=task_duration,
+                )
 
                 self.processing_successful = True
 

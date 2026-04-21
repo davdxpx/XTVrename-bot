@@ -27,6 +27,20 @@ MYFILES_SHARES_COLLECTION = "MediaStudio-myfiles-shares"
 # scheduled uploads.
 ML_QUEUE_COLLECTION = "MediaStudio-ml-queue"
 
+# Usage tracking (PR E).
+# ``MediaStudio-usage`` — one doc per (uid, date) with rich per-type /
+# per-tool breakdown. TTL index drops docs older than 180 days.
+# ``MediaStudio-usage-alltime`` — one doc per uid with lifetime totals,
+# streaks, peak-day pointers; never TTL'd.
+# ``MediaStudio-usage-daily-global`` — one doc per date with global
+# aggregates; TTL drops docs older than 365 days.
+USAGE_COLLECTION = "MediaStudio-usage"
+USAGE_ALLTIME_COLLECTION = "MediaStudio-usage-alltime"
+USAGE_DAILY_GLOBAL_COLLECTION = "MediaStudio-usage-daily-global"
+
+USAGE_TTL_DAYS = 180
+USAGE_DAILY_GLOBAL_TTL_DAYS = 365
+
 # Legacy names in MainDB prior to the mediastudio_layout migration.
 LEGACY_COLLECTION_NAMES = {
     "user_settings": None,  # split across Settings + users.personal_settings

@@ -83,6 +83,7 @@ def get_user_main_menu():
             ],
             [InlineKeyboardButton("☁️ Mirror-Leech", callback_data="ml_cfg")],
             [
+                InlineKeyboardButton("📊 Your Stats", callback_data="user_stats"),
                 InlineKeyboardButton("👀 View Current Config", callback_data="user_view"),
             ],
             [InlineKeyboardButton("❌ Close", callback_data="user_cancel")],
