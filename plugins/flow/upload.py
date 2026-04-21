@@ -888,6 +888,15 @@ async def handle_file_upload(client, message):
         "specials": metadata.get("specials", []),
         "codec": metadata.get("codec", ""),
         "audio": metadata.get("audio", ""),
+        # Per-category detector output (PR B) — seeds the split pickers
+        # with what the regex scanner saw in the filename. Users can
+        # override via the confirm screen; ``process.py:_source_vars``
+        # picks user input over detector output.
+        "source": (metadata.get("detected_groups") or {}).get("source") or "",
+        "hdr": (metadata.get("detected_groups") or {}).get("hdr") or "",
+        "edition": [(metadata.get("detected_groups") or {}).get("edition")] if (metadata.get("detected_groups") or {}).get("edition") else [],
+        "release": list((metadata.get("detected_groups") or {}).get("release") or []),
+        "extras": list((metadata.get("detected_groups") or {}).get("extras") or []),
         "has_batch_pro": has_batch_pro,
     }
     batch_sessions[user_id]["items"].append({"message": message, "data": data})

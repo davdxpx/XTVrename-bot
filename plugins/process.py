@@ -1913,20 +1913,63 @@ class TaskProcessor:
         }
 
     def _source_vars(self):
+        """Placeholders for the SOURCE group.
+
+        User picks (made via the confirm-screen pickers and stored on
+        ``self.data``) take precedence over the regex detector output
+        in ``self._pattern_groups``. This way a filename that originally
+        didn't carry the tag — or that the detector mismatched — still
+        gets the user's explicit choice.
+
+        ``{Specials}`` stays as the legacy aggregate. New sessions
+        populate the split category keys (``source`` / ``hdr`` / …)
+        and leave ``specials`` empty, so the aggregate folds across
+        all sources without double-counting.
+        """
         ec = self._eager_context or {}
         g = self._pattern_groups or {}
         sep = ec.get("pref_sep", ".")
-        release = g.get("release")
-        release_str = sep.join(release) if isinstance(release, list) else (release or "")
-        extras = g.get("extras")
-        extras_str = sep.join(extras) if isinstance(extras, list) else (extras or "")
+
+        def _multi_str(user_val, detector_val):
+            if user_val:
+                if isinstance(user_val, list):
+                    return sep.join(s for s in user_val if s)
+                return str(user_val)
+            if isinstance(detector_val, list):
+                return sep.join(detector_val)
+            return detector_val or ""
+
+        source_val   = self.data.get("source")   or g.get("source") or ""
+        hdr_val      = self.data.get("hdr")      or g.get("hdr") or ""
+        edition_val  = _multi_str(self.data.get("edition"),  g.get("edition"))
+        release_val  = _multi_str(self.data.get("release"),  g.get("release"))
+        extras_val   = _multi_str(self.data.get("extras"),   g.get("extras"))
+
+        # Build {Specials} as a deduped aggregate of every detected /
+        # user-picked tag so legacy templates keep working.
+        aggregate = []
+        for piece in (source_val, hdr_val, edition_val, release_val, extras_val):
+            if not piece:
+                continue
+            for part in piece.split(sep) if sep in piece else [piece]:
+                part = part.strip()
+                if part and part not in aggregate:
+                    aggregate.append(part)
+        legacy_specials = ec.get("specials_str", "")
+        if legacy_specials:
+            for part in legacy_specials.split(sep):
+                part = part.strip()
+                if part and part not in aggregate:
+                    aggregate.append(part)
+        specials_str = sep.join(aggregate)
+
         return {
-            "Source":   g.get("source") or "",
-            "HDR":      g.get("hdr") or "",
-            "Edition":  g.get("edition") or "",
-            "Release":  release_str,
-            "Extras":   extras_str,
-            "Specials": ec.get("specials_str", ""),
+            "Source":   source_val,
+            "HDR":      hdr_val,
+            "Edition":  edition_val,
+            "Release":  release_val,
+            "Extras":   extras_val,
+            "Specials": specials_str,
             "Codec":    ec.get("codec_str", ""),
             "Audio":    ec.get("audio_str", ""),
         }
