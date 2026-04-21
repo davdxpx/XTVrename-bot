@@ -61,13 +61,19 @@ def _fmt_duration(seconds: float) -> str:
     return f"{days}d {rem_hours}h"
 
 
-def _bar(value: float, max_value: float, width: int = 14) -> str:
-    """Unicode bar of ``width`` cells proportional to ``value/max_value``."""
+def _bar(value: float, max_value: float, width: int = 10) -> str:
+    """Progress bar in the house style: ``[■■■■□□□□□□]``.
+
+    Narrower (10 cells) than a classic full-block bar because the
+    brackets eat two chars and the denser ``■`` glyph reads well at
+    smaller widths. Empty state renders ``[□□…□]`` so the frame
+    stays visible even with zero progress.
+    """
     if max_value <= 0:
-        return "░" * width
+        return "[" + "□" * width + "]"
     filled = int(round((value / max_value) * width))
     filled = max(0, min(width, filled))
-    return "█" * filled + "░" * (width - filled)
+    return "[" + "■" * filled + "□" * (width - filled) + "]"
 
 
 def _shorten(label: str, n: int = 14) -> str:
@@ -127,7 +133,10 @@ async def _render_main_stats(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     """Hero card — lifetime totals + streak + today snapshot."""
     if db.usage_tracker is None:
         return (
-            "📊 **Your Stats**\n\n_Stats are unavailable right now._",
+            f"📊 **Your Stats**\n"
+            f"{DIVIDER}\n\n"
+            f"_Stats are unavailable right now._\n\n"
+            f"{DIVIDER}",
             InlineKeyboardMarkup(
                 [[InlineKeyboardButton("← Back to Settings", callback_data="user_main")]]
             ),
@@ -165,7 +174,8 @@ async def _render_main_stats(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         f"**Today ({today.get('date', '—')})**\n"
         f"• Egress: `{_fmt_mb(today.get('egress_mb', 0))}`\n"
         f"• Files: `{today.get('file_count', 0)}`\n"
-        f"• Processing time: `{_fmt_duration(today.get('processing_time_seconds', 0))}`\n"
+        f"• Processing time: `{_fmt_duration(today.get('processing_time_seconds', 0))}`\n\n"
+        f"{DIVIDER}"
     )
 
     kb = InlineKeyboardMarkup(
@@ -199,12 +209,14 @@ async def _render_history(user_id: int, days: int) -> tuple[str, InlineKeyboardM
 
     text = (
         f"📈 **Your last {days} days**\n"
+        f"> Daily egress, newest day at the top.\n"
         f"{DIVIDER}\n\n"
         f"• Egress: `{_fmt_mb(total_mb)}`\n"
         f"• Files: `{total_files}`\n"
         f"• Active days: `{active_days}/{days}`\n"
         f"• Daily average: `{_fmt_mb(total_mb / max(1, active_days))}`\n\n"
-        f"{chart}"
+        f"{chart}\n\n"
+        f"{DIVIDER}"
     )
 
     other = 30 if days == 7 else 7
@@ -233,10 +245,12 @@ async def _render_breakdown(
         alltime_map = alltime.get("by_type_alltime") or {}
         today_map = today.get("by_type") or {}
         header = "🎬 **Breakdown by media type**"
+        quote = "> Your uploads grouped by what you were renaming."
     else:
         alltime_map = alltime.get("by_tool_alltime") or {}
         today_map = today.get("by_tool") or {}
         header = "🛠 **Breakdown by tool**"
+        quote = "> Which tools you reach for the most."
 
     lifetime_block = _render_top_breakdown(alltime_map, label="Lifetime", limit=10)
     today_block = _render_top_breakdown(today_map, label="Today", limit=5)
@@ -249,7 +263,13 @@ async def _render_breakdown(
     if today_block:
         body_parts.append(today_block)
 
-    text = f"{header}\n{DIVIDER}\n\n" + "\n\n".join(body_parts)
+    text = (
+        f"{header}\n"
+        f"{quote}\n"
+        f"{DIVIDER}\n\n"
+        + "\n\n".join(body_parts)
+        + f"\n\n{DIVIDER}"
+    )
     kb = InlineKeyboardMarkup(
         [[InlineKeyboardButton("← Back", callback_data="user_stats")]]
     )

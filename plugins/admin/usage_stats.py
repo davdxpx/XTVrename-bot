@@ -47,12 +47,14 @@ def _fmt_mb(mb: float) -> str:
     return f"{gb / 1024:.2f} TB"
 
 
-def _bar(value: float, max_value: float, width: int = 14) -> str:
+def _bar(value: float, max_value: float, width: int = 10) -> str:
+    """Progress bar in the house style: ``[■■■■□□□□□□]``. See
+    ``plugins/user_stats.py:_bar`` for the design rationale."""
     if max_value <= 0:
-        return "░" * width
+        return "[" + "□" * width + "]"
     filled = int(round((value / max_value) * width))
     filled = max(0, min(width, filled))
-    return "█" * filled + "░" * (width - filled)
+    return "[" + "■" * filled + "□" * (width - filled) + "]"
 
 
 def _shorten(label: str, n: int = 14) -> str:
@@ -70,7 +72,10 @@ def _format_user_row(row: dict) -> str:
 async def _render_hero(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     if db.usage_tracker is None:
         return (
-            "📈 **Usage Stats**\n\n_Stats are unavailable right now._",
+            f"📈 **Usage Stats**\n"
+            f"{DIVIDER}\n\n"
+            f"_Stats are unavailable right now._\n\n"
+            f"{DIVIDER}",
             InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_panel")]]),
         )
     today = await db.usage_tracker.get_global_today()
@@ -81,22 +86,26 @@ async def _render_hero(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
 
     if cap_mb > 0:
         used_pct = min(100.0, (used_mb / cap_mb) * 100) if cap_mb else 0
-        gauge = f"`{_bar(used_mb, cap_mb, 18)}` `{used_pct:5.1f}%`"
+        gauge_line = (
+            f"{_bar(used_mb, cap_mb)} `{used_pct:5.1f}%`"
+        )
         cap_line = f"Cap: `{_fmt_mb(cap_mb)}`  ·  Used: `{_fmt_mb(used_mb)}`"
     else:
-        gauge = "`(no daily cap configured)`"
+        gauge_line = "_(no daily cap configured)_"
         cap_line = f"Used: `{_fmt_mb(used_mb)}`"
 
     date = today.get("date", datetime.datetime.utcnow().strftime("%Y-%m-%d"))
 
     text = (
         f"📈 **Usage Stats**\n"
+        f"> Live snapshot of today's activity across every user.\n"
         f"{DIVIDER}\n\n"
         f"**Today ({date})**\n"
-        f"{gauge}\n"
+        f"{gauge_line}\n"
         f"{cap_line}\n"
         f"• Unique users: `{unique_users}`\n"
-        f"• Files processed: `{file_count}`\n"
+        f"• Files processed: `{file_count}`\n\n"
+        f"{DIVIDER}"
     )
     kb = InlineKeyboardMarkup(
         [
@@ -133,8 +142,11 @@ async def _render_history() -> tuple[str, InlineKeyboardMarkup]:
     history = await db.usage_tracker.get_global_history(30)
     if not history:
         text = (
-            "📊 **Global history (30 days)**\n"
-            f"{DIVIDER}\n\n_No data yet._"
+            f"📊 **Global history (30 days)**\n"
+            f"> Daily egress across the entire bot.\n"
+            f"{DIVIDER}\n\n"
+            f"_No data yet._\n\n"
+            f"{DIVIDER}"
         )
         kb = InlineKeyboardMarkup(
             [[InlineKeyboardButton("← Back", callback_data="admin_usage")]]
@@ -142,17 +154,24 @@ async def _render_history() -> tuple[str, InlineKeyboardMarkup]:
         return text, kb
     reversed_hist = list(reversed(history))
     peak = max((float(h.get("total_egress_mb") or 0.0)) for h in reversed_hist)
-    chart_lines = ["📊 **Global history (last 30 days)**", DIVIDER, ""]
+    chart_lines = [
+        "📊 **Global history (last 30 days)**",
+        "> Daily egress across the entire bot, oldest day first.",
+        DIVIDER,
+        "",
+    ]
     total = 0.0
     for h in reversed_hist:
         date = h.get("date", "?")
         mb = float(h.get("total_egress_mb") or 0.0)
         total += mb
         chart_lines.append(
-            f"`{date[-5:]} {_bar(mb, peak or 1)} {_fmt_mb(mb):>9}`"
+            f"`{date[-5:]}` {_bar(mb, peak or 1)} `{_fmt_mb(mb):>9}`"
         )
     chart_lines.append("")
     chart_lines.append(f"**Window total:** `{_fmt_mb(total)}`")
+    chart_lines.append("")
+    chart_lines.append(DIVIDER)
     text = "\n".join(chart_lines)
     kb = InlineKeyboardMarkup(
         [[InlineKeyboardButton("← Back", callback_data="admin_usage")]]
@@ -167,6 +186,7 @@ async def _render_leaderboard(scope: str) -> tuple[str, InlineKeyboardMarkup]:
     if scope == "today":
         rows, _total = await db.usage_tracker.get_leaderboard_today(limit=10)
         title = "🏆 Leaderboard — Today"
+        quote = "> Top users by egress so far today."
     elif scope == "7d":
         today = datetime.datetime.utcnow().date()
         start = today - datetime.timedelta(days=6)
@@ -176,6 +196,7 @@ async def _render_leaderboard(scope: str) -> tuple[str, InlineKeyboardMarkup]:
             limit=10,
         )
         title = "🏆 Leaderboard — Last 7 days"
+        quote = "> Top users aggregated over the last 7 days."
     else:
         rows = await db.usage_tracker.get_leaderboard_alltime(limit=10)
         # Normalise lifetime rows so the formatter can reuse _format_user_row.
@@ -188,6 +209,7 @@ async def _render_leaderboard(scope: str) -> tuple[str, InlineKeyboardMarkup]:
             for r in rows
         ]
         title = "🏆 Leaderboard — Lifetime"
+        quote = "> Top users by lifetime egress since day one."
 
     if not rows:
         body = "_No entries yet._"
@@ -198,7 +220,13 @@ async def _render_leaderboard(scope: str) -> tuple[str, InlineKeyboardMarkup]:
             body_lines.append(f"{medal} {_format_user_row(row)}")
         body = "\n".join(body_lines)
 
-    text = f"{title}\n{DIVIDER}\n\n{body}"
+    text = (
+        f"{title}\n"
+        f"{quote}\n"
+        f"{DIVIDER}\n\n"
+        f"{body}\n\n"
+        f"{DIVIDER}"
+    )
     kb = InlineKeyboardMarkup(
         [
             [
@@ -233,10 +261,12 @@ async def _render_global_breakdown(kind: str) -> tuple[str, InlineKeyboardMarkup
         today_map = today.get("by_type_totals") or {}
         history_key = "by_type_totals"
         header = "🎬 **Global breakdown — media type**"
+        quote = "> Which media types the bot processes most."
     else:
         today_map = today.get("by_tool_totals") or {}
         history_key = "by_tool_totals"
         header = "🛠 **Global breakdown — tool**"
+        quote = "> Which tools users reach for most."
 
     # Aggregate over last 30 days from history.
     agg: dict[str, dict] = {}
@@ -275,10 +305,12 @@ async def _render_global_breakdown(kind: str) -> tuple[str, InlineKeyboardMarkup
             )
         return "\n".join(lines)
 
-    text_parts = [header, DIVIDER, ""]
+    text_parts = [header, quote, DIVIDER, ""]
     text_parts.append(_render_list(today_map, "Today"))
     text_parts.append("")
     text_parts.append(_render_list(agg, "Last 30 days"))
+    text_parts.append("")
+    text_parts.append(DIVIDER)
     text = "\n".join(text_parts)
 
     kb = InlineKeyboardMarkup(
@@ -290,15 +322,14 @@ async def _render_global_breakdown(kind: str) -> tuple[str, InlineKeyboardMarkup
 async def _render_purge_confirm() -> tuple[str, InlineKeyboardMarkup]:
     from db import schema
     text = (
-        "🧹 **Purge old usage data**\n"
+        f"🧹 **Purge old usage data**\n"
+        f"> TTL indexes do this automatically — only use to free space now.\n"
         f"{DIVIDER}\n\n"
         f"This will delete:\n"
         f"• Per-user daily docs older than **{schema.USAGE_TTL_DAYS} days**.\n"
         f"• Global daily docs older than **{schema.USAGE_DAILY_GLOBAL_TTL_DAYS} days**.\n\n"
-        f"TTL indexes usually handle this automatically. Only use this if\n"
-        f"you want to free space *now* rather than waiting for MongoDB's\n"
-        f"60-second TTL sweep.\n\n"
-        f"Continue?"
+        f"Continue?\n\n"
+        f"{DIVIDER}"
     )
     kb = InlineKeyboardMarkup(
         [
@@ -317,12 +348,13 @@ async def _run_purge() -> tuple[str, InlineKeyboardMarkup]:
     user_stats = await db.usage_tracker.purge_old_days()
     global_stats = await db.usage_tracker.purge_old_global_days()
     text = (
-        "✅ **Purge complete**\n"
+        f"✅ **Purge complete**\n"
         f"{DIVIDER}\n\n"
         f"• User-day docs deleted: `{user_stats.get('deleted', 0)}`\n"
         f"   cutoff: `{user_stats.get('cutoff', '?')}`\n"
         f"• Global-day docs deleted: `{global_stats.get('deleted', 0)}`\n"
-        f"   cutoff: `{global_stats.get('cutoff', '?')}`\n"
+        f"   cutoff: `{global_stats.get('cutoff', '?')}`\n\n"
+        f"{DIVIDER}"
     )
     kb = InlineKeyboardMarkup(
         [[InlineKeyboardButton("← Back", callback_data="admin_usage")]]
