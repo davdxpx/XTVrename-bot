@@ -49,7 +49,6 @@ from utils.template import (
     render_preview,
 )
 
-
 DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
 
 
@@ -179,7 +178,7 @@ def render_reference(field: str, group_key: str, origin: str) -> Tuple[str, Inli
         "",
         *body_lines,
         "",
-        f"> Placeholders resolve to an empty string when unavailable (e.g. no TMDb match, subtitle without probe).",
+        "> Placeholders resolve to an empty string when unavailable (e.g. no TMDb match, subtitle without probe).",
         "",
         f"Group {current_idx} of {total}",
     ]
