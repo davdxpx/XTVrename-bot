@@ -191,6 +191,19 @@ if __name__ == "__main__":
     except Exception as e:
         logger.warning(f"rescue_legacy_settings migration issue: {e}")
 
+    # --- Move per-user usage into MediaStudio-usage collection ---
+    # See db/migrations/usage_collection_v1.py. Creates indexes, backfills
+    # per-day + alltime + daily-global docs from legacy user.usage subdocs,
+    # then unsets the legacy subdocs.
+    try:
+        from db import db
+        from db.migrations.usage_collection_v1 import run_usage_collection_v1
+
+        logger.info("Running DB migration: usage_collection_v1 ...")
+        app.loop.run_until_complete(run_usage_collection_v1(db))
+    except Exception as e:
+        logger.warning(f"usage_collection_v1 migration issue: {e}")
+
     # --- Restore YouTube cookies from DB (survives container redeploys) ---
     try:
         from tools.YouTubeTool import restore_youtube_cookies_from_db

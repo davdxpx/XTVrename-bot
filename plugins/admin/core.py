@@ -105,12 +105,15 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
                     "📊 Usage Dashboard", callback_data="admin_usage_dashboard"
                 ),
                 InlineKeyboardButton(
-                    "📢 Broadcast Message", callback_data="admin_broadcast"
+                    "📈 Usage Stats", callback_data="admin_usage"
                 ),
             ]
         )
         keyboard.append(
             [
+                InlineKeyboardButton(
+                    "📢 Broadcast Message", callback_data="admin_broadcast"
+                ),
                 InlineKeyboardButton(
                     myfiles_txt, callback_data="admin_myfiles_settings"
                 ),
@@ -140,6 +143,13 @@ def get_admin_main_menu(pro_session, public_mode, myfiles_enabled=True):
                 InlineKeyboardButton(
                     "📊 Usage Dashboard", callback_data="admin_usage_dashboard"
                 ),
+                InlineKeyboardButton(
+                    "📈 Usage Stats", callback_data="admin_usage"
+                ),
+            ]
+        )
+        keyboard.append(
+            [
                 InlineKeyboardButton("👀 View Settings", callback_data="admin_view"),
             ]
         )
