@@ -1165,7 +1165,15 @@ async def handle_user_photo(client, message):
         raise ContinuePropagation
 
     user_id = message.from_user.id
-    if user_sessions.get(user_id) != "awaiting_user_thumb":
+    # user_sessions[user_id] is stored as a dict ({"state": ..., "msg_id": ...})
+    # everywhere it's set in this file. Reading as a bare string here meant
+    # the comparison never matched, so every thumbnail upload fell through
+    # to the rename flow's file-upload handler and opened a confirm screen
+    # instead of saving the thumbnail. Mirror the defensive read pattern
+    # used by the text handler below (line ~1218) for consistency.
+    state_obj = user_sessions.get(user_id)
+    state = state_obj if isinstance(state_obj, str) else (state_obj or {}).get("state")
+    if state != "awaiting_user_thumb":
         raise ContinuePropagation
 
     msg = await message.reply_text("Processing thumbnail...")
