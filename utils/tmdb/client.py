@@ -201,11 +201,10 @@ class TMDb:
         cached = type(self)._details_cache.get(cache_key)
         if cached is not None:
             # LRU touch
+            import contextlib as _contextlib
             order = type(self)._details_cache_order
-            try:
+            with _contextlib.suppress(ValueError):
                 order.remove(cache_key)
-            except ValueError:
-                pass
             order.append(cache_key)
             return cached
 

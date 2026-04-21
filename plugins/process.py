@@ -1,11 +1,13 @@
 # --- Imports ---
 import asyncio
 import contextlib
+import datetime as _dt
 import logging
 import math
 import os
 import random
 import re
+import secrets as _secrets
 import shutil
 import string
 import time
@@ -20,9 +22,13 @@ from pyrogram.types import Message
 from config import Config
 from db import db
 from utils.media.detect import apply_autofill, probe_audio_streams
+from utils.media.ffmpeg_tools import (
+    execute_ffmpeg,
+    generate_ffmpeg_command,
+    probe_file,
+)
 from utils.media.patterns import detect_all as _detect_patterns
 from utils.media.patterns import flatten_specials as _flatten_specials
-from utils.media.ffmpeg_tools import execute_ffmpeg, generate_ffmpeg_command, probe_file
 from utils.queue_manager import queue_manager
 from utils.telegram.progress import progress_for_pyrogram
 from utils.template import (
@@ -33,10 +39,6 @@ from utils.template import (
 )
 from utils.tmdb import tmdb
 from utils.XTVengine import XTVEngine
-
-import datetime as _dt
-import secrets as _secrets
-import string as _string
 
 logger = logging.getLogger("TaskProcessor")
 
@@ -668,23 +670,6 @@ class TaskProcessor:
             "codec_str": codec_str,
             "audio_str": audio_str,
             "ext_hint": ext,
-        }
-
-        fmt_dict = {
-            "Title": safe_title,
-            "Year": year_str,
-            "Quality": self.quality,
-            "Season": season_str,
-            "Episode": episode_str,
-            "Season_Episode": season_episode,
-            "Language": self.language,
-            "Channel": self.channel,
-            "Specials": specials_str,
-            "Codec": codec_str,
-            "Audio": audio_str,
-            "filename": (
-                os.path.splitext(self.original_name)[0] if self.original_name else ""
-            ),
         }
 
         def clean_filename(name, orig_template=""):
@@ -1930,16 +1915,11 @@ class TaskProcessor:
     def _source_vars(self):
         ec = self._eager_context or {}
         g = self._pattern_groups or {}
+        sep = ec.get("pref_sep", ".")
         release = g.get("release")
-        if isinstance(release, list):
-            release_str = ec.get("pref_sep", ".").join(release)
-        else:
-            release_str = release or ""
+        release_str = sep.join(release) if isinstance(release, list) else (release or "")
         extras = g.get("extras")
-        if isinstance(extras, list):
-            extras_str = ec.get("pref_sep", ".").join(extras)
-        else:
-            extras_str = extras or ""
+        extras_str = sep.join(extras) if isinstance(extras, list) else (extras or "")
         return {
             "Source":   g.get("source") or "",
             "HDR":      g.get("hdr") or "",
@@ -1965,7 +1945,7 @@ class TaskProcessor:
             except OSError:
                 pass
         now = _dt.datetime.utcnow()
-        token = "".join(_secrets.choice(_string.ascii_letters + _string.digits) for _ in range(8))
+        token = "".join(_secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
         # Hashtag derived from title (+ season for series) — alnum only.
         base_tag = re.sub(r"[^A-Za-z0-9]", "", self.title or "")
         if self.media_type == "series" and self.season:
@@ -2068,10 +2048,11 @@ class TaskProcessor:
         ec = self._eager_context or {}
         sep = ec.get("pref_sep", ".")
         genres = details.get("genres") or []
-        if isinstance(genres, list):
-            genres_str = sep.join(g for g in genres if g)
-        else:
-            genres_str = str(genres or "")
+        genres_str = (
+            sep.join(g for g in genres if g)
+            if isinstance(genres, list)
+            else str(genres or "")
+        )
         countries = details.get("production_countries") or []
         countries_str = sep.join(c for c in countries if c) if isinstance(countries, list) else str(countries or "")
         networks = details.get("networks") or []
