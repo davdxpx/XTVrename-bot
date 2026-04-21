@@ -30,6 +30,19 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 from config import Config
 from db import db
 from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
+from utils.template import validate_template
+
+# Known fields per filename-template key, kept in sync with process.py.
+_FILENAME_TEMPLATE_FIELDS = {
+    "Title", "Year", "Quality", "Season", "Episode",
+    "Season_Episode", "Language", "Channel", "Specials", "Codec", "Audio",
+}
+_PERSONAL_TEMPLATE_FIELDS = {
+    "Title", "Year", "Quality", "Season", "Episode",
+    "Season_Episode", "Language", "Channel",
+}
+_METADATA_TEMPLATE_FIELDS = {"title", "season_episode", "lang"}
+_CAPTION_TEMPLATE_FIELDS = {"filename", "size", "duration", "random"}
 
 
 def get_admin_templates_menu():
@@ -453,7 +466,17 @@ async def _handle_template_text(client, message, state, state_obj, msg_id):
     """Handle awaiting_template_* and awaiting_caption states."""
     user_id = message.from_user.id
     field = state.split("_")[-1]
-    new_template = message.text
+    new_template = message.text or ""
+
+    allowed = _CAPTION_TEMPLATE_FIELDS if field == "caption" else _METADATA_TEMPLATE_FIELDS
+    ok, err = validate_template(new_template, allowed_fields=allowed)
+    if not ok:
+        await message.reply_text(
+            f"❌ **Invalid template**\n\n{err}\n\n"
+            f"You sent:\n`{new_template}`"
+        )
+        return
+
     await db.update_template(field, new_template)
     if field == "caption":
         reply_markup = InlineKeyboardMarkup(
@@ -474,7 +497,20 @@ async def _handle_fn_template_text(client, message, state, state_obj, msg_id):
     """Handle awaiting_fn_template_* states."""
     user_id = message.from_user.id
     field = state.replace("awaiting_fn_template_", "")
-    new_template = message.text
+    new_template = message.text or ""
+
+    if field.lower().startswith("personal_"):
+        allowed = _PERSONAL_TEMPLATE_FIELDS
+    else:
+        allowed = _FILENAME_TEMPLATE_FIELDS
+    ok, err = validate_template(new_template, allowed_fields=allowed)
+    if not ok:
+        await message.reply_text(
+            f"❌ **Invalid filename template**\n\n{err}\n\n"
+            f"You sent:\n`{new_template}`"
+        )
+        return
+
     await db.update_filename_template(field, new_template)
     reply_markup = InlineKeyboardMarkup(
         [[InlineKeyboardButton("← Back to Filename Templates", callback_data="admin_filename_templates")]]

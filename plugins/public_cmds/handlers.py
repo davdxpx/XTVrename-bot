@@ -26,10 +26,22 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from config import BOT_START_TIME, Config
 from db import db
 from utils.telegram.log import get_logger
+from utils.template import validate_template
 
 logger = get_logger("plugins.public_cmds.handlers")
 
 user_sessions = {}
+
+_USER_FILENAME_TEMPLATE_FIELDS = {
+    "Title", "Year", "Quality", "Season", "Episode",
+    "Season_Episode", "Language", "Channel", "Specials", "Codec", "Audio",
+}
+_USER_PERSONAL_TEMPLATE_FIELDS = {
+    "Title", "Year", "Quality", "Season", "Episode",
+    "Season_Episode", "Language", "Channel",
+}
+_USER_METADATA_TEMPLATE_FIELDS = {"title", "season_episode", "lang"}
+_USER_CAPTION_TEMPLATE_FIELDS = {"filename", "size", "duration", "random"}
 
 # === Helper Functions ===
 def get_user_main_menu():
@@ -1243,7 +1255,20 @@ async def handle_user_text(client, message):
 
     if state.startswith("awaiting_user_template_"):
         field = state.split("_")[-1]
-        new_template = message.text
+        new_template = message.text or ""
+
+        allowed = (
+            _USER_CAPTION_TEMPLATE_FIELDS if field == "caption"
+            else _USER_METADATA_TEMPLATE_FIELDS
+        )
+        ok, err = validate_template(new_template, allowed_fields=allowed)
+        if not ok:
+            await message.reply_text(
+                f"❌ **Invalid template**\n\n{err}\n\n"
+                f"You sent:\n`{new_template}`"
+            )
+            raise StopPropagation
+
         await db.update_template(field, new_template, user_id)
 
         if field == "caption":
@@ -1269,7 +1294,20 @@ async def handle_user_text(client, message):
 
     elif state.startswith("awaiting_user_fn_template_"):
         field = state.replace("awaiting_user_fn_template_", "")
-        new_template = message.text
+        new_template = message.text or ""
+
+        if field.lower().startswith("personal_"):
+            allowed = _USER_PERSONAL_TEMPLATE_FIELDS
+        else:
+            allowed = _USER_FILENAME_TEMPLATE_FIELDS
+        ok, err = validate_template(new_template, allowed_fields=allowed)
+        if not ok:
+            await message.reply_text(
+                f"❌ **Invalid filename template**\n\n{err}\n\n"
+                f"You sent:\n`{new_template}`"
+            )
+            raise StopPropagation
+
         await db.update_filename_template(field, new_template, user_id)
 
         reply_markup = InlineKeyboardMarkup(
