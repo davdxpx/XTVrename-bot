@@ -69,11 +69,22 @@ VIRTUAL_DOC_IDS = {VIRTUAL_GLOBAL_SETTINGS, VIRTUAL_PUBLIC_MODE_CONFIG}
 
 # All real Settings docs that the shim merges when reading a virtual doc
 # ID. The order matters — the merge iterates in this exact sequence and
-# later docs overwrite earlier ones on key collision. LEGACY_MISC_DOC_ID
-# is listed first so authoritative per-concern docs always win over
-# leftover data from older deployments (keys that used to land in
+# later docs overwrite earlier ones on key collision.
+#
+# VIRTUAL_GLOBAL_SETTINGS leads the list as a safety net for legacy
+# deployments that still have leftover data in the real ``global_settings``
+# document (pre-shim writes, or state that survived the original
+# ``mediastudio_layout`` migration because it never lived in the old
+# ``user_settings`` collection it walked). Putting it first means any
+# authoritative per-concern doc overrides it; the ``rescue_legacy_settings``
+# migration eventually drains and removes that doc entirely, but until it
+# runs this fallback keeps the data visible instead of silently dropped.
+#
+# LEGACY_MISC_DOC_ID follows so authoritative per-concern docs always win
+# over leftover data from older deployments (keys that used to land in
 # legacy_misc before the dotted-key routing landed).
 MERGED_GLOBAL_DOCS = (
+    VIRTUAL_GLOBAL_SETTINGS,
     LEGACY_MISC_DOC_ID,
     DOC_BRANDING,
     DOC_FORCE_SUB,
@@ -228,6 +239,42 @@ PERSONAL_KEYS = frozenset(
         "mirror_leech_webhook",
     }
 )
+
+# --- User-doc top-level keys ---
+#
+# When the shim receives a write for ``{"_id": "user_<uid>"}`` it routes
+# the fields into ``MediaStudio-users.<uid>``. By default everything lands
+# under ``personal_settings.<key>`` so users' rename templates, dumb
+# channels etc. live side-by-side with account metadata.
+#
+# A handful of fields are *not* settings — they're top-level subdocs on
+# the user doc created by the ``mediastudio_layout`` migration
+# (``usage``, ``myfiles_state``) or transient session identifiers
+# (``temp_pro_tunnel_id``). These keys must NOT be prefixed with
+# ``personal_settings.`` — otherwise quota writes silently double-bucket
+# and reads that look at top-level ``usage`` see stale data.
+#
+# Dotted keys (``usage.egress_mb``) match by their first segment: the
+# segment before the first dot is looked up against this set.
+
+USER_TOP_LEVEL_KEYS = frozenset(
+    {
+        "usage",              # daily / all-time quota tracking
+        "myfiles_state",      # per-user MyFiles navigation state
+        "temp_pro_tunnel_id", # transient 𝕏TV Pro tunnel handle
+        "flow_session",       # crash-recovery snapshot of the rename flow
+        "flow_session_updated",
+    }
+)
+
+
+def is_user_top_level_key(key: str) -> bool:
+    """Return True when ``key`` (possibly dotted like 'usage.egress_mb')
+    targets a top-level field on a user doc, not a personal_settings
+    subkey."""
+    top = key.partition(".")[0]
+    return top in USER_TOP_LEVEL_KEYS
+
 
 # --- Whole-doc upsert routing ---
 #
