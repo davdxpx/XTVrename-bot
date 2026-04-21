@@ -74,7 +74,7 @@ async def _render_hero(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         return (
             f"📈 **Usage Stats**\n"
             f"{DIVIDER}\n\n"
-            f"_Stats are unavailable right now._\n\n"
+            f"__Stats are unavailable right now.__\n\n"
             f"{DIVIDER}",
             InlineKeyboardMarkup([[InlineKeyboardButton("← Back", callback_data="admin_panel")]]),
         )
@@ -91,7 +91,7 @@ async def _render_hero(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         )
         cap_line = f"Cap: `{_fmt_mb(cap_mb)}`  ·  Used: `{_fmt_mb(used_mb)}`"
     else:
-        gauge_line = "_(no daily cap configured)_"
+        gauge_line = "__(no daily cap configured)__"
         cap_line = f"Used: `{_fmt_mb(used_mb)}`"
 
     date = today.get("date", datetime.datetime.utcnow().strftime("%Y-%m-%d"))
@@ -145,7 +145,7 @@ async def _render_history() -> tuple[str, InlineKeyboardMarkup]:
             f"📊 **Global history (30 days)**\n"
             f"> Daily egress across the entire bot.\n"
             f"{DIVIDER}\n\n"
-            f"_No data yet._\n\n"
+            f"__No data yet.__\n\n"
             f"{DIVIDER}"
         )
         kb = InlineKeyboardMarkup(
@@ -212,7 +212,7 @@ async def _render_leaderboard(scope: str) -> tuple[str, InlineKeyboardMarkup]:
         quote = "> Top users by lifetime egress since day one."
 
     if not rows:
-        body = "_No entries yet._"
+        body = "__No entries yet.__"
     else:
         body_lines = []
         for i, row in enumerate(rows, start=1):
@@ -292,7 +292,7 @@ async def _render_global_breakdown(kind: str) -> tuple[str, InlineKeyboardMarkup
                 )
             )
         if not rows:
-            return f"**{title}**\n_No data._"
+            return f"**{title}**\n__No data.__"
         rows.sort(key=lambda r: r[1], reverse=True)
         rows = rows[:10]
         peak = rows[0][1] or 1

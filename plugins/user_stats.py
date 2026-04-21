@@ -84,7 +84,7 @@ def _shorten(label: str, n: int = 14) -> str:
 def _render_history_chart(history: list[dict], *, days_label: str) -> str:
     """Render a text bar chart of daily egress over the given history."""
     if not history:
-        return "_No activity yet._"
+        return "__No activity yet.__"
     reversed_hist = list(reversed(history))  # oldest first for left-to-right
     peak = max((h.get("egress_mb") or 0.0) for h in reversed_hist)
     lines = [f"📈 **{days_label} egress (MB)**"]
@@ -135,7 +135,7 @@ async def _render_main_stats(user_id: int) -> tuple[str, InlineKeyboardMarkup]:
         return (
             f"📊 **Your Stats**\n"
             f"{DIVIDER}\n\n"
-            f"_Stats are unavailable right now._\n\n"
+            f"__Stats are unavailable right now.__\n\n"
             f"{DIVIDER}",
             InlineKeyboardMarkup(
                 [[InlineKeyboardButton("← Back to Settings", callback_data="user_main")]]
@@ -259,7 +259,7 @@ async def _render_breakdown(
     if lifetime_block:
         body_parts.append(lifetime_block)
     else:
-        body_parts.append("_No lifetime breakdown yet — upload some files!_")
+        body_parts.append("__No lifetime breakdown yet — upload some files!__")
     if today_block:
         body_parts.append(today_block)
 
