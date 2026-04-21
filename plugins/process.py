@@ -25,8 +25,18 @@ from utils.media.patterns import flatten_specials as _flatten_specials
 from utils.media.ffmpeg_tools import execute_ffmpeg, generate_ffmpeg_command, probe_file
 from utils.queue_manager import queue_manager
 from utils.telegram.progress import progress_for_pyrogram
-from utils.template import safe_format
+from utils.template import (
+    SCOPE_GROUPS,
+    allowed_fields_for,
+    apply_trim,
+    safe_format,
+)
+from utils.tmdb import tmdb
 from utils.XTVengine import XTVEngine
+
+import datetime as _dt
+import secrets as _secrets
+import string as _string
 
 logger = logging.getLogger("TaskProcessor")
 
@@ -89,6 +99,17 @@ class TaskProcessor:
         self.tunnel_id = None
         self.tunneled_message_id = None
         self.is_priority = False
+
+        # Template-system caches, populated lazily by `_build_fmt_dict`
+        # the first time a scope/template needs them. Storing as None so
+        # the attribute always exists — cheaper than hasattr checks.
+        self._tmdb_details_data = None
+        self._input_probe_data = None
+        self._output_probe_data = None
+        # Populated in `_prepare_resources` — every new placeholder reads
+        # from here to avoid re-deriving formatted strings mid-pipeline.
+        self._eager_context = {}
+        self._pattern_groups = None
 
         try:
             user_bot = getattr(self.client, "user_bot", None)
@@ -632,6 +653,23 @@ class TaskProcessor:
         codec_str = pref_sep.join(extracted_codec)
         audio_str = pref_sep.join(extracted_audio)
 
+        # Stash the raw pattern groups so SOURCE placeholders (Source, HDR,
+        # Edition, Release, Extras) can read them later without re-running
+        # the detector.
+        self._pattern_groups = _fallback_groups if _fallback_groups is not None else _detect_patterns(self.original_name or "")
+        self._eager_context = {
+            "safe_title": safe_title,
+            "year_str": year_str,
+            "season_str": season_str,
+            "episode_str": episode_str,
+            "season_episode": season_episode,
+            "pref_sep": pref_sep,
+            "specials_str": specials_str,
+            "codec_str": codec_str,
+            "audio_str": audio_str,
+            "ext_hint": ext,
+        }
+
         fmt_dict = {
             "Title": safe_title,
             "Year": year_str,
@@ -672,7 +710,8 @@ class TaskProcessor:
 
         if self.media_type == "general":
             template = self.data.get("general_name", "{filename}")
-            base_name, fmt_err = safe_format(template, fmt_dict)
+            scope_fmt = await self._build_fmt_dict("filename_general", template)
+            base_name, fmt_err = safe_format(template, scope_fmt)
             if fmt_err:
                 logger.warning(
                     f"General template {template!r} rejected ({fmt_err}); using fallback."
@@ -701,12 +740,15 @@ class TaskProcessor:
                     "subtitles_series",
                     Config.DEFAULT_FILENAME_TEMPLATES["subtitles_series"],
                 )
+                fn_scope = "filename_subs_series"
             else:
                 template = self.filename_templates.get(
                     "series", Config.DEFAULT_FILENAME_TEMPLATES["series"]
                 )
+                fn_scope = "filename_series"
 
-            base_name, fmt_err = safe_format(template, fmt_dict)
+            scope_fmt = await self._build_fmt_dict(fn_scope, template)
+            base_name, fmt_err = safe_format(template, scope_fmt)
             if fmt_err:
                 logger.warning(
                     f"Series template {template!r} rejected ({fmt_err}); using fallback."
@@ -735,10 +777,8 @@ class TaskProcessor:
 
             final_filename = f"{base_name}{ext}"
             title_template = self.templates.get("title", "")
-            meta_title, title_err = safe_format(
-                title_template,
-                {"title": self.title, "season_episode": season_episode},
-            )
+            title_fmt = await self._build_fmt_dict("metadata_title", title_template)
+            meta_title, title_err = safe_format(title_template, title_fmt)
             if title_err:
                 logger.warning(
                     f"Series title template {title_template!r} rejected ({title_err}); "
@@ -752,17 +792,21 @@ class TaskProcessor:
                 template = self.filename_templates.get(
                     key, Config.DEFAULT_FILENAME_TEMPLATES[key]
                 )
+                fn_scope = f"filename_personal_{personal_type}"
             elif self.is_subtitle:
                 template = self.filename_templates.get(
                     "subtitles_movies",
                     Config.DEFAULT_FILENAME_TEMPLATES["subtitles_movies"],
                 )
+                fn_scope = "filename_subs_movies"
             else:
                 template = self.filename_templates.get(
                     "movies", Config.DEFAULT_FILENAME_TEMPLATES["movies"]
                 )
+                fn_scope = "filename_movies"
 
-            base_name, fmt_err = safe_format(template, fmt_dict)
+            scope_fmt = await self._build_fmt_dict(fn_scope, template)
+            base_name, fmt_err = safe_format(template, scope_fmt)
             if fmt_err:
                 logger.warning(
                     f"Movie template {template!r} rejected ({fmt_err}); using fallback."
@@ -790,10 +834,8 @@ class TaskProcessor:
 
             final_filename = f"{base_name}{ext}"
             title_template = self.templates.get("title", "")
-            meta_title, title_err = safe_format(
-                title_template,
-                {"title": self.title, "season_episode": ""},
-            )
+            title_fmt = await self._build_fmt_dict("metadata_title", title_template)
+            meta_title, title_err = safe_format(title_template, title_fmt)
             if title_err:
                 logger.warning(
                     f"Movie title template {title_template!r} rejected ({title_err}); "
@@ -814,24 +856,62 @@ class TaskProcessor:
 
         if "title" not in self.metadata:
             self.metadata["title"] = meta_title
+
+        # audio_title / subtitle_title keep their ``{lang}`` placeholder
+        # intact — ffmpeg_tools fills it per-stream at encode time. For
+        # those two scopes we substitute a sentinel before formatting so
+        # the other TECHNICAL / TMDB placeholders still resolve.
+        async def _render_meta(scope, template):
+            if not template:
+                return ""
+            needs_lang_sentinel = scope in {"metadata_audio", "metadata_subtitle"}
+            src = template
+            if needs_lang_sentinel:
+                src = src.replace("{lang}", "\x00LANG\x00")
+            fmt = await self._build_fmt_dict(scope, src)
+            rendered, err = safe_format(src, fmt)
+            if err:
+                logger.warning(
+                    f"Metadata template ({scope}) {template!r} rejected ({err}); "
+                    f"keeping raw template."
+                )
+                rendered = template
+            if needs_lang_sentinel:
+                rendered = rendered.replace("\x00LANG\x00", "{lang}")
+            return rendered
+
         if "artist" not in self.metadata:
-            self.metadata["artist"] = self.templates.get("artist", "")
+            self.metadata["artist"] = await _render_meta(
+                "metadata_artist", self.templates.get("artist", "")
+            )
 
         self.metadata.update(
             {
-                "author": self.templates.get("author", ""),
-                "encoded_by": "@XTVglobal",
-                "video_title": self.templates.get("video", "Encoded By:- @XTVglobal"),
-                "audio_title": self.templates.get(
-                    "audio", "Audio By:- @XTVglobal - {lang}"
-                ),
-                "subtitle_title": self.templates.get(
-                    "subtitle", "Subtitled By:- @XTVglobal - {lang}"
-                ),
+                "author":        await _render_meta("metadata_author",   self.templates.get("author", "")),
+                "encoded_by":    "@XTVglobal",
+                "video_title":   await _render_meta("metadata_video",    self.templates.get("video", "Encoded By:- @XTVglobal")),
+                "audio_title":   await _render_meta("metadata_audio",    self.templates.get("audio", "Audio By:- @XTVglobal - {lang}")),
+                "subtitle_title":await _render_meta("metadata_subtitle", self.templates.get("subtitle", "Subtitled By:- @XTVglobal - {lang}")),
                 "default_language": "English",
-                "copyright": self.templates.get("copyright", "@XTVglobal"),
+                "copyright":     await _render_meta("metadata_copyright",self.templates.get("copyright", "@XTVglobal")),
+                "comment":       await _render_meta("metadata_comment",  self.templates.get("comment", "")),
+                "description":   await _render_meta("metadata_description", self.templates.get("description", "")),
+                "genre":         await _render_meta("metadata_genre",    self.templates.get("genre", "")),
+                "date":          await _render_meta("metadata_date",     self.templates.get("date", "")),
             }
         )
+
+        # Series-only / audio-only tags — skip when the media type doesn't
+        # match so ffmpeg doesn't get spurious entries.
+        if self.media_type == "series":
+            self.metadata["show"] = await _render_meta("metadata_show", self.templates.get("show", ""))
+            network_val = await _render_meta("metadata_network", self.templates.get("network", ""))
+            if network_val:
+                self.metadata["network"] = network_val
+        if self.media_type == "audio":
+            album_val = await _render_meta("metadata_album", self.templates.get("album", ""))
+            if album_val:
+                self.metadata["album"] = album_val
 
     async def _process_media(self) -> bool:
         if self.media_type not in ["convert", "extract_subtitles", "audio", "watermark", "trim", "voice_convert", "video_note"]:
@@ -1091,7 +1171,7 @@ class TaskProcessor:
         upload_start = time.time()
         final_filename = os.path.basename(self.output_path)
 
-        caption = self._generate_caption(final_filename)
+        caption = await self._generate_caption(final_filename)
 
         target_chat_id = self.user_id
         is_tunneling = False
@@ -1528,26 +1608,31 @@ class TaskProcessor:
                     internal_name = final_filename
 
                     try:
-                        settings = await db.get_settings(self.user_id)
-                        system_filename_template = settings.get("templates", {}).get("system_filename")
-
                         safe_title = re.sub(r'[\\/*?:"<>|,;\'!]', "", self.title) if self.title else ""
                         safe_title = safe_title.replace("&", "and")
                         year_str = str(self.year) if self.year else ""
 
+                        # Pick the split key for the current media type.
+                        # get_system_filename_template falls back to the
+                        # legacy single `system_filename` key when neither
+                        # split key is set, so existing installs keep
+                        # working unchanged.
+                        sys_scope = (
+                            "system_filename_series"
+                            if self.media_type == "series"
+                            else "system_filename_movies"
+                        )
+                        system_filename_template = await db.get_system_filename_template(
+                            self.media_type, self.user_id
+                        )
+
                         if system_filename_template:
-                            # Ensure episode is safely formatted for formatting string dict
-                            ep_str_for_sys = "".join([f"E{int(e):02d}" for e in self.episode]) if isinstance(self.episode, list) else f"{self.episode:02d}" if self.episode else ""
-                            sys_fmt_dict = {
-                                "title": safe_title,
-                                "year": year_str,
-                                "season": f"{self.season:02d}" if self.season else "",
-                                "episode": ep_str_for_sys,
-                                "series_name": safe_title if self.media_type == "series" else "",
-                            }
+                            sys_fmt = await self._build_fmt_dict(
+                                sys_scope, system_filename_template
+                            )
 
                             base_name, sys_err = safe_format(
-                                system_filename_template, sys_fmt_dict
+                                system_filename_template, sys_fmt
                             )
                             if sys_err:
                                 logger.warning(
@@ -1779,26 +1864,390 @@ class TaskProcessor:
                         f"Failed to cleanup ephemeral tunnel {self.tunnel_id}: {e}"
                     )
 
-    def _generate_caption(self, filename: str) -> str:
+    # ------------------------------------------------------------------
+    # Template-system helpers
+    # ------------------------------------------------------------------
+    # Every inline `.format(**fmt_dict)` site across the task now goes
+    # through `_build_fmt_dict(scope, template)`. It:
+    #
+    #  * populates BASIC/EPISODE/SOURCE/FILE eagerly (no I/O),
+    #  * hits ffprobe only when the scope+template actually reference a
+    #    TECHNICAL placeholder,
+    #  * hits TMDb only when the scope+template reference a TMDB one,
+    #  * memoises both on the instance so a batch of scopes within the
+    #    same task never double-fetches,
+    #  * filters to `allowed_fields_for(scope)` so we never leak a key
+    #    a scope didn't opt into (preserves validate_template's contract),
+    #  * applies `apply_trim` so long placeholders (Overview, Tagline,
+    #    Genres, …) stay below the filename 255-byte limit.
+
+    def _basic_vars(self):
+        ec = self._eager_context or {}
+        uploader = (
+            f"@{self.data.get('username')}"
+            if self.data.get("username")
+            else f"id:{self.user_id}"
+        )
+        return {
+            "Title":    ec.get("safe_title", self.title or ""),
+            "title":    ec.get("safe_title", self.title or ""),
+            "Year":     ec.get("year_str", ""),
+            "year":     ec.get("year_str", ""),
+            "Channel":  self.channel or "",
+            "channel":  self.channel or "",
+            "Language": self.language or "",
+            "language": self.language or "",
+            "lang":     self.language or "",
+            "Uploader": uploader,
+        }
+
+    def _episode_vars(self):
+        ec = self._eager_context or {}
+        season_num = f"{self.season:02d}" if self.season else ""
+        if isinstance(self.episode, list):
+            ep_num = "".join(f"{int(e):02d}" for e in self.episode)
+        elif self.episode:
+            ep_num = f"{int(self.episode):02d}"
+        else:
+            ep_num = ""
+        series_name = ec.get("safe_title", self.title or "") if self.media_type == "series" else ""
+        return {
+            "Season":         ec.get("season_str", ""),
+            "SeasonNum":      season_num,
+            "season":         season_num,
+            "Episode":        ec.get("episode_str", ""),
+            "EpisodeNum":     ep_num,
+            "episode":        ep_num,
+            "Season_Episode": ec.get("season_episode", ""),
+            "season_episode": ec.get("season_episode", ""),
+            "SeriesName":     series_name,
+            "series_name":    series_name,
+            "NumSeasons":     "",
+            "NumEpisodes":    "",
+            "FirstAirYear":   "",
+        }
+
+    def _source_vars(self):
+        ec = self._eager_context or {}
+        g = self._pattern_groups or {}
+        release = g.get("release")
+        if isinstance(release, list):
+            release_str = ec.get("pref_sep", ".").join(release)
+        else:
+            release_str = release or ""
+        extras = g.get("extras")
+        if isinstance(extras, list):
+            extras_str = ec.get("pref_sep", ".").join(extras)
+        else:
+            extras_str = extras or ""
+        return {
+            "Source":   g.get("source") or "",
+            "HDR":      g.get("hdr") or "",
+            "Edition":  g.get("edition") or "",
+            "Release":  release_str,
+            "Extras":   extras_str,
+            "Specials": ec.get("specials_str", ""),
+            "Codec":    ec.get("codec_str", ""),
+            "Audio":    ec.get("audio_str", ""),
+        }
+
+    def _file_vars(self):
+        ec = self._eager_context or {}
+        fname = os.path.splitext(self.original_name)[0] if self.original_name else ""
+        ext_hint = ec.get("ext_hint", "")
+        size_str = ""
+        size_bytes = ""
+        if self.output_path and os.path.exists(self.output_path):
+            try:
+                b = os.path.getsize(self.output_path)
+                size_bytes = str(b)
+                size_str = self._humanbytes(b)
+            except OSError:
+                pass
+        now = _dt.datetime.utcnow()
+        token = "".join(_secrets.choice(_string.ascii_letters + _string.digits) for _ in range(8))
+        # Hashtag derived from title (+ season for series) — alnum only.
+        base_tag = re.sub(r"[^A-Za-z0-9]", "", self.title or "")
+        if self.media_type == "series" and self.season:
+            hashtag = f"#{base_tag}S{int(self.season):02d}" if base_tag else ""
+        else:
+            hashtag = f"#{base_tag}" if base_tag else ""
+        return {
+            "Filename":  fname,
+            "filename":  fname,
+            "Ext":       ext_hint,
+            "Size":      size_str,
+            "size":      size_str,
+            "SizeBytes": size_bytes,
+            "Date":      now.strftime("%Y-%m-%d"),
+            "Time":      now.strftime("%H:%M"),
+            "Random":    token,
+            "random":    token,
+            "Hashtag":   hashtag,
+            "hashtag":   hashtag,
+        }
+
+    def _technical_vars(self, probe):
+        """Extract TECHNICAL placeholders from a probe_file() result.
+        Accepts the probe tuple shape (data, streams) used elsewhere as
+        well as a raw dict — both occur in this codebase.
+        """
+        data = probe
+        if isinstance(probe, tuple):
+            data = probe[0] if probe else None
+        if not isinstance(data, dict):
+            return {}
+
+        fmt = data.get("format") or {}
+        streams = data.get("streams") or []
+        video = next((s for s in streams if s.get("codec_type") == "video"), {})
+        audio = next((s for s in streams if s.get("codec_type") == "audio"), {})
+
+        try:
+            total_sec = int(float(fmt.get("duration") or 0))
+        except (TypeError, ValueError):
+            total_sec = 0
+        if total_sec:
+            hh = total_sec // 3600
+            mm = (total_sec % 3600) // 60
+            ss = total_sec % 60
+            duration_str = f"{hh:02d}:{mm:02d}:{ss:02d}"
+        else:
+            duration_str = ""
+
+        width = video.get("width") or ""
+        height = video.get("height") or ""
+        resolution = f"{width}x{height}" if width and height else ""
+
+        br_raw = fmt.get("bit_rate")
+        bitrate_str = ""
+        if br_raw:
+            try:
+                br_mbps = float(br_raw) / 1_000_000
+                bitrate_str = f"{br_mbps:.1f} Mbps"
+            except (TypeError, ValueError):
+                bitrate_str = ""
+
+        fr = video.get("r_frame_rate") or ""
+        if fr and "/" in fr:
+            try:
+                num, den = fr.split("/")
+                fr = f"{float(num) / float(den):.3f}" if float(den) else fr
+            except (TypeError, ValueError, ZeroDivisionError):
+                pass
+
+        channels = audio.get("channels") or ""
+        channel_layout = {1: "1.0", 2: "2.0", 6: "5.1", 8: "7.1"}.get(channels, str(channels) if channels else "")
+        audio_lang = (audio.get("tags") or {}).get("language", "") or ""
+
+        return {
+            "Quality":        self.quality or "",
+            "quality":        self.quality or "",
+            "Resolution":     resolution,
+            "resolution":     resolution,
+            "Width":          str(width) if width else "",
+            "Height":         str(height) if height else "",
+            "Duration":       duration_str,
+            "duration":       duration_str,
+            "DurationSec":    str(total_sec) if total_sec else "",
+            "VideoCodec":     video.get("codec_name") or "",
+            "video_codec":    video.get("codec_name") or "",
+            "AudioCodec":     audio.get("codec_name") or "",
+            "audio_codec":    audio.get("codec_name") or "",
+            "AudioChannels":  channel_layout,
+            "audio_channels": channel_layout,
+            "AudioLang":      audio_lang,
+            "audio_lang":     audio_lang,
+            "Bitrate":        bitrate_str,
+            "FrameRate":      str(fr),
+        }
+
+    def _tmdb_vars(self, details):
+        if not isinstance(details, dict):
+            return {}
+        ec = self._eager_context or {}
+        sep = ec.get("pref_sep", ".")
+        genres = details.get("genres") or []
+        if isinstance(genres, list):
+            genres_str = sep.join(g for g in genres if g)
+        else:
+            genres_str = str(genres or "")
+        countries = details.get("production_countries") or []
+        countries_str = sep.join(c for c in countries if c) if isinstance(countries, list) else str(countries or "")
+        networks = details.get("networks") or []
+        network_str = networks[0] if isinstance(networks, list) and networks else (str(networks or ""))
+        rating_raw = details.get("vote_average") or 0
+        try:
+            rating_str = f"{float(rating_raw):.1f}" if rating_raw else ""
+        except (TypeError, ValueError):
+            rating_str = ""
+        runtime_raw = details.get("runtime") or 0
+        try:
+            runtime_str = f"{int(runtime_raw)}m" if runtime_raw else ""
+        except (TypeError, ValueError):
+            runtime_str = ""
+        release_date = details.get("release_date") or details.get("first_air_date") or ""
+        first_air_year = (details.get("first_air_date") or "")[:4]
+
+        return {
+            "TMDbId":            str(self.tmdb_id or ""),
+            "tmdb_id":           str(self.tmdb_id or ""),
+            "OriginalTitle":     details.get("original_title") or "",
+            "Overview":          details.get("overview") or "",
+            "overview":          details.get("overview") or "",
+            "Rating":            rating_str,
+            "rating":            rating_str,
+            "Runtime":           runtime_str,
+            "runtime":           runtime_str,
+            "Genres":            genres_str,
+            "genres":            genres_str,
+            "Tagline":           details.get("tagline") or "",
+            "tagline":           details.get("tagline") or "",
+            "OriginalLanguage":  details.get("original_language") or "",
+            "Countries":         countries_str,
+            "Network":           network_str,
+            "network":           network_str,
+            "ReleaseDate":       release_date,
+            "release_date":      release_date,
+            "NumSeasons":        str(details.get("number_of_seasons") or ""),
+            "NumEpisodes":       str(details.get("number_of_episodes") or ""),
+            "FirstAirYear":      first_air_year,
+        }
+
+    @staticmethod
+    def _template_references_group(template, group_key):
+        """Return True if ``template`` contains any placeholder belonging
+        to ``group_key``. Cheap: walks Formatter.parse once and intersects
+        with the group's field names.
+        """
+        if not template:
+            return False
+        try:
+            from utils.template import CATALOG
+            group = CATALOG.get(group_key)
+            if not group:
+                return False
+            names = {f.name for f in group.fields}
+            for _lit, field, _spec, _conv in string.Formatter().parse(template):
+                if field is None:
+                    continue
+                root = field.split(".", 1)[0].split("[", 1)[0].strip()
+                if root in names:
+                    return True
+        except ValueError:
+            # Malformed template — safe_format will catch and log later.
+            return False
+        return False
+
+    async def _probe_input_cached(self):
+        if self._input_probe_data is not None:
+            return self._input_probe_data
+        if not self.input_path or not os.path.exists(self.input_path):
+            return None
+        try:
+            self._input_probe_data = await probe_file(self.input_path)
+        except Exception as e:
+            logger.warning(f"probe_file(input) failed: {e}")
+            self._input_probe_data = None
+        return self._input_probe_data
+
+    async def _probe_output_cached(self):
+        if self._output_probe_data is not None:
+            return self._output_probe_data
+        if not self.output_path or not os.path.exists(self.output_path):
+            # Fall back to input probe so caption generation still has
+            # resolution / duration data if the output isn't ready yet.
+            return await self._probe_input_cached()
+        try:
+            self._output_probe_data = await probe_file(self.output_path)
+        except Exception as e:
+            logger.warning(f"probe_file(output) failed: {e}")
+            self._output_probe_data = None
+        return self._output_probe_data
+
+    async def _tmdb_details_cached(self):
+        if self._tmdb_details_data is not None:
+            return self._tmdb_details_data
+        if not self.tmdb_id:
+            return None
+        try:
+            self._tmdb_details_data = await tmdb.get_details_cached(
+                self.tmdb_id, self.media_type
+            )
+        except Exception as e:
+            logger.warning(f"tmdb.get_details_cached failed: {e}")
+            self._tmdb_details_data = None
+        return self._tmdb_details_data
+
+    async def _build_fmt_dict(self, scope, template=None):
+        """Return the placeholder mapping for ``scope`` filtered to its
+        allowed fields and scope-aware-trimmed. ``template`` is optional
+        — when provided, TECHNICAL / TMDB fetches are skipped entirely
+        if the template text doesn't reference any placeholder from
+        those groups.
+        """
+        values = {}
+        values.update(self._basic_vars())
+        values.update(self._episode_vars())
+        values.update(self._source_vars())
+        values.update(self._file_vars())
+
+        groups = SCOPE_GROUPS.get(scope, ())
+
+        needs_tech = "TECHNICAL" in groups and (
+            template is None or self._template_references_group(template, "TECHNICAL")
+        )
+        if needs_tech:
+            probe_source = (
+                self._probe_output_cached
+                if scope == "caption"
+                else self._probe_input_cached
+            )
+            probe = await probe_source()
+            if probe:
+                values.update(self._technical_vars(probe))
+
+        needs_tmdb = "TMDB" in groups and self.tmdb_id and (
+            template is None or self._template_references_group(template, "TMDB")
+        )
+        if needs_tmdb:
+            details = await self._tmdb_details_cached()
+            if details:
+                values.update(self._tmdb_vars(details))
+
+        allowed = allowed_fields_for(scope)
+        filtered = {k: v for k, v in values.items() if k in allowed}
+        for name in allowed:
+            filtered.setdefault(name, "")
+        return apply_trim(filtered, scope)
+
+    def _select_filename_scope(self):
+        """Pick the scope name that matches the current rename flow."""
+        personal = self.data.get("personal_type")
+        if personal in ("video", "photo", "file"):
+            return f"filename_personal_{personal}"
+        if self.media_type == "general":
+            return "filename_general"
+        if self.media_type == "series":
+            return "filename_subs_series" if self.is_subtitle else "filename_series"
+        return "filename_subs_movies" if self.is_subtitle else "filename_movies"
+
+    async def _generate_caption(self, filename: str) -> str:
         template = self.templates.get("caption", "{random}")
 
+        # Keep the `{random}`-only shortcut — existing users rely on this
+        # as a cheap unique-id generator; skipping the probe+tmdb path
+        # for it saves ~50 ms per upload.
         if "{random}" in template or template == "{random}":
             return "".join(random.choices(string.ascii_letters + string.digits, k=16))
 
-        file_size = os.path.getsize(self.output_path)
-        size_str = self._humanbytes(file_size)
+        fmt = await self._build_fmt_dict("caption", template)
+        # Preserve the original `{filename}` semantics — final_filename
+        # takes precedence over the FILE group's self.original_name value.
+        fmt["filename"] = filename
+        fmt["Filename"] = filename
 
-        caption, caption_err = safe_format(
-            template,
-            {
-                "filename": filename,
-                "size": size_str,
-                "duration": "",
-                "random": "".join(
-                    random.choices(string.ascii_letters + string.digits, k=8)
-                ),
-            },
-        )
+        caption, caption_err = safe_format(template, fmt)
         if caption_err:
             logger.warning(
                 f"Caption template {template!r} rejected ({caption_err}); using filename."
