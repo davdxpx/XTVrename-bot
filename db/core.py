@@ -250,6 +250,27 @@ class Database:
             return settings.get("templates", Config.DEFAULT_TEMPLATES)
         return Config.DEFAULT_TEMPLATES
 
+    async def get_system_filename_template(self, media_type, user_id=None):
+        """Return the per-media-type system filename template.
+
+        Preference order: explicit per-type key → legacy ``system_filename``
+        key (so an install that used the single-key editor keeps working
+        after the split) → Config default. Never raises.
+        """
+        templates = await self.get_all_templates(user_id)
+        key = "system_filename_series" if media_type == "series" else "system_filename_movies"
+        val = templates.get(key)
+        if val:
+            return val
+        legacy = templates.get("system_filename")
+        if legacy:
+            return legacy
+        return (
+            Config.DEFAULT_SYSTEM_FILENAME_SERIES
+            if media_type == "series"
+            else Config.DEFAULT_SYSTEM_FILENAME_MOVIES
+        )
+
     async def get_filename_templates(self, user_id=None):
         settings = await self.get_settings(user_id)
         raw = (

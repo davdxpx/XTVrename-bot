@@ -25,23 +25,49 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import BOT_START_TIME, Config
 from db import db
+from plugins.ui.placeholder_reference import (
+    FIELD_TO_SCOPE,
+    reference_and_preview_buttons,
+)
 from utils.telegram.log import get_logger
-from utils.template import validate_template
+from utils.template import (
+    SCOPE_TOP_HINTS,
+    allowed_fields_for,
+    validate_template,
+)
 
 logger = get_logger("plugins.public_cmds.handlers")
 
 user_sessions = {}
 
-_USER_FILENAME_TEMPLATE_FIELDS = {
-    "Title", "Year", "Quality", "Season", "Episode",
-    "Season_Episode", "Language", "Channel", "Specials", "Codec", "Audio",
+DIVIDER = "━━━━━━━━━━━━━━━━━━━━"
+
+_USER_METADATA_KEYS = {
+    "title", "author", "artist", "video", "audio", "subtitle",
+    "comment", "copyright", "description", "genre", "date",
+    "album", "show", "network",
 }
-_USER_PERSONAL_TEMPLATE_FIELDS = {
-    "Title", "Year", "Quality", "Season", "Episode",
-    "Season_Episode", "Language", "Channel",
-}
-_USER_METADATA_TEMPLATE_FIELDS = {"title", "season_episode", "lang"}
-_USER_CAPTION_TEMPLATE_FIELDS = {"filename", "size", "duration", "random"}
+
+
+def _vars_line(scope: str) -> str:
+    hints = SCOPE_TOP_HINTS.get(scope, ())
+    return ", ".join(f"`{{{h}}}`" for h in hints)
+
+
+def _ref_and_preview(field: str):
+    return reference_and_preview_buttons(field, origin="u")
+
+
+async def _user_legacy_sys_banner_line(user_id: int) -> str:
+    templates = await db.get_all_templates(user_id)
+    legacy = templates.get("system_filename")
+    has_new = bool(templates.get("system_filename_movies") or templates.get("system_filename_series"))
+    if legacy and not has_new:
+        return (
+            "ℹ️ **System Filename was split into Movies/Series.**\n"
+            "Your existing template still applies to both until you override either.\n\n"
+        )
+    return ""
 
 # === Helper Functions ===
 def get_user_main_menu():
@@ -64,6 +90,10 @@ def get_user_main_menu():
     )
 
 def get_user_templates_menu():
+    # System filename editing folded into the Filename Templates submenu
+    # as its own Movies/Series rows, so it no longer needs a top-level
+    # entry. Users who previously tapped the old entry now discover it
+    # inside Filename Templates alongside the other rename templates.
     return InlineKeyboardMarkup(
         [
             [
@@ -80,11 +110,6 @@ def get_user_templates_menu():
             [
                 InlineKeyboardButton(
                     "📝 Edit Metadata Templates", callback_data="user_templates"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "⚙️ Edit System Filename", callback_data="edit_system_filename"
                 )
             ],
             [
@@ -190,7 +215,7 @@ debug("✅ Loaded handler: user_settings_callback")
 
 @Client.on_callback_query(
     filters.regex(
-        r"^(user_|edit_user_template_|edit_user_fn_template_|prompt_user_.*|dumb_user_|set_lang_|set_user_workflow_|set_thumb_mode_|user_delete_msg)"
+        r"^(user_|edit_user_template_|edit_user_fn_template_|edit_user_sys_template_|prompt_user_.*|dumb_user_|set_lang_|set_user_workflow_|set_thumb_mode_|user_delete_msg)"
     )
 )
 async def user_settings_callback(client, callback_query):
@@ -609,37 +634,60 @@ async def user_settings_callback(client, callback_query):
     elif data == "user_templates":
         with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                "📝 **Edit Metadata Templates**\n\n" "Select a field to edit:",
+                f"📝 **Edit Metadata Templates**\n"
+                f"{DIVIDER}\n\n"
+                "Select a field to edit.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
-                            InlineKeyboardButton(
-                                "Title", callback_data="edit_user_template_title"
-                            ),
-                            InlineKeyboardButton(
-                                "Author", callback_data="edit_user_template_author"
-                            ),
+                            InlineKeyboardButton("✏️ Title",   callback_data="edit_user_template_title"),
+                            InlineKeyboardButton("✏️ Author",  callback_data="edit_user_template_author"),
                         ],
                         [
-                            InlineKeyboardButton(
-                                "Artist", callback_data="edit_user_template_artist"
-                            ),
-                            InlineKeyboardButton(
-                                "Video", callback_data="edit_user_template_video"
-                            ),
+                            InlineKeyboardButton("✏️ Artist",  callback_data="edit_user_template_artist"),
+                            InlineKeyboardButton("✏️ Video",   callback_data="edit_user_template_video"),
                         ],
                         [
-                            InlineKeyboardButton(
-                                "Audio", callback_data="edit_user_template_audio"
-                            ),
-                            InlineKeyboardButton(
-                                "Subtitle", callback_data="edit_user_template_subtitle"
-                            ),
+                            InlineKeyboardButton("✏️ Audio",   callback_data="edit_user_template_audio"),
+                            InlineKeyboardButton("✏️ Subtitle",callback_data="edit_user_template_subtitle"),
+                        ],
+                        [
+                            InlineKeyboardButton("➡ More metadata fields", callback_data="user_templates_meta2"),
                         ],
                         [
                             InlineKeyboardButton(
                                 "← Back to Templates", callback_data="user_templates_menu"
                             )
+                        ],
+                    ]
+                ),
+            )
+    elif data == "user_templates_meta2":
+        with contextlib.suppress(MessageNotModified):
+            await callback_query.message.edit_text(
+                f"📝 **Edit Metadata Templates**\n"
+                f"{DIVIDER}\n\n"
+                "Extended metadata tags written to the output file.",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton("✏️ Comment",     callback_data="edit_user_template_comment"),
+                            InlineKeyboardButton("✏️ Copyright",   callback_data="edit_user_template_copyright"),
+                        ],
+                        [
+                            InlineKeyboardButton("✏️ Description", callback_data="edit_user_template_description"),
+                            InlineKeyboardButton("✏️ Genre",       callback_data="edit_user_template_genre"),
+                        ],
+                        [
+                            InlineKeyboardButton("✏️ Date",        callback_data="edit_user_template_date"),
+                            InlineKeyboardButton("✏️ Album",       callback_data="edit_user_template_album"),
+                        ],
+                        [
+                            InlineKeyboardButton("✏️ Show",        callback_data="edit_user_template_show"),
+                            InlineKeyboardButton("✏️ Network",     callback_data="edit_user_template_network"),
+                        ],
+                        [
+                            InlineKeyboardButton("← Back", callback_data="user_templates"),
                         ],
                     ]
                 ),
@@ -647,44 +695,39 @@ async def user_settings_callback(client, callback_query):
     elif data == "user_caption":
         templates = await db.get_all_templates(user_id)
         current_caption = templates.get("caption", "{random}")
+        vars_line = _vars_line("caption")
+        rows = [
+            [InlineKeyboardButton("✏️ Change", callback_data="prompt_user_caption")],
+        ]
+        rows.extend(_ref_and_preview("caption"))
+        rows.append([
+            InlineKeyboardButton(
+                "← Back to Templates", callback_data="user_templates_menu"
+            )
+        ])
         with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                f"📝 **Edit Caption Template**\n\n"
+                f"🧾 **Edit Caption Template**\n"
+                f"{DIVIDER}\n\n"
                 f"Current: `{current_caption}`\n\n"
-                "**Variables:**\n"
-                "- `{filename}` : The final filename\n"
-                "- `{size}` : File size (e.g. 1.5 GB)\n"
-                "- `{duration}` : Video duration\n"
-                "- `{random}` : Random string (Anti-Hash)\n\n"
-                "Click below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change", callback_data="prompt_user_caption"
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Templates", callback_data="user_templates_menu"
-                            )
-                        ],
-                    ]
-                ),
+                f"Variables: {vars_line}\n"
+                "Tap 📖 for the full list.\n\n"
+                "> Send just `{random}` to keep the default anti-hash behaviour.",
+                reply_markup=InlineKeyboardMarkup(rows),
             )
     elif data == "prompt_user_caption":
         user_sessions[user_id] = {"state": "awaiting_user_template_caption", "msg_id": callback_query.message.id}
+        vars_line = _vars_line("caption")
         with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                "📝 **Send the new caption text:**\n\n(Use `{random}` to use the default random text generator)",
+                f"✏️ **Send the new caption template:**\n"
+                f"{DIVIDER}\n\n"
+                f"Variables: {vars_line}\n"
+                "Tap 📖 for the full list.\n\n"
+                "> Use `{random}` alone to keep the default anti-hash generator.",
                 reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="user_templates_menu"
-                            )
-                        ]
-                    ]
+                    _ref_and_preview("caption")
+                    + [[InlineKeyboardButton("❌ Cancel", callback_data="user_templates_menu")]]
                 ),
             )
     elif data == "user_view":
@@ -732,30 +775,34 @@ async def user_settings_callback(client, callback_query):
                 ),
             )
     elif data == "user_filename_templates":
+        banner = await _user_legacy_sys_banner_line(user_id)
         with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                "📝 **Edit Filename Templates**\n\n" "Select media type to edit:",
+                f"📝 **Filename Templates**\n"
+                f"{DIVIDER}\n\n"
+                f"{banner}"
+                "Select a template to edit.",
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
-                            InlineKeyboardButton(
-                                "Movies", callback_data="edit_user_fn_template_movies"
-                            )
+                            InlineKeyboardButton("🎬 Movies",      callback_data="edit_user_fn_template_movies"),
+                            InlineKeyboardButton("📺 Series",      callback_data="edit_user_fn_template_series"),
                         ],
                         [
-                            InlineKeyboardButton(
-                                "Series", callback_data="edit_user_fn_template_series"
-                            )
+                            InlineKeyboardButton("🎬 Movies Subs", callback_data="edit_user_fn_template_subtitles_movies"),
+                            InlineKeyboardButton("📺 Series Subs", callback_data="edit_user_fn_template_subtitles_series"),
                         ],
                         [
-                            InlineKeyboardButton(
-                                "Personal", callback_data="user_fn_templates_personal"
-                            )
+                            InlineKeyboardButton("🎞 Personal Video", callback_data="edit_user_fn_template_personal_video"),
+                            InlineKeyboardButton("🖼 Personal Photo", callback_data="edit_user_fn_template_personal_photo"),
+                            InlineKeyboardButton("📁 Personal File",  callback_data="edit_user_fn_template_personal_file"),
                         ],
                         [
-                            InlineKeyboardButton(
-                                "Subtitles", callback_data="user_fn_templates_subtitles"
-                            )
+                            InlineKeyboardButton("⚙️ System (Movies)", callback_data="edit_user_sys_template_movies"),
+                            InlineKeyboardButton("⚙️ System (Series)", callback_data="edit_user_sys_template_series"),
+                        ],
+                        [
+                            InlineKeyboardButton("🧾 Caption", callback_data="user_caption"),
                         ],
                         [
                             InlineKeyboardButton(
@@ -765,122 +812,117 @@ async def user_settings_callback(client, callback_query):
                     ]
                 ),
             )
-    elif data == "user_fn_templates_personal":
-        with contextlib.suppress(MessageNotModified):
-            await callback_query.message.edit_text(
-                "📝 **Edit Personal Filename Templates**\n\n"
-                "Select media type to edit:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Personal Files",
-                                callback_data="edit_user_fn_template_personal_file",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Personal Photos",
-                                callback_data="edit_user_fn_template_personal_photo",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Personal Videos",
-                                callback_data="edit_user_fn_template_personal_video",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Filename Templates", callback_data="user_filename_templates"
-                            )
-                        ],
-                    ]
-                ),
-            )
-    elif data == "user_fn_templates_subtitles":
-        with contextlib.suppress(MessageNotModified):
-            await callback_query.message.edit_text(
-                "📝 **Edit Subtitles Filename Templates**\n\n"
-                "Select media type to edit:",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "Movies",
-                                callback_data="edit_user_fn_template_subtitles_movies",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "Series",
-                                callback_data="edit_user_fn_template_subtitles_series",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Filename Templates", callback_data="user_filename_templates"
-                            )
-                        ],
-                    ]
-                ),
-            )
     elif data.startswith("edit_user_fn_template_"):
         field = data.replace("edit_user_fn_template_", "")
+        scope = FIELD_TO_SCOPE.get(field)
+        if scope is None:
+            await callback_query.answer("Unknown template field.", show_alert=True)
+            return
         templates = await db.get_filename_templates(user_id)
         current_val = templates.get(field, "")
-        try:
-            if field.lower() in {"movies", "series", "subtitles_movies", "subtitles_series"}:
-                vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
-            else:
-                vars_text = "`{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
-
-            await callback_query.message.edit_text(
-                f"✏️ **Edit Filename Template ({field.capitalize()})**\n\n"
-                f"Current: `{current_val}`\n\n"
-                f"Variables: {vars_text}\n"
-                f"Note: File extension will be added automatically.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change",
-                                callback_data=f"prompt_user_fn_template_{field}",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Filename Templates", callback_data="user_filename_templates"
-                            )
-                        ],
-                    ]
-                ),
+        default_val = Config.DEFAULT_FILENAME_TEMPLATES.get(field, "")
+        stored_line = (
+            f"Current: `{current_val}`"
+            if current_val
+            else f"Current: __not set — using default__ `{default_val}`"
+        )
+        vars_line = _vars_line(scope)
+        label = field.replace("_", " ").title()
+        rows = [
+            [InlineKeyboardButton("✏️ Change", callback_data=f"prompt_user_fn_template_{field}")],
+        ]
+        rows.extend(_ref_and_preview(field))
+        rows.append([
+            InlineKeyboardButton(
+                "← Back to Filename Templates",
+                callback_data="user_filename_templates",
             )
-        except MessageNotModified:
-            pass
+        ])
+        with contextlib.suppress(MessageNotModified):
+            await callback_query.message.edit_text(
+                f"📝 **Edit Filename Template — {label}**\n"
+                f"{DIVIDER}\n\n"
+                f"{stored_line}\n\n"
+                f"Variables: {vars_line}\n"
+                "Tap 📖 for the full list.\n\n"
+                "Note: File extension is added automatically.",
+                reply_markup=InlineKeyboardMarkup(rows),
+            )
     elif data.startswith("prompt_user_fn_template_"):
         field = data.replace("prompt_user_fn_template_", "")
+        scope = FIELD_TO_SCOPE.get(field)
         user_sessions[user_id] = {"state": f"awaiting_user_fn_template_{field}", "msg_id": callback_query.message.id}
-        try:
-            if field.lower() in {"movies", "series", "subtitles_movies", "subtitles_series"}:
-                vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`, `{Specials}`, `{Codec}`, `{Audio}`"
-            else:
-                vars_text = "\n\nVariables: `{Title}`, `{Year}`, `{Quality}`, `{Season}`, `{Episode}`, `{Season_Episode}`, `{Language}`, `{Channel}`"
-
+        vars_line = _vars_line(scope) if scope else ""
+        with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                f"✏️ **Send the new filename template for {field.capitalize()}:**{vars_text}",
+                f"✏️ **Send the new filename template for {field.replace('_', ' ').title()}:**\n"
+                f"{DIVIDER}\n\n"
+                + (f"Variables: {vars_line}\n" if vars_line else "")
+                + "Tap 📖 for the full list.",
                 reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="user_filename_templates"
-                            )
-                        ]
-                    ]
+                    (_ref_and_preview(field) if scope else [])
+                    + [[InlineKeyboardButton("❌ Cancel", callback_data="user_filename_templates")]]
                 ),
             )
-        except MessageNotModified:
-            pass
+    elif data.startswith("edit_user_sys_template_"):
+        sub = data.replace("edit_user_sys_template_", "")
+        if sub not in ("movies", "series"):
+            return
+        field = f"system_filename_{sub}"
+        scope = FIELD_TO_SCOPE[field]
+        templates = await db.get_all_templates(user_id)
+        current_val = templates.get(field) or templates.get("system_filename", "")
+        default_val = (
+            Config.DEFAULT_SYSTEM_FILENAME_SERIES
+            if sub == "series"
+            else Config.DEFAULT_SYSTEM_FILENAME_MOVIES
+        )
+        stored_line = (
+            f"Current: `{current_val}`"
+            if current_val
+            else f"Current: __not set — using default__ `{default_val}`"
+        )
+        vars_line = _vars_line(scope)
+        label = "System Filename — " + ("Series" if sub == "series" else "Movies")
+        rows = [
+            [InlineKeyboardButton("✏️ Change", callback_data=f"prompt_user_sys_template_{sub}")],
+        ]
+        rows.extend(_ref_and_preview(field))
+        rows.append([
+            InlineKeyboardButton(
+                "← Back to Filename Templates",
+                callback_data="user_filename_templates",
+            )
+        ])
+        with contextlib.suppress(MessageNotModified):
+            await callback_query.message.edit_text(
+                f"⚙️ **Edit {label}**\n"
+                f"{DIVIDER}\n\n"
+                f"{stored_line}\n\n"
+                f"Variables: {vars_line}\n"
+                "Tap 📖 for the full list.",
+                reply_markup=InlineKeyboardMarkup(rows),
+            )
+    elif data.startswith("prompt_user_sys_template_"):
+        sub = data.replace("prompt_user_sys_template_", "")
+        if sub not in ("movies", "series"):
+            return
+        field = f"system_filename_{sub}"
+        scope = FIELD_TO_SCOPE.get(field)
+        user_sessions[user_id] = {"state": f"awaiting_user_sys_template_{sub}", "msg_id": callback_query.message.id}
+        vars_line = _vars_line(scope) if scope else ""
+        with contextlib.suppress(MessageNotModified):
+            await callback_query.message.edit_text(
+                f"✏️ **Send the new system filename template for "
+                f"{'Series' if sub == 'series' else 'Movies'}:**\n"
+                f"{DIVIDER}\n\n"
+                + (f"Variables: {vars_line}\n" if vars_line else "")
+                + "Tap 📖 for the full list.",
+                reply_markup=InlineKeyboardMarkup(
+                    (_ref_and_preview(field) if scope else [])
+                    + [[InlineKeyboardButton("❌ Cancel", callback_data="user_filename_templates")]]
+                ),
+            )
     elif data == "user_general_settings_menu":
         with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
@@ -1066,45 +1108,54 @@ async def user_settings_callback(client, callback_query):
                 reply_markup=get_user_main_menu(),
             )
     elif data.startswith("edit_user_template_"):
-        field = data.split("_")[-1]
+        field = data.replace("edit_user_template_", "")
+        if field not in _USER_METADATA_KEYS:
+            await callback_query.answer("Unknown metadata template.", show_alert=True)
+            return
+        scope = FIELD_TO_SCOPE.get(field)
         templates = await db.get_all_templates(user_id)
         current_val = templates.get(field, "")
+        default_val = Config.DEFAULT_TEMPLATES.get(field, "")
+        stored_line = (
+            f"Current: `{current_val}`"
+            if current_val
+            else f"Current: __not set — using default__ `{default_val}`"
+        )
+        vars_line = _vars_line(scope) if scope else ""
+        rows = [
+            [InlineKeyboardButton("✏️ Change", callback_data=f"prompt_user_template_{field}")],
+        ]
+        rows.extend(_ref_and_preview(field))
+        rows.append([
+            InlineKeyboardButton(
+                "← Back to Metadata Templates", callback_data="user_templates"
+            )
+        ])
         with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                f"✏️ **Edit {field.capitalize()} Template**\n\n"
-                f"Current: `{current_val}`\n\n"
-                f"Variables: `{{title}}`, `{{season_episode}}`, `{{lang}}` (for audio/subtitle)\n\n"
-                "Click below to change it.",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "✏️ Change",
-                                callback_data=f"prompt_user_template_{field}",
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                "← Back to Metadata Templates", callback_data="user_templates"
-                            )
-                        ],
-                    ]
-                ),
+                f"📝 **Edit {field.capitalize()} Metadata Template**\n"
+                f"{DIVIDER}\n\n"
+                f"{stored_line}\n\n"
+                + (f"Variables: {vars_line}\n" if vars_line else "")
+                + "Tap 📖 for the full list.",
+                reply_markup=InlineKeyboardMarkup(rows),
             )
     elif data.startswith("prompt_user_template_"):
         field = data.replace("prompt_user_template_", "")
+        if field not in _USER_METADATA_KEYS and field != "caption":
+            return
+        scope = FIELD_TO_SCOPE.get(field)
         user_sessions[user_id] = {"state": f"awaiting_user_template_{field}", "msg_id": callback_query.message.id}
+        vars_line = _vars_line(scope) if scope else ""
         with contextlib.suppress(MessageNotModified):
             await callback_query.message.edit_text(
-                f"✏️ **Send the new template text for {field.capitalize()}:**",
+                f"✏️ **Send the new template text for {field.capitalize()}:**\n"
+                f"{DIVIDER}\n\n"
+                + (f"Variables: {vars_line}\n" if vars_line else "")
+                + "Tap 📖 for the full list.",
                 reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "❌ Cancel", callback_data="user_templates"
-                            )
-                        ]
-                    ]
+                    (_ref_and_preview(field) if scope else [])
+                    + [[InlineKeyboardButton("❌ Cancel", callback_data="user_templates")]]
                 ),
             )
 
@@ -1254,18 +1305,26 @@ async def handle_user_text(client, message):
         return
 
     if state.startswith("awaiting_user_template_"):
-        field = state.split("_")[-1]
+        field = state.replace("awaiting_user_template_", "")
         new_template = message.text or ""
 
-        allowed = (
-            _USER_CAPTION_TEMPLATE_FIELDS if field == "caption"
-            else _USER_METADATA_TEMPLATE_FIELDS
-        )
+        scope = FIELD_TO_SCOPE.get(field)
+        if scope is None:
+            await message.reply_text(f"❌ Unknown template field: `{field}`.")
+            raise StopPropagation
+
+        allowed = set(allowed_fields_for(scope))
         ok, err = validate_template(new_template, allowed_fields=allowed)
         if not ok:
             await message.reply_text(
-                f"❌ **Invalid template**\n\n{err}\n\n"
-                f"You sent:\n`{new_template}`"
+                f"❌ **Invalid template**\n"
+                f"{DIVIDER}\n\n{err}\n\n"
+                f"You sent:\n`{new_template}`\n\n"
+                "Tap 📖 below for the full list.",
+                reply_markup=InlineKeyboardMarkup(
+                    reference_and_preview_buttons(field, origin="u")
+                    + [[InlineKeyboardButton("❌ Cancel", callback_data="user_templates")]]
+                ),
             )
             raise StopPropagation
 
@@ -1277,16 +1336,12 @@ async def handle_user_text(client, message):
             )
         else:
             reply_markup = InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "← Back to Templates", callback_data="user_templates"
-                        )
-                    ]
-                ]
+                [[InlineKeyboardButton("← Back to Templates", callback_data="user_templates")]]
             )
 
-        await edit_or_reply(client, message, msg_id, f"✅ Your template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        await edit_or_reply(client, message, msg_id,
+            f"✅ **Your {field.capitalize()} template updated**\n"
+            f"{DIVIDER}\n\n`{new_template}`",
             reply_markup=reply_markup,
         )
         user_sessions.pop(user_id, None)
@@ -1296,15 +1351,23 @@ async def handle_user_text(client, message):
         field = state.replace("awaiting_user_fn_template_", "")
         new_template = message.text or ""
 
-        if field.lower().startswith("personal_"):
-            allowed = _USER_PERSONAL_TEMPLATE_FIELDS
-        else:
-            allowed = _USER_FILENAME_TEMPLATE_FIELDS
+        scope = FIELD_TO_SCOPE.get(field)
+        if scope is None:
+            await message.reply_text(f"❌ Unknown filename template field: `{field}`.")
+            raise StopPropagation
+
+        allowed = set(allowed_fields_for(scope))
         ok, err = validate_template(new_template, allowed_fields=allowed)
         if not ok:
             await message.reply_text(
-                f"❌ **Invalid filename template**\n\n{err}\n\n"
-                f"You sent:\n`{new_template}`"
+                f"❌ **Invalid filename template**\n"
+                f"{DIVIDER}\n\n{err}\n\n"
+                f"You sent:\n`{new_template}`\n\n"
+                "Tap 📖 below for the full list.",
+                reply_markup=InlineKeyboardMarkup(
+                    reference_and_preview_buttons(field, origin="u")
+                    + [[InlineKeyboardButton("❌ Cancel", callback_data="user_filename_templates")]]
+                ),
             )
             raise StopPropagation
 
@@ -1320,8 +1383,45 @@ async def handle_user_text(client, message):
                 ]
             ]
         )
-        await edit_or_reply(client, message, msg_id, f"✅ Your filename template for **{field.capitalize()}** updated to:\n`{new_template}`",
+        await edit_or_reply(client, message, msg_id,
+            f"✅ **Your filename template for {field.replace('_', ' ').title()} updated**\n"
+            f"{DIVIDER}\n\n`{new_template}`",
             reply_markup=reply_markup,
+        )
+        user_sessions.pop(user_id, None)
+        raise StopPropagation
+
+    elif state.startswith("awaiting_user_sys_template_"):
+        sub = state.replace("awaiting_user_sys_template_", "")
+        if sub not in ("movies", "series"):
+            raise ContinuePropagation
+        field = f"system_filename_{sub}"
+        new_template = message.text or ""
+
+        scope = FIELD_TO_SCOPE[field]
+        allowed = set(allowed_fields_for(scope))
+        ok, err = validate_template(new_template, allowed_fields=allowed)
+        if not ok:
+            await message.reply_text(
+                f"❌ **Invalid system filename template**\n"
+                f"{DIVIDER}\n\n{err}\n\n"
+                f"You sent:\n`{new_template}`\n\n"
+                "Tap 📖 below for the full list.",
+                reply_markup=InlineKeyboardMarkup(
+                    reference_and_preview_buttons(field, origin="u")
+                    + [[InlineKeyboardButton("❌ Cancel", callback_data="user_filename_templates")]]
+                ),
+            )
+            raise StopPropagation
+
+        await db.update_template(field, new_template, user_id)
+        label = "Series" if sub == "series" else "Movies"
+        await edit_or_reply(client, message, msg_id,
+            f"✅ **Your System Filename ({label}) updated**\n"
+            f"{DIVIDER}\n\n`{new_template}`",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("← Back to Filename Templates", callback_data="user_filename_templates")]]
+            ),
         )
         user_sessions.pop(user_id, None)
         raise StopPropagation

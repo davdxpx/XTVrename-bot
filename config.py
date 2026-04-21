@@ -35,7 +35,10 @@ class Config:
     DOWNLOAD_DIR = "downloads/"
     THUMB_PATH = "downloads/thumb.jpg"
 
-    # Tenplates can be changed, in the Bot directly, or if you want also here.
+    # Templates can be changed, in the Bot directly, or if you want also here.
+    DEFAULT_SYSTEM_FILENAME_MOVIES = "{title} ({year})"
+    DEFAULT_SYSTEM_FILENAME_SERIES = "{series_name} S{season}E{episode}"
+
     DEFAULT_TEMPLATES = {
         "title": "@XTVglobal - {title} {season_episode}",
         "author": "@XTVglobal",
@@ -43,6 +46,20 @@ class Config:
         "video": "Encoded By:- @XTVglobal",
         "audio": "Audio By:- @XTVglobal - {lang}",
         "subtitle": "Subtitled By:- @XTVglobal - {lang}",
+        # Expanded metadata templates — each ffmpeg tag gets its own entry,
+        # so admins can tailor copyright/genre/comment etc. independently.
+        "comment": "{overview}",
+        "copyright": "© {year} {channel}",
+        "description": "{tagline}",
+        "genre": "{genres}",
+        "date": "{release_date}",
+        "album": "{title}",
+        "show": "{title}",
+        "network": "{network}",
+        # System filename templates — split per media type. Legacy single
+        # `system_filename` is honoured via a lazy fallback in db.core.
+        "system_filename_movies": DEFAULT_SYSTEM_FILENAME_MOVIES,
+        "system_filename_series": DEFAULT_SYSTEM_FILENAME_SERIES,
     }
 
     DEFAULT_FILENAME_TEMPLATES = {

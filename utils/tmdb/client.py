@@ -1,6 +1,7 @@
 # --- Imports ---
 import asyncio
 import time
+from typing import Dict, List, Tuple
 
 import aiohttp
 
@@ -162,6 +163,94 @@ class TMDb:
     async def get_details(self, media_type, tmdb_id, language="en-US"):
         endpoint = f"/movie/{tmdb_id}" if media_type == "movie" else f"/tv/{tmdb_id}"
         return await self._request(endpoint, language=language)
+
+    # ------------------------------------------------------------------
+    # Placeholder-details cache
+    # ------------------------------------------------------------------
+    # ``get_details`` already memoises the raw HTTP response for 10 minutes
+    # inside ``_cache``. The placeholder layer on top of TMDb only needs
+    # a small subset of fields and benefits from a longer-lived, bounded
+    # cache so a batch of 40 files with the same tmdb_id stays cheap
+    # across hours. Keyed on ``(tmdb_id, media_type)`` so a numeric id
+    # that exists as both (rare but possible) doesn't collide.
+
+    _DETAILS_CACHE_MAX = 1000
+    _details_cache: "Dict[Tuple[int, str], Dict[str, object]]" = {}
+    _details_cache_order: "List[Tuple[int, str]]" = []
+
+    async def get_details_cached(self, tmdb_id, media_type):
+        """Return a trimmed dict of TMDb fields used by template
+        placeholders. Cached per process with a simple LRU up to
+        ``_DETAILS_CACHE_MAX`` entries. Returns ``None`` when TMDb is
+        unavailable or the id doesn't resolve.
+
+        Keys returned when available: ``title``, ``original_title``,
+        ``overview``, ``tagline``, ``vote_average``, ``runtime``,
+        ``genres`` (list of names), ``release_date``, ``first_air_date``,
+        ``number_of_seasons``, ``number_of_episodes``,
+        ``original_language``, ``production_countries`` (list of iso),
+        ``networks`` (list of names).
+        """
+        if not tmdb_id:
+            return None
+        try:
+            cache_key = (int(tmdb_id), "tv" if media_type == "series" else "movie")
+        except (TypeError, ValueError):
+            return None
+
+        cached = type(self)._details_cache.get(cache_key)
+        if cached is not None:
+            # LRU touch
+            order = type(self)._details_cache_order
+            try:
+                order.remove(cache_key)
+            except ValueError:
+                pass
+            order.append(cache_key)
+            return cached
+
+        data = await self.get_details(cache_key[1], cache_key[0])
+        if not data:
+            return None
+
+        trimmed = {
+            "title": data.get("title") or data.get("name") or "",
+            "original_title": (
+                data.get("original_title") or data.get("original_name") or ""
+            ),
+            "overview": data.get("overview") or "",
+            "tagline": data.get("tagline") or "",
+            "vote_average": data.get("vote_average") or 0,
+            "runtime": (
+                data.get("runtime")
+                or (data.get("episode_run_time") or [None])[0]
+                or 0
+            ),
+            "genres": [g.get("name", "") for g in (data.get("genres") or []) if g.get("name")],
+            "release_date": data.get("release_date") or "",
+            "first_air_date": data.get("first_air_date") or "",
+            "number_of_seasons": data.get("number_of_seasons") or 0,
+            "number_of_episodes": data.get("number_of_episodes") or 0,
+            "original_language": data.get("original_language") or "",
+            "production_countries": [
+                c.get("iso_3166_1", "")
+                for c in (data.get("production_countries") or [])
+                if c.get("iso_3166_1")
+            ],
+            "networks": [
+                n.get("name", "") for n in (data.get("networks") or []) if n.get("name")
+            ],
+        }
+
+        cache = type(self)._details_cache
+        order = type(self)._details_cache_order
+        cache[cache_key] = trimmed
+        order.append(cache_key)
+        while len(order) > self._DETAILS_CACHE_MAX:
+            evict = order.pop(0)
+            cache.pop(evict, None)
+        return trimmed
+
 
 tmdb = TMDb()
 
