@@ -13,6 +13,7 @@ handles exactly one artefact per task.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import shutil
 from pathlib import Path
@@ -90,8 +91,23 @@ class GalleryDLDownloader(Downloader):
                     ctx.progress(count, max(count, 1) + 1, 0.0)
 
         pump_task = asyncio.create_task(_pump())
+        # 15 min hard cap — gallery-dl against a broken extractor or a
+        # host rate-limiting with never-ending retries has been observed
+        # to hang indefinitely, starving a worker slot.
+        _TIMEOUT_SEC = 900
         try:
-            _, stderr = await proc.communicate()
+            try:
+                _, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=_TIMEOUT_SEC
+                )
+            except asyncio.TimeoutError:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                with contextlib.suppress(Exception):
+                    await proc.wait()
+                raise RuntimeError(
+                    f"gallery-dl timed out after {_TIMEOUT_SEC}s"
+                )
         finally:
             pump_task.cancel()
 

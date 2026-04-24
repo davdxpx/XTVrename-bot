@@ -45,6 +45,7 @@ from plugins.flow.sessions import (
 )
 from tools.AudioMetadataEditor import render_audio_menu
 from utils.state import clear_session, get_data, get_state, set_state, update_data
+from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
 from utils.template import validate_template
 from utils.tmdb import tmdb
@@ -286,7 +287,7 @@ async def handle_text_input(client, message):
                     await message.delete()
                 except Exception:
                     pass
-            asyncio.create_task(delete_warning())
+            _spawn_task(delete_warning(), user_id=user_id, label="search_warn_delete")
             return
 
         new_name = message.text.strip()
@@ -312,7 +313,7 @@ async def handle_text_input(client, message):
             if prompt_msg_id:
                 with contextlib.suppress(Exception):
                     await client.delete_messages(chat_id=user_id, message_ids=prompt_msg_id)
-        asyncio.create_task(delayed_cleanup())
+        _spawn_task(delayed_cleanup(), user_id=user_id, label="search_prompt_cleanup")
 
         await prompt_destination_folder(client, user_id, message, is_edit=False)
         raise StopPropagation
@@ -387,7 +388,7 @@ async def handle_text_input(client, message):
         if message.text.isdigit():
             file_sessions[msg_id]["episode"] = int(message.text)
             set_state(user_id, "awaiting_file_upload")
-            asyncio.create_task(_persist_session_to_db(user_id))
+            _spawn_task(_persist_session_to_db(user_id), user_id=user_id, label="persist_flow_session")
             await update_confirmation_message(client, msg_id, user_id)
             await message.delete()
         else:
@@ -404,7 +405,7 @@ async def handle_text_input(client, message):
         if message.text.isdigit():
             file_sessions[msg_id]["season"] = int(message.text)
             set_state(user_id, "awaiting_file_upload")
-            asyncio.create_task(_persist_session_to_db(user_id))
+            _spawn_task(_persist_session_to_db(user_id), user_id=user_id, label="persist_flow_session")
             await update_confirmation_message(client, msg_id, user_id)
             await message.delete()
         else:

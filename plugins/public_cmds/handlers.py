@@ -505,12 +505,14 @@ async def user_settings_callback(client, callback_query):
                 )
 
                 import asyncio
+                from utils.tasks import spawn as _spawn_task
+
                 async def auto_delete():
                     await asyncio.sleep(30)
                     with contextlib.suppress(Exception):
                         await sent_msg.delete()
 
-                asyncio.create_task(auto_delete())
+                _spawn_task(auto_delete(), label="auto_delete_msg")
 
                 await callback_query.answer("Thumbnail sent! Check below.", show_alert=False)
 

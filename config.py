@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 
 from dotenv import load_dotenv
@@ -6,6 +7,28 @@ from dotenv import load_dotenv
 BOT_START_TIME = time.time()
 
 load_dotenv()
+
+
+def _parse_id_list(raw: str) -> list[int]:
+    """Split a comma-separated list of integer IDs from an env var,
+    skipping (and warning on) any entry that isn't a valid integer.
+
+    Startup used to die with `ValueError: invalid literal for int()`
+    if any single entry in ADMIN_IDS was malformed — a non-integer
+    typo in the env file took the whole bot down."""
+    out: list[int] = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            out.append(int(entry))
+        except ValueError:
+            print(
+                f"[config] WARNING: ignoring non-numeric ID entry: {entry!r}",
+                file=sys.stderr,
+            )
+    return out
 
 
 class Config:
@@ -20,7 +43,7 @@ class Config:
     SETTINGS_COLLECTION = "MediaStudio-Settings"
 
     CEO_ID = int(os.getenv("CEO_ID", 0))
-    ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
+    ADMIN_IDS = _parse_id_list(os.getenv("ADMIN_IDS", ""))
 
     PUBLIC_MODE = os.getenv("PUBLIC_MODE", "False").lower() == "true"
     DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() in ("true", "1", "yes")

@@ -367,9 +367,10 @@ def _admin_gate(callback_query) -> bool:
     if is_admin(callback_query.from_user.id):
         return True
     # Fire-and-forget — Pyrogram discards the coroutine, but the alert fires.
-    import asyncio
-    asyncio.ensure_future(
-        callback_query.answer("Admins only.", show_alert=True)
+    from utils.tasks import spawn as _spawn_task
+    _spawn_task(
+        callback_query.answer("Admins only.", show_alert=True),
+        label="admin_gate_deny_alert",
     )
     return False
 

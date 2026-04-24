@@ -37,6 +37,7 @@ from utils.media.archive import check_password_protected, extract_archive
 from utils.media.detect import analyze_filename, auto_match_tmdb
 from utils.queue_manager import queue_manager
 from utils.state import clear_session, get_data, get_state, set_state, update_data
+from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
 from utils.telegram.progress import progress_for_pyrogram
 
@@ -331,7 +332,9 @@ async def process_extracted_archive(client, user_id, archive_path, msg, state, p
             pass
 
     if user_id in batch_sessions and batch_sessions[user_id]["items"]:
-        batch_tasks[user_id] = asyncio.create_task(wait_and_process())
+        batch_tasks[user_id] = _spawn_task(
+            wait_and_process(), user_id=user_id, label="batch_wait_and_process"
+        )
     else:
         shutil.rmtree(extract_dir, ignore_errors=True)
 

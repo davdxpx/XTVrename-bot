@@ -71,10 +71,10 @@ class HTTPDownloader(Downloader):
                                 raise asyncio.CancelledError()  # noqa
                             if not chunk:
                                 continue
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                elapsed = max(time.time() - started, 1e-3)
-                                ctx.progress(downloaded, total, downloaded / elapsed)
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            elapsed = max(time.time() - started, 1e-3)
+                            ctx.progress(downloaded, total, downloaded / elapsed)
                         return dest
             except Exception as exc:
                 last_exc = exc

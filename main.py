@@ -26,6 +26,7 @@ import time
 from pyrogram import Client, idle
 
 from config import Config
+from utils.tasks import spawn
 from utils.telegram.log import get_logger
 
 logger = get_logger("main")
@@ -311,8 +312,8 @@ if __name__ == "__main__":
                     logger.debug(f"Flow cleanup: {e}")
 
         logger.info("Scheduling background tasks...")
-        app.loop.create_task(db_cleanup())
-        app.loop.create_task(state_cleanup())
+        spawn(db_cleanup(), label="db_cleanup")
+        spawn(state_cleanup(), label="state_cleanup")
 
         # Mirror-Leech persistent-queue worker: drains scheduled uploads
         # and retries transient failures with exponential backoff. Safe
@@ -348,7 +349,7 @@ if __name__ == "__main__":
                 logger.info(f"Recovered {count} stale flow sessions from DB.")
 
         logger.info("Checking for stale flow sessions...")
-        app.loop.create_task(recover_stale_sessions())
+        spawn(recover_stale_sessions(), label="recover_stale_sessions")
     except Exception as e:
         logger.warning(f"Error recovering stale sessions: {e}")
 
@@ -362,7 +363,7 @@ if __name__ == "__main__":
                 logger.info("Cleanup complete. No orphaned files found.")
 
         logger.info("Running automated orphaned file cleanup...")
-        app.loop.create_task(async_cleanup_orphaned())
+        spawn(async_cleanup_orphaned(), label="orphaned_file_cleanup")
     except Exception as e:
         logger.warning(f"Error during orphaned file cleanup: {e}")
 

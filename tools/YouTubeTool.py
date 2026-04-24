@@ -4,6 +4,7 @@ import contextlib
 import os
 import re
 import time
+from pathlib import Path
 
 from pyrogram import Client, StopPropagation, filters
 from pyrogram.errors import MessageNotModified
@@ -97,15 +98,22 @@ _PROGRESS_INTERVAL = 3.0  # seconds between status message edits
 #      UI layer show dedicated retry/help screens instead of the generic
 #      "Could not fetch video info".
 
+# All cookie paths are anchored to the project root so they don't drift
+# when pyrogram's `PARENT_DIR = Path(sys.argv[0]).parent` (used inside
+# `message.download`) resolves differently from the bot's CWD \u2014 a
+# mismatch that used to cause "uploaded cookies stored silently at a
+# path yt-dlp never looks in".
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 _COOKIES_CANDIDATES = [
     os.getenv("YT_COOKIES_FILE"),
-    "config/yt_cookies.txt",
-    "./yt_cookies.txt",
-    "./downloads/yt_cookies.txt",
+    str(_PROJECT_ROOT / "config" / "yt_cookies.txt"),
+    str(_PROJECT_ROOT / "yt_cookies.txt"),
+    str(_PROJECT_ROOT / "downloads" / "yt_cookies.txt"),
 ]
 
 # Single canonical on-disk path used for writing (uploads + DB restore).
-_COOKIES_TARGET_PATH = "config/yt_cookies.txt"
+_COOKIES_TARGET_PATH = str(_PROJECT_ROOT / "config" / "yt_cookies.txt")
 
 # Order matters: iOS and TV clients tend to be less rate-limited than the
 # default web client right now. yt-dlp picks a reasonable set automatically
@@ -119,14 +127,36 @@ _PLAYER_CLIENT_FALLBACKS = [
     "mweb",
 ]
 
+# Markers that reliably indicate YouTube's anti-bot guard. The previous
+# list included the substring "cookies", which false-matched every
+# cookie-loading error message from yt-dlp ("Could not load cookies
+# file\u2026") and sent the retry loop rotating through every player_client
+# with the same broken cookies \u2014 always failing, and finally surfacing
+# "bot-check triggered" to the user no matter what the real problem was.
 _BOT_CHECK_MARKERS = (
     "sign in to confirm",
     "confirm you're not a bot",
     "confirm you\u2019re not a bot",
     "age-restricted",
     "please sign in",
-    "cookies",
+    "consent cookie",
     "login required",
+    "use --cookies",
+    "use --cookies-from-browser",
+)
+
+# Markers that indicate yt-dlp could not load / parse the cookies file
+# itself. These are NOT bot-check situations \u2014 rotating player clients
+# won't help, the file is the problem. We surface this to the user as a
+# dedicated error so they re-export cookies.txt instead of blaming
+# YouTube.
+_COOKIE_FILE_ERROR_MARKERS = (
+    "could not load cookies",
+    "unable to load cookies",
+    "failed to parse cookies",
+    "cookies file is not",
+    "netscape format",
+    "no valid cookies",
 )
 
 # Markers indicating the current player_client returned no usable formats.
@@ -156,6 +186,16 @@ class FormatUnavailableError(RuntimeError):
 
     def __init__(self, original: str = ""):
         super().__init__(original or "YouTube format unavailable")
+        self.original = original
+
+
+class CookieFileError(RuntimeError):
+    """Raised when yt-dlp can't load / parse the cookies.txt file. The UI
+    layer surfaces a dedicated "your cookies file is broken, re-export"
+    screen — rotating player clients wouldn't help here."""
+
+    def __init__(self, original: str = ""):
+        super().__init__(original or "Cookies file invalid")
         self.original = original
 
 
@@ -252,6 +292,15 @@ def _is_format_unavailable_error(err_text: str) -> bool:
     return any(m in low for m in _FORMAT_UNAVAILABLE_MARKERS)
 
 
+def _is_cookie_file_error(err_text: str) -> bool:
+    """Detect yt-dlp errors caused by a broken / unreadable cookies file.
+    Rotating player clients won't help — the file itself is the problem."""
+    if not err_text:
+        return False
+    low = err_text.lower()
+    return any(m in low for m in _COOKIE_FILE_ERROR_MARKERS)
+
+
 def _is_retryable_ytdlp_error(err_text: str) -> bool:
     """Errors where rotating to a different player_client is likely to help."""
     return _is_bot_check_error(err_text) or _is_format_unavailable_error(err_text)
@@ -322,6 +371,11 @@ def _run_ytdlp_with_fallback(
         except Exception as e:  # yt_dlp.utils.DownloadError or similar
             last_exc = e
             msg = str(e)
+            if _is_cookie_file_error(msg):
+                # Broken cookies.txt — rotating player clients can't fix
+                # this, fail fast with a dedicated error.
+                logger.warning(f"yt-dlp cookie-file error: {msg[:200]}")
+                raise CookieFileError(msg) from e
             if _is_bot_check_error(msg):
                 logger.warning(
                     f"yt-dlp bot-check with player_client={client_name!r}: {msg[:200]}"
@@ -368,6 +422,9 @@ def _run_ydl_session(build_extra_fn, action_fn):
         except Exception as e:
             last_exc = e
             msg = str(e)
+            if _is_cookie_file_error(msg):
+                logger.warning(f"yt-dlp cookie-file error: {msg[:200]}")
+                raise CookieFileError(msg) from e
             if _is_bot_check_error(msg):
                 logger.warning(
                     f"yt-dlp bot-check with player_client={client_name!r}: {msg[:200]}"
@@ -494,9 +551,7 @@ def _sync_extract_info(url: str) -> dict | None:
             base_extra={"skip_download": True},
             download=False,
         )
-    except BotCheckError:
-        raise
-    except FormatUnavailableError:
+    except (BotCheckError, FormatUnavailableError, CookieFileError):
         raise
     except Exception as e:
         logger.warning(f"yt-dlp extract_info failed for {url}: {e}")
@@ -652,9 +707,7 @@ def _sync_download_video(url: str, quality: str, output_dir: str, max_size: int,
 
     try:
         return _run_ydl_session(_build_extra, _action)
-    except BotCheckError:
-        raise
-    except FormatUnavailableError:
+    except (BotCheckError, FormatUnavailableError, CookieFileError):
         raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Download failed: {e}", None
@@ -707,9 +760,7 @@ def _sync_download_audio(url: str, bitrate: str, output_dir: str, max_size: int,
 
     try:
         return _run_ydl_session(_build_extra, _action)
-    except BotCheckError:
-        raise
-    except FormatUnavailableError:
+    except (BotCheckError, FormatUnavailableError, CookieFileError):
         raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Download failed: {e}", None
@@ -733,7 +784,7 @@ def _sync_download_thumbnail(url: str, output_dir: str) -> tuple[bool, str, dict
         info = _sync_extract_info(url)
         if not info:
             return False, "Could not fetch video metadata.", None
-    except (BotCheckError, FormatUnavailableError):
+    except (BotCheckError, FormatUnavailableError, CookieFileError):
         # Let typed errors bubble up so the UI can show a dedicated screen.
         raise
     try:
@@ -833,9 +884,7 @@ def _sync_download_subtitles(url: str, lang: str, output_dir: str
 
     try:
         return _run_ydl_session(_build_extra, _action)
-    except BotCheckError:
-        raise
-    except FormatUnavailableError:
+    except (BotCheckError, FormatUnavailableError, CookieFileError):
         raise
     except yt_dlp.utils.DownloadError as e:
         return False, f"Subtitle download failed: {e}", None
@@ -994,6 +1043,57 @@ async def _render_format_unavailable_error(status_msg, user_id: int,
     except Exception as e:
         logger.warning(f"_render_format_unavailable_error edit failed: {e}")
     logger.warning(f"yt format-unavailable surfaced to user {user_id}: {str(fue)[:200]}")
+
+
+async def _render_cookie_file_error(status_msg, user_id: int, cfe: CookieFileError,
+                                    back_state: str | None = None):
+    """Shown when yt-dlp could not parse the cookies.txt file itself.
+
+    This is a distinct failure from the bot-check screen: the file is
+    broken, not the request. We tell the user to re-export in Netscape
+    format (the only shape yt-dlp supports).
+    """
+    admin_ids_set = set(getattr(Config, "ADMIN_IDS", []) or [])
+    ceo_id = getattr(Config, "CEO_ID", None)
+    is_admin = (user_id == ceo_id) or (user_id in admin_ids_set)
+
+    lines = [
+        "❌ **Cookies file is invalid**",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "yt-dlp could not read the uploaded `cookies.txt`. That almost "
+        "always means the file is not in **Netscape** format (the only "
+        "format yt-dlp accepts).",
+        "",
+        "**Fix it**",
+        "• In your browser, install __Get cookies.txt LOCALLY__ (or a "
+        "similar extension that exports **Netscape** format).",
+        "• Log into `youtube.com` with a normal account.",
+        "• Export cookies → save as `cookies.txt`.",
+    ]
+    if is_admin:
+        lines.append("• Re-upload via `/ytcookies`.")
+    else:
+        lines.append("• Ask an admin to re-upload via `/ytcookies`.")
+
+    rows = [
+        [InlineKeyboardButton("🔄 Try Another URL", callback_data="yt_retry_url")],
+        [InlineKeyboardButton("⬅️ Back to Menu", callback_data="yt_back_mode"),
+         InlineKeyboardButton("❌ Cancel", callback_data="yt_cancel")],
+    ]
+    if back_state:
+        set_state(user_id, back_state)
+    try:
+        await status_msg.edit_text(
+            "\n".join(lines),
+            reply_markup=InlineKeyboardMarkup(rows),
+            disable_web_page_preview=True,
+        )
+    except MessageNotModified:
+        pass
+    except Exception as e:
+        logger.warning(f"_render_cookie_file_error edit failed: {e}")
+    logger.warning(f"yt cookie-file error surfaced to user {user_id}: {str(cfe)[:200]}")
 
 
 def _mode_menu_markup() -> InlineKeyboardMarkup:
@@ -1185,6 +1285,9 @@ async def handle_youtube_url_input(client, message):
         return
     except FormatUnavailableError as fue:
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_youtube_url")
+        return
+    except CookieFileError as cfe:
+        await _render_cookie_file_error(status_msg, user_id, cfe, back_state="awaiting_youtube_url")
         return
 
     if not info:
@@ -1381,6 +1484,11 @@ async def _run_video_download(client, status_msg, user_id: int, url: str, qualit
         if not pump_task.done():
             pump_task.cancel()
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
+    except CookieFileError as cfe:
+        progress.closed = True
+        if not pump_task.done():
+            pump_task.cancel()
+        await _render_cookie_file_error(status_msg, user_id, cfe, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Video download pipeline crashed")
         with contextlib.suppress(Exception):
@@ -1486,6 +1594,11 @@ async def _run_audio_download(client, status_msg, user_id: int, url: str, bitrat
         if not pump_task.done():
             pump_task.cancel()
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
+    except CookieFileError as cfe:
+        progress.closed = True
+        if not pump_task.done():
+            pump_task.cancel()
+        await _render_cookie_file_error(status_msg, user_id, cfe, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Audio download pipeline crashed")
         with contextlib.suppress(Exception):
@@ -1566,6 +1679,8 @@ async def _run_subtitle_download(client, status_msg, user_id: int, url: str, lan
         await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
     except FormatUnavailableError as fue:
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
+    except CookieFileError as cfe:
+        await _render_cookie_file_error(status_msg, user_id, cfe, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Subtitle pipeline crashed")
         with contextlib.suppress(Exception):
@@ -1625,6 +1740,8 @@ async def _run_thumbnail_download(client, status_msg, user_id: int, url: str):
         await _render_bot_check_error(status_msg, user_id, bce, back_state="awaiting_yt_result")
     except FormatUnavailableError as fue:
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
+    except CookieFileError as cfe:
+        await _render_cookie_file_error(status_msg, user_id, cfe, back_state="awaiting_yt_result")
     except Exception as e:
         logger.exception("Thumbnail pipeline crashed")
         with contextlib.suppress(Exception):
@@ -1653,6 +1770,9 @@ async def _run_info_display(client, status_msg, user_id: int, url: str):
         return
     except FormatUnavailableError as fue:
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_yt_result")
+        return
+    except CookieFileError as cfe:
+        await _render_cookie_file_error(status_msg, user_id, cfe, back_state="awaiting_yt_result")
         return
     if not info:
         with contextlib.suppress(Exception):
@@ -1817,6 +1937,9 @@ async def handle_yt_auto_detect(client, message):
         return
     except FormatUnavailableError as fue:
         await _render_format_unavailable_error(status_msg, user_id, fue, back_state="awaiting_youtube_url")
+        return
+    except CookieFileError as cfe:
+        await _render_cookie_file_error(status_msg, user_id, cfe, back_state="awaiting_youtube_url")
         return
     if not info:
         with contextlib.suppress(MessageNotModified):
@@ -1986,17 +2109,47 @@ async def handle_ytcookies_upload(client, message):
         await message.reply_text(f"❌ Could not prepare cookies dir: {e}")
         raise StopPropagation from e
 
+    # Pyrogram's `message.download(file_name=...)` resolves a relative
+    # path against its own `PARENT_DIR` (derived from sys.argv[0]) —
+    # which is not always the bot's CWD. We pass an absolute path and
+    # also capture the returned location so we read back from exactly
+    # where pyrogram actually wrote the file.
+    saved_path: str | None = None
     try:
-        await message.download(file_name=_COOKIES_TARGET_PATH)
+        saved_path = await message.download(file_name=_COOKIES_TARGET_PATH)
     except Exception as e:
         await message.reply_text(f"❌ Download failed: {e}")
         raise StopPropagation from e
+
+    if not saved_path or not os.path.isfile(saved_path):
+        await message.reply_text(
+            "❌ Upload failed: Pyrogram reported no file path. "
+            "Please try again or check the bot's storage."
+        )
+        raise StopPropagation
+
+    # If pyrogram landed the file somewhere other than our canonical
+    # target path, copy it over so every other code path (_get_cookies_file,
+    # restore_youtube_cookies_from_db, delete_youtube_cookies) keeps
+    # pointing at a single location.
+    if os.path.abspath(saved_path) != os.path.abspath(_COOKIES_TARGET_PATH):
+        try:
+            import shutil
+            shutil.copyfile(saved_path, _COOKIES_TARGET_PATH)
+            with contextlib.suppress(OSError):
+                os.remove(saved_path)
+            saved_path = _COOKIES_TARGET_PATH
+        except Exception as e:
+            logger.warning(
+                f"handle_ytcookies_upload: could not move {saved_path} "
+                f"to {_COOKIES_TARGET_PATH}: {e}"
+            )
 
     # Quick sanity check: file must contain at least one YouTube cookie line.
     ok = False
     full_text = ""
     try:
-        with open(_COOKIES_TARGET_PATH, "r", encoding="utf-8", errors="ignore") as f:
+        with open(saved_path, "r", encoding="utf-8", errors="ignore") as f:
             full_text = f.read()
         if "youtube.com" in full_text.lower():
             ok = True

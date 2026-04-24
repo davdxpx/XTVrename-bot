@@ -1,14 +1,12 @@
 # --- Imports ---
-import math
+import re
 
-from pyrogram import Client, filters
+from pyrogram import Client
 from pyrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InlineQuery,
     InlineQueryResultArticle,
-    InlineQueryResultCachedDocument,
-    InlineQueryResultCachedVideo,
     InputTextMessageContent,
 )
 
@@ -39,20 +37,31 @@ async def inline_search(client: Client, inline_query: InlineQuery):
         ], cache_time=0)
         return
 
-    # Build DB filter
-    filter_query = {"file_name": {"$regex": query, "$options": "i"}}
+    # Build DB filter. `re.escape` prevents a user-typed meta char like
+    # `(` or `*` from turning the Mongo regex into an invalid pattern
+    # that would crash the find() and leave the inline UI spinning.
+    filter_query = {"file_name": {"$regex": re.escape(query), "$options": "i"}}
     if Config.PUBLIC_MODE:
         filter_query["user_id"] = user_id
 
-    # Limit search results to 50 (Telegram inline limit)
-    cursor = db.files.find(filter_query).limit(50)
-    files = await cursor.to_list(length=50)
+    try:
+        # Limit search results to 50 (Telegram inline limit)
+        cursor = db.files.find(filter_query).limit(50)
+        files = await cursor.to_list(length=50)
+    except Exception as e:
+        logger.warning(f"inline_search DB query failed: {e}")
+        await inline_query.answer([], cache_time=0)
+        return
 
     results = []
 
-    # We will generate Deep Links for files
-    bot_me = await client.get_me()
-    bot_username = bot_me.username
+    try:
+        bot_me = await client.get_me()
+        bot_username = bot_me.username
+    except Exception as e:
+        logger.warning(f"inline_search get_me failed: {e}")
+        await inline_query.answer([], cache_time=0)
+        return
 
     for f in files:
         file_id_str = str(f["_id"])
