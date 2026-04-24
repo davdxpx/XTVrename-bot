@@ -12,14 +12,19 @@ from pyrogram import ContinuePropagation
 
 # --- Handlers ---
 async def debug_all_messages(client, message):
-    sender_id = (
-        message.from_user.id
-        if message.from_user
-        else (message.sender_chat.id if message.sender_chat else "Unknown")
-    )
-    logger.debug(
-        f"Received message from {sender_id}: {message.text or message.caption or '[Media]'}"
-    )
+    # This handler runs for every inbound message (group=-1). A crash
+    # here wouldn't kill the bot, but it would stop `ContinuePropagation`
+    # from firing and silently eat events — so every step is defensive.
+    try:
+        sender_id = (
+            message.from_user.id
+            if message.from_user
+            else (message.sender_chat.id if getattr(message, "sender_chat", None) else "Unknown")
+        )
+        preview = message.text or message.caption or "[Media]"
+        logger.debug(f"Received message from {sender_id}: {preview}")
+    except Exception as e:
+        logger.debug(f"debug handler error: {e}")
     raise ContinuePropagation
 
 # --------------------------------------------------------------------------
