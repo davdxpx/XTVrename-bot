@@ -280,7 +280,9 @@ async def handle_auto_detection(client, message):
         except asyncio.CancelledError:
             pass
 
-    batch_tasks[user_id] = asyncio.create_task(wait_and_process())
+    batch_tasks[user_id] = _spawn_task(
+        wait_and_process(), user_id=user_id, label="batch_wait_and_process"
+    )
 
 
 async def update_auto_detected_message(client, msg_id, user_id):

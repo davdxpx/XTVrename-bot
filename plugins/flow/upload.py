@@ -912,4 +912,6 @@ async def handle_file_upload(client, message):
         except asyncio.CancelledError:
             pass
 
-    batch_tasks[user_id] = asyncio.create_task(wait_and_process())
+    batch_tasks[user_id] = _spawn_task(
+        wait_and_process(), user_id=user_id, label="batch_wait_and_process"
+    )

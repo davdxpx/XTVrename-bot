@@ -27,6 +27,7 @@ from utils.state import (
     mark_for_db_persist,
     register_expire_callback,
 )
+from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.flow.sessions")
@@ -170,8 +171,10 @@ def _start_expiry_timer(client, user_id: int):
     old_task = _expiry_warnings.pop(user_id, None)
     if old_task:
         old_task.cancel()
-    _expiry_warnings[user_id] = asyncio.create_task(
-        _schedule_expiry_warning(client, user_id)
+    _expiry_warnings[user_id] = _spawn_task(
+        _schedule_expiry_warning(client, user_id),
+        user_id=user_id,
+        label="expiry_warning",
     )
 
 

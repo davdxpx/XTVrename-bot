@@ -38,6 +38,7 @@ from utils.state import (
     set_state,
     update_data,
 )
+from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.flow.destinations")
@@ -123,7 +124,7 @@ async def prompt_dumb_channel(client, user_id, message_obj, is_edit=False, page=
             return
 
         set_state(user_id, "awaiting_file_upload")
-        asyncio.create_task(_persist_session_to_db(user_id))
+        _spawn_task(_persist_session_to_db(user_id), user_id=user_id, label="persist_flow_session")
         text = "✅ **Ready!**\n\nNow, **send me the file(s)** you want to rename."
         reply_markup = InlineKeyboardMarkup(
             [[InlineKeyboardButton("❌ Cancel", callback_data="cancel_rename")]]
@@ -261,7 +262,7 @@ async def handle_dumb_selection(client, callback_query):
         return
 
     set_state(user_id, "awaiting_file_upload")
-    asyncio.create_task(_persist_session_to_db(user_id))
+    _spawn_task(_persist_session_to_db(user_id), user_id=user_id, label="persist_flow_session")
     with contextlib.suppress(MessageNotModified):
         await callback_query.message.edit_text(
             "✅ **Ready!**\n\n" "Now, **send me the file(s)** you want to rename.",

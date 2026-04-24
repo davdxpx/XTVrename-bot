@@ -11,6 +11,7 @@ from config import Config
 from db import db
 from plugins.admin.core import is_admin
 from utils.state import clear_session, get_data, get_state, set_state, update_data
+from utils.tasks import spawn as _spawn_task
 from utils.telegram.logger import debug
 
 debug("✅ Loaded handler: broadcast_callback")
@@ -125,8 +126,10 @@ async def broadcast_callback(client, callback_query):
         ud = get_data(user_id)
         msg_id = ud.get("broadcast_message_id")
         buttons = ud.get("broadcast_buttons", [])
-        asyncio.create_task(
-            run_broadcast(client, user_id, callback_query.message, msg_id, buttons)
+        _spawn_task(
+            run_broadcast(client, user_id, callback_query.message, msg_id, buttons),
+            user_id=user_id,
+            label="broadcast_worker",
         )
         clear_session(user_id)
 

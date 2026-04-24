@@ -1197,7 +1197,12 @@ async def _render_cfg_root(
             else:
                 # Fire-and-forget — refresh runs in background, the next
                 # settings open picks it up from cache.
-                _asyncio.create_task(QuotaCache.get(user_id, pid))
+                from utils.tasks import spawn as _spawn_task
+                _spawn_task(
+                    QuotaCache.get(user_id, pid),
+                    user_id=user_id,
+                    label="quota_cache_refresh",
+                )
 
     if visible_count == 0:
         body = (

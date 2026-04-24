@@ -6,6 +6,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from db import db
 from utils.state import update_data
+from utils.tasks import spawn
 
 
 # === Helper Functions ===
@@ -98,7 +99,7 @@ async def check_and_send_welcome(client, message, config):
             with contextlib.suppress(Exception):
                 await msg.delete()
 
-        asyncio.create_task(delete_later())
+        spawn(delete_later(), user_id=user_id, label="gate_welcome_delete")
 
 # --------------------------------------------------------------------------
 # Developed by 𝕏0L0™ (@davdxpx) | © 2026 XTV Network Global

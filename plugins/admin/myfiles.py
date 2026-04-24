@@ -25,6 +25,7 @@ from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
 from config import Config
 from db import db
 from plugins.admin.core import admin_sessions, edit_or_reply, is_admin
+from utils.tasks import spawn as _spawn_task
 from utils.telegram.log import get_logger
 
 logger = get_logger("plugins.admin.myfiles")
@@ -330,7 +331,7 @@ async def admin_myfiles_callback(client, callback_query):
             with contextlib.suppress(Exception):
                 await client.send_message(user_id, f"✅ **Cleanup Complete: {job_name}**\n\nProcessed: {count} items.")
 
-        asyncio.create_task(run_admin_cleanup())
+        _spawn_task(run_admin_cleanup(), label="admin_myfiles_cleanup")
         return
 
 
