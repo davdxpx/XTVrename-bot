@@ -89,9 +89,16 @@ def cleanup_expired():
 
     Uses last-activity timestamps (sliding TTL) so active users are never
     swept mid-flow. Locks are also released so stale references don't
-    linger."""
+    linger.
+
+    The iteration uses a list snapshot so a parallel handler that writes
+    to ``_timestamps`` mid-sweep (rapid-fire callback) can't raise a
+    ``RuntimeError: dictionary changed size during iteration``. Each
+    ``.pop(..., None)`` is already idempotent so a concurrent delete is
+    harmless too."""
     now = time.time()
-    expired = [uid for uid, ts in _timestamps.items() if now - ts > _STATE_TTL]
+    snapshot = list(_timestamps.items())
+    expired = [uid for uid, ts in snapshot if now - ts > _STATE_TTL]
     for uid in expired:
         user_data.pop(uid, None)
         _timestamps.pop(uid, None)
