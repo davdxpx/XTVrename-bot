@@ -1,12 +1,17 @@
 # --- Imports ---
 import asyncio
 import contextlib
+from collections import OrderedDict
 
+from pyrogram.errors import FloodWait
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from db import db
 from utils.state import update_data
 from utils.tasks import spawn
+from utils.telegram.log import get_logger
+
+logger = get_logger("utils.auth.gate")
 
 
 # === Helper Functions ===
@@ -57,34 +62,53 @@ async def send_force_sub_gate(client, message, config):
 
             buttons.append([InlineKeyboardButton(final_btn_text, url=ch.get("link"))])
 
-    if banner_file_id:
-        msg = await client.send_photo(
-            chat_id=user_id,
-            photo=banner_file_id,
-            caption=formatted_text,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-    else:
-        msg = await client.send_message(
-            chat_id=user_id,
-            text=formatted_text,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
+    msg = None
+    for attempt in range(3):
+        try:
+            if banner_file_id:
+                msg = await client.send_photo(
+                    chat_id=user_id,
+                    photo=banner_file_id,
+                    caption=formatted_text,
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+            else:
+                msg = await client.send_message(
+                    chat_id=user_id,
+                    text=formatted_text,
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+            break
+        except FloodWait as e:
+            wait = min(getattr(e, "value", 1) + 1, 60)
+            logger.warning(
+                f"send_force_sub_gate FloodWait {wait}s (attempt {attempt + 1}/3)"
+            )
+            if attempt >= 2:
+                return
+            await asyncio.sleep(wait)
+        except Exception as e:
+            logger.warning(f"send_force_sub_gate failed: {e}")
+            return
 
     if msg:
         update_data(user_id, "force_sub_msg_id", msg.id)
 
+# Bounded LRU. When full, the oldest entry is evicted (not the whole
+# set cleared) so long-lived users never get a second welcome burst
+# after the cache rolls over.
 _MAX_WELCOMED = 10000
-welcomed_users = set()
+welcomed_users: "OrderedDict[int, None]" = OrderedDict()
 
 async def check_and_send_welcome(client, message, config):
     user_id = message.from_user.id
 
     if user_id not in welcomed_users:
-        # Prevent unbounded growth
+        # LRU-evict the oldest entry when full — never purge everything
+        # at once, which caused repeat-welcomes after every 10k users.
         if len(welcomed_users) >= _MAX_WELCOMED:
-            welcomed_users.clear()
-        welcomed_users.add(user_id)
+            welcomed_users.popitem(last=False)
+        welcomed_users[user_id] = None
 
         has_setup = await db.has_completed_setup(user_id)
         if not has_setup:
@@ -92,7 +116,21 @@ async def check_and_send_welcome(client, message, config):
 
         welcome_text = config.get("force_sub_welcome_text") or "✅ Welcome aboard! You're all set. Send your file and let's go."
 
-        msg = await client.send_message(user_id, welcome_text)
+        msg = None
+        try:
+            msg = await client.send_message(user_id, welcome_text)
+        except FloodWait as e:
+            wait = min(getattr(e, "value", 1) + 1, 60)
+            logger.warning(f"welcome send FloodWait {wait}s")
+            await asyncio.sleep(wait)
+            with contextlib.suppress(Exception):
+                msg = await client.send_message(user_id, welcome_text)
+        except Exception as e:
+            logger.debug(f"welcome send failed: {e}")
+            return
+
+        if not msg:
+            return
 
         async def delete_later():
             await asyncio.sleep(5)
